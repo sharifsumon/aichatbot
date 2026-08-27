@@ -1,0 +1,1848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Agently — AI Agent Builder</title>
+<style>
+  :root{
+    --primary:#4F46E5; --primary-2:#7C3AED; --primary-soft:#EEF2FF;
+    --bg:#F5F7FB; --card:#FFFFFF; --text:#101828; --muted:#667085;
+    --border:#E4E7EC; --success:#12B76A; --success-soft:#ECFDF3;
+    --warning:#F79009; --warning-soft:#FFFAEB; --danger:#F04438; --danger-soft:#FEF3F2;
+    --fb:#1877F2; --wa:#25D366; --ig:#E4405F; --google:#4285F4;
+    --shadow:0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.1);
+    --shadow-lg:0 12px 32px rgba(16,24,40,.14);
+    --radius:16px;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    font-family:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    background:var(--bg); color:var(--text); font-size:14px; line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  button{font-family:inherit; cursor:pointer; border:none; background:none; color:inherit;}
+  input,textarea,select{font-family:inherit; font-size:14px; color:var(--text);}
+  .hidden{display:none !important;}
+  .screen{min-height:100vh;}
+
+  /* ---------- Buttons ---------- */
+  .btn{display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    padding:10px 16px; border-radius:10px; font-weight:600; font-size:14px;
+    transition:.15s ease; border:1px solid transparent; white-space:nowrap;}
+  .btn svg{flex:none;}
+  .btn-primary{background:linear-gradient(135deg,var(--primary),var(--primary-2)); color:#fff;
+    box-shadow:0 4px 12px rgba(79,70,229,.28);}
+  .btn-primary:hover{filter:brightness(1.06); transform:translateY(-1px);}
+  .btn-outline{border-color:var(--border); background:#fff; color:var(--text);}
+  .btn-outline:hover{background:#F9FAFB; border-color:#CBD5E1;}
+  .btn-ghost{color:var(--muted);}
+  .btn-ghost:hover{background:#F2F4F7; color:var(--text);}
+  .btn-success{background:var(--success); color:#fff;}
+  .btn-success:hover{filter:brightness(1.05);}
+  .btn-danger-ghost{color:var(--danger);}
+  .btn-danger-ghost:hover{background:var(--danger-soft);}
+  .btn:disabled{opacity:.55; cursor:not-allowed; transform:none !important;}
+  .btn-block{width:100%;}
+
+  /* ---------- Login ---------- */
+  .login-wrap{display:grid; grid-template-columns:1.1fr 1fr; min-height:100vh;}
+  .login-left{
+    background:linear-gradient(150deg,#312E81 0%, #4F46E5 45%, #7C3AED 100%);
+    color:#fff; padding:56px 60px; display:flex; flex-direction:column; position:relative; overflow:hidden;
+  }
+  .login-left .blob{position:absolute; border-radius:50%; filter:blur(70px); opacity:.35;}
+  .b1{width:340px;height:340px; background:#A5B4FC; top:-80px; right:-60px;}
+  .b2{width:280px;height:280px; background:#F0ABFC; bottom:-80px; left:-60px;}
+  .brand{display:flex; align-items:center; gap:10px; font-weight:800; font-size:20px; position:relative; z-index:1;}
+  .brand-logo{width:38px;height:38px;border-radius:11px;background:#fff;display:flex;align-items:center;justify-content:center;color:var(--primary);}
+  .login-left h1{font-size:34px; line-height:1.25; margin-top:64px; position:relative; z-index:1; font-weight:800;}
+  .login-left h1 span{color:#C7D2FE;}
+  .login-left p{color:#C7D2FE; margin-top:14px; max-width:460px; font-size:15px; position:relative; z-index:1;}
+  .login-proof{margin-top:40px; display:flex; gap:16px; position:relative; z-index:1;}
+  .proof-card{background:rgba(255,255,255,.1); backdrop-filter:blur(6px); border:1px solid rgba(255,255,255,.18);
+    border-radius:14px; padding:14px 18px; min-width:130px;}
+  .proof-card b{font-size:22px; display:block;}
+  .proof-card span{font-size:12px; color:#C7D2FE;}
+  .login-right{display:flex; align-items:center; justify-content:center; padding:40px; background:#fff;}
+  .login-card{width:100%; max-width:400px;}
+  .login-card h2{font-size:24px; font-weight:800;}
+  .login-card .sub{color:var(--muted); margin:6px 0 28px;}
+  .sso-btn{display:flex; align-items:center; justify-content:center; gap:12px; width:100%; padding:13px;
+    border:1px solid var(--border); border-radius:12px; font-weight:600; background:#fff; margin-bottom:12px;
+    transition:.15s; box-shadow:var(--shadow);}
+  .sso-btn:hover{border-color:#98A2B3; background:#F9FAFB; transform:translateY(-1px);}
+  .sso-btn svg{flex:none;}
+  .sso-google span{color:var(--google);}
+  .sso-fb span{color:var(--fb);}
+  .login-divider{display:flex; align-items:center; gap:12px; color:#98A2B3; font-size:12px; margin:18px 0;}
+  .login-divider::before,.login-divider::after{content:""; flex:1; height:1px; background:var(--border);}
+  .demo-hint{background:var(--primary-soft); border:1px solid #C7D2FE; border-radius:12px; padding:12px 14px;
+    font-size:13px; color:#4338CA; margin-top:8px; line-height:1.6;}
+  .login-foot{margin-top:24px; text-align:center; color:var(--muted); font-size:12px;}
+
+  /* ---------- Wizard shell ---------- */
+  .wizard-top{background:#fff; border-bottom:1px solid var(--border); padding:14px 28px; display:flex; align-items:center; justify-content:space-between;}
+  .wiz-logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px;}
+  .wiz-logo .brand-logo{width:34px;height:34px;border-radius:10px;}
+  .wiz-step-title{font-weight:700;}
+  .wiz-progress-line{background:#fff; border-bottom:1px solid var(--border); padding:18px 28px 0;}
+  .stepper{display:flex; max-width:860px; margin:0 auto; align-items:flex-start;}
+  .step-node{display:flex; flex-direction:column; align-items:center; flex:1; position:relative;}
+  .step-node .dot{width:38px;height:38px;border-radius:50%; display:flex;align-items:center;justify-content:center;
+    background:#fff; border:2px solid var(--border); color:#98A2B3; transition:.25s; position:relative; z-index:2; font-size:13px; font-weight:700;}
+  .step-node.active .dot{background:linear-gradient(135deg,var(--primary),var(--primary-2)); border-color:transparent; color:#fff; box-shadow:0 4px 10px rgba(79,70,229,.35);}
+  .step-node.done .dot{background:var(--success); border-color:var(--success); color:#fff;}
+  .step-node .lbl{font-size:12px; margin-top:8px; color:#98A2B3; font-weight:600;}
+  .step-node.active .lbl{color:var(--primary);}
+  .step-node.done .lbl{color:var(--success);}
+  .step-line{position:absolute; top:19px; left:-50%; width:100%; height:2px; background:var(--border); z-index:1;}
+  .step-node:first-child .step-line{display:none;}
+  .step-node.done .step-line{background:var(--success);}
+  .wiz-body{max-width:860px; margin:28px auto 20px; padding:0 28px;}
+  .wiz-panel{animation:fadeUp .35s ease;}
+  @keyframes fadeUp{from{opacity:0; transform:translateY(10px);} to{opacity:1; transform:none;}}
+  .wiz-panel h2{font-size:26px; font-weight:800;}
+  .welcome-wrap{display:grid; grid-template-columns:1.15fr 1fr; gap:28px; align-items:center; min-height:420px;}
+  .welcome-left h2{font-size:34px; font-weight:800; line-height:1.2;}
+  .welcome-badge{display:inline-flex; align-items:center; gap:7px; background:var(--primary-soft); color:var(--primary); font-weight:700; font-size:12px; padding:6px 12px; border-radius:99px; margin-bottom:18px;}
+  .welcome-points{margin:22px 0 28px; display:flex; flex-direction:column; gap:14px;}
+  .welcome-point{display:flex; gap:12px; align-items:flex-start;}
+  .welcome-point .wp-ic{width:40px;height:40px;border-radius:11px; background:var(--primary-soft); color:var(--primary); display:flex; align-items:center; justify-content:center; flex:none;}
+  .welcome-point b{font-size:14px; display:block;}
+  .welcome-point span{font-size:12.5px; color:var(--muted);}
+  .btn-lg{padding:14px 26px; font-size:15px; border-radius:12px;}
+  .welcome-right{display:flex; align-items:center; justify-content:center; background:linear-gradient(160deg,#EEF2FF,#F5F3FF 55%,#FDF4FF); border:1px solid #E4E7EC; border-radius:22px; min-height:420px; position:relative; overflow:hidden; box-shadow:var(--shadow);}
+  .welcome-right svg{width:300px;height:300px;}
+  .name-input{font-size:18px; font-weight:600; padding:14px 16px; width:100%; border:1px solid var(--border); border-radius:12px; outline:none; transition:.15s; background:#fff;}
+  .name-input:focus{border-color:var(--primary); box-shadow:0 0 0 3px rgba(79,70,229,.12);}
+  .name-suggestions{display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; align-items:center;}
+  .name-preview{display:flex; align-items:center; gap:12px; background:#fff; border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin-top:18px; box-shadow:var(--shadow);}
+  .name-preview .ic{width:42px;height:42px;border-radius:50%; background:linear-gradient(135deg,var(--primary),var(--primary-2)); color:#fff; display:flex; align-items:center; justify-content:center; flex:none;}
+  .name-preview b{font-size:16px; display:block;}
+  .name-preview span{font-size:12px; color:var(--muted);}
+  .platform-wrap{display:grid; grid-template-columns:1fr 1.15fr; gap:22px; align-items:start;}
+  .platform-chat{height:410px;}
+  .platform-badges{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;}
+  .pb{display:inline-flex; align-items:center; gap:6px; background:#fff; border:1px solid var(--border); border-radius:99px; padding:5px 12px; font-size:12px; font-weight:600;}
+  .pb svg{width:16px; height:16px;}
+  .platform-title{font-weight:800; font-size:19px; margin-bottom:14px; display:flex; align-items:center; gap:8px; color:var(--text);}
+  .platform-title svg{width:20px;height:20px;}
+  .fb-panel{background:#fff;border:1px solid var(--border);border-radius:16px;padding:16px;margin-top:14px;}
+  .fb-panel-head{display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;font-size:14px;font-weight:700;}
+  .fb-panel-head span{font-weight:500;font-size:12px;color:var(--muted);}
+  .fb-login{width:100%;justify-content:center;display:flex;align-items:center;gap:8px;background:#1877F2;border:none;color:#fff;padding:12px;border-radius:10px;font-weight:600;font-size:14px;cursor:pointer;}
+  .fb-login:hover{background:#1465d6;}
+  .page-radio{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--border);border-radius:12px;margin-bottom:8px;cursor:pointer;background:#fff;transition:border-color .15s, background .15s;}
+  .page-radio:hover{border-color:#b9c3ff;}
+  .page-radio.selected{border-color:var(--primary);background:var(--primary-soft);}
+  .page-radio input{width:16px;height:16px;accent-color:var(--primary);cursor:pointer;}
+  .page-radio .info{flex:1;min-width:0;}
+  .page-radio .info b{display:block;font-size:13.5px;}
+  .page-radio .info span{font-size:11.5px;color:var(--muted);}
+  .page-radio .check-badge{opacity:0;transition:opacity .15s;}
+  .page-radio.selected .check-badge{opacity:1;}
+  .fb-ic{background:#1877F2;display:flex;align-items:center;justify-content:center;border-radius:50%;flex-shrink:0;}
+  .kb-chat{max-width:640px;margin:0 auto;}
+  .kb-stack{display:flex;flex-direction:column;gap:18px;}
+  .kb-section{min-width:0;}
+  .kb-chat{max-width:none;}
+  .code-box{position:relative;}
+  .crawl-row{display:flex;gap:8px;width:100%;align-items:center;}
+  .crawl-row input{flex:1;border:1px solid var(--border);border-radius:999px;padding:9px 14px;font-size:13px;outline:none;font-family:inherit;background:#fff;}
+  .crawl-row input:focus{border-color:#6366F1;}
+  .kb-actions+.kb-main{margin-top:8px;}
+  .copy-btn{position:absolute;top:8px;right:8px;z-index:2;width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:7px;color:#cbd5e1;cursor:pointer;transition:.15s;}
+  .copy-btn:hover{background:rgba(255,255,255,.18);color:#fff;}
+  .kb-chat .chat-body{min-height:250px;max-height:340px;}
+  .kb-actions{justify-content:center;border-top:1px solid var(--border);padding-top:10px;}
+  .attach-btn{background:var(--primary-soft);border:none;color:var(--primary);border-radius:10px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;}
+  .attach-btn:hover{background:#E3E8FF;}
+  .doc-mini{display:flex;align-items:center;gap:8px;}
+  .doc-mini .thumb{width:26px;height:26px;border-radius:8px;background:var(--primary-soft);color:var(--primary);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .doc-mini b{font-size:12.5px;word-break:break-all;}
+  .doc-mini .mini{font-size:11px;color:var(--muted);}
+  .prod-form{background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px;min-width:300px;max-width:360px;}
+  .prod-form .pf-row{margin-bottom:10px;}
+  .prod-form label{font-size:11.5px;font-weight:700;color:var(--muted);display:block;margin-bottom:5px;}
+  .prod-form input,.prod-form textarea{width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:#fff;color:var(--text);}
+  .prod-form input:focus,.prod-form textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft);}
+  .prod-form .pf-2col{display:flex;gap:10px;}
+  .prod-form .pf-2col .pf-row{flex:1;}
+  .prod-form .pf-img{display:flex;align-items:center;gap:8px;padding:9px 11px;border:1px dashed var(--border);border-radius:8px;background:var(--primary-soft);}
+  .prod-form .pf-img .thumb{width:26px;height:26px;border-radius:8px;background:#fff;color:var(--primary);display:flex;align-items:center;justify-content:center;}
+  .prod-form .pf-img b{font-size:12.5px;word-break:break-all;}
+  .prod-form .pf-img .mini{font-size:11px;color:var(--muted);}
+  .chat-input .attach-btn{margin-right:6px;}
+  .mx{width:100%;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:#fff;}
+  .mx-head,.mx-row{display:grid;grid-template-columns:110px repeat(4,1fr);align-items:center;}
+  .mx-head{background:var(--primary-soft);border-bottom:1px solid var(--border);}
+  .mx-head b{font-size:11px;color:var(--muted);text-align:center;padding:7px 2px;font-weight:700;}
+  .mx-row{border-bottom:1px solid var(--border);}
+  .mx-row:last-child{border-bottom:none;}
+  .mx-color{display:flex;align-items:center;gap:6px;padding:7px 9px;font-size:12px;font-weight:600;min-width:0;}
+  .mx-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;border:1px solid rgba(0,0,0,.12);}
+  .mx-del{background:none;border:none;color:var(--muted);cursor:pointer;padding:0;margin-left:auto;display:flex;}
+  .mx-del:hover{color:#EF4444;}
+  .mx-cell{width:100%;box-sizing:border-box;border:none;border-left:1px solid var(--border);text-align:center;padding:7px 2px;font-size:12px;color:var(--text);background:#fff;}
+  .mx-cell:focus{outline:none;background:var(--primary-soft);}
+  .mx-cell::-webkit-inner-spin-button{opacity:0;}
+  .mx-add{display:flex;gap:8px;margin-top:10px;}
+  .mx-add input{flex:1;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:13px;}
+  .mx-add input:focus{outline:none;border-color:var(--primary);}
+  .mx-total{font-size:12px;color:var(--muted);margin-top:8px;}
+  .mx-total b{color:var(--text);font-size:13px;}
+  .wiz-panel .wiz-desc{color:var(--muted); margin:6px 0 24px; font-size:15px;}
+  .wiz-panel .wiz-desc b{color:var(--text);}
+  .wiz-nav{max-width:860px; margin:0 auto; padding:8px 28px 40px; display:flex; justify-content:space-between; align-items:center;}
+  .wiz-nav .right{display:flex; gap:10px; margin-left:auto;}
+  .wiz-count{color:var(--muted); font-size:13px; font-weight:600;}
+
+  /* ---------- Icon cards (business / channel) ---------- */
+  .icon-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:14px;}
+  .icon-card{border:2px solid var(--border); background:#fff; border-radius:14px; padding:20px 14px;
+    display:flex; flex-direction:column; align-items:center; text-align:center; gap:12px; transition:.18s;}
+  .icon-card:hover{border-color:#98A2B3; transform:translateY(-3px); box-shadow:var(--shadow-lg);}
+  .icon-card.selected{border-color:var(--primary); background:var(--primary-soft); box-shadow:0 0 0 3px rgba(79,70,229,.15);}
+  .icon-card .ic{width:58px;height:58px;border-radius:14px; display:flex; align-items:center; justify-content:center; color:#fff;}
+  .icon-card .ic svg{width:28px;height:28px;}
+  .icon-card .nm{font-weight:700; font-size:13px;}
+  .icon-card .ds{font-size:11px; color:var(--muted); line-height:1.4;}
+  .icon-card .tick{position:absolute;}
+  .check-badge{width:20px;height:20px;border-radius:50%; background:var(--primary); color:#fff; display:flex;
+    align-items:center; justify-content:center; margin-top:-14px; opacity:0; transform:scale(.6); transition:.2s;}
+  .icon-card.selected .check-badge{opacity:1; transform:scale(1);}
+
+  /* ---------- Connect step ---------- */
+  .connect-wrap{display:grid; grid-template-columns:1fr 1fr; gap:24px;}
+  .conn-card{background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:24px; box-shadow:var(--shadow);}
+  .conn-card h3{font-size:17px; font-weight:700; display:flex; align-items:center; gap:10px;}
+  .conn-card h3 .ic{width:40px;height:40px;border-radius:10px; display:flex;align-items:center;justify-content:center;}
+  .conn-card .muted{color:var(--muted); font-size:13px; margin:6px 0 18px;}
+  .page-row{display:flex; align-items:center; gap:12px; border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:10px; background:#fff;}
+  .page-row .avatar{width:40px;height:40px;border-radius:10px; background:linear-gradient(135deg,#E0E7FF,#DDD6FE); display:flex;align-items:center;justify-content:center;color:var(--primary);font-weight:800;font-size:15px;}
+  .page-row .info{flex:1; min-width:0;}
+  .page-row .info b{display:block; font-size:13px;}
+  .page-row .info span{font-size:12px; color:var(--muted); display:flex; align-items:center; gap:4px;}
+  .conn-badge{display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:600; color:var(--success); background:var(--success-soft); padding:5px 10px; border-radius:99px;}
+  .form-group{margin-bottom:14px;}
+  .form-group label{display:block; font-weight:600; font-size:13px; margin-bottom:6px;}
+  .form-group input{width:100%; padding:11px 12px; border:1px solid var(--border); border-radius:10px; outline:none; transition:.15s; background:#fff;}
+  .form-group input:focus{border-color:var(--primary); box-shadow:0 0 0 3px rgba(79,70,229,.12);}
+  .form-row{display:flex; gap:10px;}
+  .otp-boxes{display:flex; gap:8px;}
+  .otp-box{width:46px;height:52px;text-align:center;font-size:20px;font-weight:700;border:1px solid var(--border);border-radius:10px;outline:none;}
+  .otp-box:focus{border-color:var(--primary); box-shadow:0 0 0 3px rgba(79,70,229,.12);}
+  .num-pill{display:inline-flex; align-items:center; gap:8px; background:var(--success-soft); color:var(--success); font-weight:700; padding:8px 14px; border-radius:99px; font-size:13px;}
+
+  /* ---------- Knowledge base ---------- */
+  .kb-grid{display:grid; grid-template-columns:1.35fr 1fr; gap:20px;}
+  .dropzone{border:2px dashed #C7D2FE; background:#F8FAFF; border-radius:var(--radius); padding:38px 20px;
+    text-align:center; color:var(--muted); transition:.2s; cursor:pointer;}
+  .dropzone:hover,.dropzone.drag{border-color:var(--primary); background:var(--primary-soft);}
+  .dropzone .big{width:52px;height:52px;border-radius:14px; background:var(--primary-soft); color:var(--primary); display:flex;align-items:center;justify-content:center;margin:0 auto 12px;}
+  .dropzone b{color:var(--text);}
+  .dropzone .mini{font-size:12px; margin-top:8px;}
+  .file-tags{display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:14px;}
+  .file-tag{font-size:11px; font-weight:600; background:#fff; border:1px solid var(--border); padding:4px 10px; border-radius:99px; color:var(--muted);}
+  .doc-list{background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:6px 0;}
+  .doc-list .empty{padding:28px; text-align:center; color:var(--muted);}
+  .doc-row{display:flex; align-items:center; gap:12px; padding:11px 16px; border-bottom:1px solid #F2F4F7;}
+  .doc-row:last-child{border-bottom:none;}
+  .doc-ic{width:38px;height:38px;border-radius:9px; display:flex;align-items:center;justify-content:center; flex:none;}
+  .doc-ic.pdf{background:#FEF3F2; color:#F04438;}
+  .doc-ic.sheet{background:#ECFDF3; color:#12B76A;}
+  .doc-row .info{flex:1; min-width:0;}
+  .doc-row .info b{font-size:13px; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .doc-row .info span{font-size:12px; color:var(--muted);}
+  .sheet-card{background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:20px; display:flex; gap:14px; align-items:flex-start;}
+  .sheet-card .ic{width:44px;height:44px;border-radius:11px; background:#ECFDF3; color:var(--success); display:flex;align-items:center;justify-content:center; flex:none;}
+  .sheet-card .ic svg{width:22px;height:22px;}
+  .sheet-card b{font-size:14px;}
+  .sheet-card .muted{font-size:12px; color:var(--muted); margin:4px 0 12px; line-height:1.5;}
+  .tool-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:10px; width:100%;}
+  .tool-card{border:1px solid var(--border); border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:8px; cursor:pointer; transition:.15s; background:#fff; text-align:left;}
+  .tool-card:hover{border-color:#98A2B3; transform:translateY(-1px); box-shadow:var(--shadow);}
+  .tool-card.on{border-color:var(--success); background:var(--success-soft);}
+  .tool-card .t-ic{width:32px;height:32px;border-radius:9px; display:flex; align-items:center; justify-content:center;}
+  .tool-card .t-name{font-weight:600; font-size:12.5px;}
+  .tool-card .t-desc{font-size:11px; color:var(--muted); line-height:1.4;}
+  .tool-status{font-size:11px; font-weight:700; color:var(--muted); display:inline-flex; align-items:center; gap:4px;}
+  .tool-status.on{color:var(--success);}
+
+  /* ---------- AI setup / chat ---------- */
+  .setup-grid{display:grid; grid-template-columns:1fr 1fr; gap:22px; align-items:start;}
+  .chat-panel{background:#fff; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; box-shadow:var(--shadow); display:flex; flex-direction:column; height:460px;}
+  .chat-head{display:flex; align-items:center; gap:12px; padding:14px 16px; border-bottom:1px solid var(--border);}
+  .chat-head .bot-avatar{width:40px;height:40px;border-radius:50%; background:linear-gradient(135deg,var(--primary),var(--primary-2)); display:flex;align-items:center;justify-content:center;color:#fff;}
+  .chat-head b{font-size:14px;}
+  .chat-head span{font-size:12px; color:var(--muted); display:flex; align-items:center; gap:5px;}
+  .dot-green{width:7px;height:7px;border-radius:50%;background:var(--success);display:inline-block;}
+  .chat-body{flex:1; overflow-y:auto; padding:18px; background:#F8FAFC; display:flex; flex-direction:column; gap:12px;}
+  .msg{max-width:78%; padding:11px 14px; border-radius:14px; font-size:13.5px; line-height:1.55; animation:fadeUp .3s;}
+  .msg.bot{background:#fff; border:1px solid var(--border); border-top-left-radius:4px; align-self:flex-start; box-shadow:var(--shadow);}
+  .msg.user{background:linear-gradient(135deg,var(--primary),var(--primary-2)); color:#fff; border-top-right-radius:4px; align-self:flex-end;}
+  .msg .prod-mini{display:flex; gap:10px; align-items:center; background:#F8FAFF; border:1px solid #C7D2FE; border-radius:10px; padding:10px; margin-top:8px;}
+  .msg .prod-mini .thumb{width:44px;height:44px;border-radius:8px;background:#E0E7FF;color:var(--primary);display:flex;align-items:center;justify-content:center;font-weight:800;}
+  .msg .prod-mini b{font-size:13px; display:block;}
+  .msg .prod-mini span{font-size:12px; color:var(--muted);}
+  .lead-mini{background:#ECFDF3; border:1px solid #A6F4C5; border-radius:10px; padding:10px; margin-top:8px; font-size:12.5px;}
+  .lead-mini b{color:var(--success);}
+  .chat-input{display:flex; gap:10px; padding:12px 14px; border-top:1px solid var(--border); background:#fff;}
+  .chat-input input{flex:1; border:1px solid var(--border); border-radius:10px; padding:11px 13px; outline:none;}
+  .chat-input input:focus{border-color:var(--primary);}
+  .chat-input .send-btn{width:44px;height:44px;border-radius:11px; background:linear-gradient(135deg,var(--primary),var(--primary-2)); color:#fff; display:flex;align-items:center;justify-content:center; flex:none;}
+  .quick-row{display:flex; gap:8px; flex-wrap:wrap; padding:0 14px 12px; background:#fff;}
+  .quick-chip{font-size:12px; font-weight:600; border:1px solid var(--border); background:#fff; padding:7px 12px; border-radius:99px; color:var(--text);}
+  .quick-chip:hover{border-color:var(--primary); color:var(--primary); background:var(--primary-soft);}
+  .setup-info{background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:22px; box-shadow:var(--shadow);}
+  .setup-info h3{font-size:16px; font-weight:700; margin-bottom:8px;}
+  .setup-info .muted{color:var(--muted); font-size:13px;}
+  .checklist{list-style:none; margin:16px 0;}
+  .checklist li{display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px dashed var(--border); font-size:13.5px;}
+  .checklist li:last-child{border-bottom:none;}
+  .checklist .ck{width:22px;height:22px;border-radius:50%; flex:none; display:flex;align-items:center;justify-content:center;font-size:12px;}
+  .ck.ok{background:var(--success-soft); color:var(--success);}
+  .ck.todo{background:#F2F4F7; color:#98A2B3;}
+  .feature-row{display:flex; align-items:center; gap:12px; padding:10px; border:1px solid var(--border); border-radius:12px; margin-top:10px;}
+  .feature-row .fic{width:36px;height:36px;border-radius:9px;background:var(--primary-soft);color:var(--primary);display:flex;align-items:center;justify-content:center;flex:none;}
+  .feature-row b{font-size:13px;}
+  .feature-row span{font-size:12px; color:var(--muted); display:block;}
+  .switch{width:42px;height:24px;border-radius:99px;background:#D0D5DD;position:relative;transition:.2s;flex:none;}
+  .switch.on{background:var(--success);}
+  .switch::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.2s;}
+  .switch.on::after{left:21px;}
+
+  /* ---------- Dashboard ---------- */
+  .dash{display:flex; min-height:100vh;}
+  .sidebar{width:248px; background:#fff; border-right:1px solid var(--border); display:flex; flex-direction:column; flex:none;}
+  .sb-brand{display:flex; align-items:center; gap:10px; padding:18px 18px 14px; font-weight:800; font-size:17px;}
+  .sb-brand .brand-logo{width:34px;height:34px;border-radius:10px;}
+  .sb-nav{flex:1; padding:8px 12px; overflow-y:auto;}
+  .sb-group{font-size:11px; font-weight:700; color:#98A2B3; text-transform:uppercase; letter-spacing:.6px; padding:14px 10px 6px;}
+  .nav-item{display:flex; align-items:center; gap:11px; width:100%; padding:10px 11px; border-radius:10px; font-weight:600; color:#475467; font-size:13.5px; transition:.15s; margin-bottom:2px; text-align:left;}
+  .nav-item:hover{background:#F2F4F7; color:var(--text);}
+  .nav-item.active{background:var(--primary-soft); color:var(--primary);}
+  .nav-item svg{flex:none;}
+  .nav-item .chev{margin-left:auto; transition:.2s;}
+  .nav-item.open .chev{transform:rotate(180deg);}
+  .submenu{overflow:hidden; max-height:0; transition:max-height .25s ease;}
+  .submenu.open{max-height:240px;}
+  .submenu .nav-item{padding-left:34px; font-size:13px;}
+  .nav-item .badge{background:var(--danger); color:#fff; font-size:10px; font-weight:700; padding:2px 7px; border-radius:99px; margin-left:auto;}
+  .sb-bottom{padding:12px; border-top:1px solid var(--border);}
+  .sb-user{display:flex; align-items:center; gap:10px; padding:10px; border-radius:10px;}
+  .sb-user .avatar{width:36px;height:36px;border-radius:50%; background:linear-gradient(135deg,#F59E0B,#F97316); color:#fff; display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;}
+  .sb-user b{font-size:13px; display:block;}
+  .sb-user span{font-size:12px; color:var(--muted);}
+
+  .dash-main{flex:1; display:flex; flex-direction:column; min-width:0;}
+  .dash-top{display:flex; align-items:center; gap:12px; padding:14px 28px; background:#fff; border-bottom:1px solid var(--border);}
+  .dash-top h2{font-size:19px; font-weight:800;}
+  .dash-top .spacer{flex:1;}
+  .top-search{display:flex; align-items:center; gap:8px; background:#F2F4F7; border-radius:10px; padding:8px 12px; color:var(--muted); width:260px;}
+  .top-search input{background:none; border:none; outline:none; width:100%;}
+  .icon-btn{width:38px;height:38px;border-radius:10px; display:flex;align-items:center;justify-content:center; color:var(--muted); background:#F2F4F7; position:relative;}
+  .icon-btn:hover{background:#E4E7EC; color:var(--text);}
+  .icon-btn .dotp{position:absolute; top:8px; right:9px; width:8px;height:8px;border-radius:50%; background:var(--danger);}
+  .dash-body{padding:26px 28px; overflow-y:auto; flex:1;}
+  .stat-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px;}
+  .stat-card{background:#fff; border:1px solid var(--border); border-radius:14px; padding:18px; box-shadow:var(--shadow);}
+  .stat-card .head{display:flex; justify-content:space-between; align-items:center;}
+  .stat-card .s-ic{width:38px;height:38px;border-radius:10px; display:flex;align-items:center;justify-content:center;}
+  .stat-card .val{font-size:26px; font-weight:800; margin-top:10px;}
+  .stat-card .lbl{font-size:13px; color:var(--muted);}
+  .stat-card .delta{font-size:12px; font-weight:700; padding:2px 8px; border-radius:99px;}
+  .delta.up{color:var(--success); background:var(--success-soft);}
+  .delta.flat{color:var(--muted); background:#F2F4F7;}
+  .panel{background:#fff; border:1px solid var(--border); border-radius:14px; padding:20px; box-shadow:var(--shadow);}
+  .panel-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;}
+  .panel-head h3{font-size:15px; font-weight:700;}
+  .dash-cols{display:grid; grid-template-columns:1.6fr 1fr; gap:16px;}
+  .agent-row{display:flex; align-items:center; gap:12px; padding:13px 0; border-bottom:1px solid #F2F4F7;}
+  .agent-row:last-child{border-bottom:none;}
+  .agent-row .a-ic{width:42px;height:42px;border-radius:11px; display:flex;align-items:center;justify-content:center;color:#fff;flex:none;}
+  .agent-row .info{flex:1; min-width:0;}
+  .agent-row .info b{font-size:13.5px; display:block;}
+  .agent-row .info span{font-size:12px; color:var(--muted);}
+  .status-pill{font-size:11px; font-weight:700; padding:4px 10px; border-radius:99px;}
+  .status-pill.live{color:var(--success); background:var(--success-soft);}
+  .status-pill.setup{color:var(--warning); background:var(--warning-soft);}
+  .status-pill.off{color:var(--muted); background:#F2F4F7;}
+  .activity{display:flex; gap:12px; padding:11px 0; border-bottom:1px solid #F2F4F7; font-size:13px;}
+  .activity:last-child{border-bottom:none;}
+  .activity .t{width:8px;height:8px;border-radius:50%;margin-top:5px;flex:none;}
+  .activity b{font-weight:600;}
+  .activity span{color:var(--muted); font-size:12px;}
+  .connection-tile{display:flex; align-items:center; gap:12px; padding:13px; border:1px solid var(--border); border-radius:12px; margin-bottom:10px;}
+  .connection-tile .c-ic{width:38px;height:38px;border-radius:10px; display:flex;align-items:center;justify-content:center;flex:none;}
+  .connection-tile b{font-size:13px; display:block;}
+  .connection-tile span{font-size:12px; color:var(--muted);}
+
+  /* leads table */
+  .table{width:100%; border-collapse:collapse;}
+  .table th{text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:#98A2B3; padding:10px 12px; border-bottom:1px solid var(--border);}
+  .table td{padding:12px; border-bottom:1px solid #F2F4F7; font-size:13px; vertical-align:middle;}
+  .table tr:last-child td{border-bottom:none;}
+  .table .l-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:#fff;}
+  .lead-src{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--muted);}
+  .lead-src svg{width:15px;height:15px;}
+  .filter-bar{display:flex; gap:10px; align-items:center; margin-bottom:16px; flex-wrap:wrap;}
+  .filter-bar .chip{padding:8px 14px; border:1px solid var(--border); border-radius:99px; background:#fff; font-size:13px; font-weight:600; color:var(--muted);}
+  .filter-bar .chip.on{background:var(--primary); color:#fff; border-color:var(--primary);}
+  .filter-bar select{border:1px solid var(--border); border-radius:10px; padding:8px 10px; background:#fff;}
+
+  /* whatsapp page */
+  .wa-hero{display:grid; grid-template-columns:1.3fr 1fr; gap:20px;}
+  .wa-status{display:flex; align-items:center; gap:14px; background:var(--success-soft); border:1px solid #A6F4C5; border-radius:12px; padding:14px;}
+  .wa-status .ic{width:44px;height:44px;border-radius:11px;background:#fff;color:var(--wa);display:flex;align-items:center;justify-content:center;flex:none;}
+  .wa-status b{font-size:14px;}
+  .wa-status span{font-size:12.5px; color:#027A48;}
+  .bar-chart{display:flex; align-items:flex-end; gap:12px; height:150px; padding-top:10px;}
+  .bar{flex:1; border-radius:6px 6px 0 0; background:linear-gradient(180deg,var(--primary),var(--primary-2)); opacity:.85; min-height:6px;}
+  .bar:hover{opacity:1;}
+  .bar-day{text-align:center; font-size:11px; color:var(--muted); margin-top:8px;}
+
+  /* toast */
+  #toast{position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(80px); background:var(--text); color:#fff; padding:13px 20px; border-radius:12px; font-weight:600; font-size:13.5px; box-shadow:var(--shadow-lg); transition:.3s; z-index:999; opacity:0; display:flex; align-items:center; gap:9px;}
+  #toast.show{transform:translateX(-50%) translateY(0); opacity:1;}
+  #toast svg{color:#6CE9A6;}
+  .lang-switch{position:fixed;top:16px;right:20px;z-index:9999;display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--border);border-radius:12px;padding:7px 12px;box-shadow:0 4px 14px rgba(16,24,40,.08);}
+  .lang-switch svg{color:var(--muted);}
+  .lang-switch select{border:none;background:transparent;font-weight:700;font-size:13px;color:var(--text);cursor:pointer;outline:none;}
+  .lang-switch select:focus{outline:none;}
+  .login-loading{display:flex; align-items:center; gap:10px; justify-content:center; padding:13px; border:1px solid var(--border); border-radius:12px; background:#fff; font-weight:600; color:var(--muted);}
+  .spinner{width:18px;height:18px;border-radius:50%; border:2.5px solid #D0D5DD; border-top-color:var(--primary); animation:spin .7s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .center{text-align:center;}
+  .mt16{margin-top:16px;} .mt24{margin-top:24px;} .mb16{margin-bottom:16px;}
+  .flex-between{display:flex; justify-content:space-between; align-items:center; gap:10px;}
+  .empty-state{padding:36px 20px; text-align:center; color:var(--muted);}
+  .empty-state .big{width:56px;height:56px;border-radius:14px;background:#F2F4F7;color:#98A2B3;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;}
+
+  @media (max-width:1000px){
+    .login-wrap{grid-template-columns:1fr;}
+    .login-left{display:none;}
+    .connect-wrap,.setup-grid,.kb-grid,.dash-cols,.wa-hero,.welcome-wrap,.platform-wrap{grid-template-columns:1fr;}
+    .welcome-right{min-height:260px;}
+    .stat-grid{grid-template-columns:repeat(2,1fr);}
+    .sidebar{display:none;}
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN SCREEN ============ -->
+<div id="scr-login" class="screen">
+  <div class="login-wrap">
+    <div class="login-left">
+      <div class="blob b1"></div><div class="blob b2"></div>
+      <div class="brand">
+        <div class="brand-logo">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3z"/></svg>
+        </div>
+        Agently
+      </div>
+      <h1 id="lg-h1">Build your <span>AI chat agent</span> in minutes.<br/>No coding required.</h1>
+      <p id="lg-p">Connect your social channels, upload your knowledge, and let AI chat with your customers across Facebook, WhatsApp, Instagram and more — all from one simple dashboard.</p>
+      <div class="login-proof">
+        <div class="proof-card"><b>3+</b><span data-i18n="Channels connected">Channels connected</span></div>
+        <div class="proof-card"><b>70%</b><span data-i18n="Faster replies">Faster replies</span></div>
+        <div class="proof-card"><b>24/7</b><span data-i18n="AI availability">AI availability</span></div>
+      </div>
+    </div>
+    <div class="login-right">
+      <div class="login-card">
+        <h2 data-i18n="Welcome to Agently">Welcome to Agently</h2>
+        <p class="sub" data-i18n="Sign in to set up your AI chat agent">Sign in to set up your AI chat agent</p>
+        <button class="sso-btn sso-google" onclick="ssoLogin('google')">
+          <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.1 5.7l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>
+          <span data-i18n="Continue with Google">Continue with Google</span>
+        </button>
+        <button class="sso-btn sso-fb" onclick="ssoLogin('facebook')">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+          <span data-i18n="Continue with Facebook">Continue with Facebook</span>
+        </button>
+        <div class="login-divider" data-i18n="or">or</div>
+        <div class="demo-hint" id="lg-tip">▶ <b>Demo tip:</b> Click any login button — the whole onboarding wizard is clickable. After setup you'll land on the dashboard where the <b>Chat Agent → Knowledge Base</b> menu lives.</div>
+        <div class="login-foot" data-i18n="By continuing you agree to our Terms of Service & Privacy Policy.">By continuing you agree to our Terms of Service &amp; Privacy Policy.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ WIZARD SCREEN ============ -->
+<div id="scr-wizard" class="screen hidden">
+  <div class="wizard-top">
+    <div class="wiz-logo">
+      <div class="brand-logo"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3z"/></svg></div>
+      Agently
+    </div>
+    <div class="wiz-step-title" id="wiz-step-label">Step 1 of 5 · Business</div>
+    <button class="btn btn-ghost" onclick="skipToDashboard()"><span data-i18n="Skip setup → Dashboard">Skip setup → Dashboard</span></button>
+  </div>
+  <div class="wiz-progress-line">
+    <div class="stepper" id="stepper"></div>
+  </div>
+  <div class="wiz-body" id="wizard-body"></div>
+  <div class="wiz-nav">
+    <button class="btn btn-outline" id="wiz-back" onclick="wizardBack()">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      <span data-i18n="Back">Back</span>
+    </button>
+    <div class="right">
+      <span class="wiz-count" id="wiz-count"></span>
+      <button class="btn btn-primary" id="wiz-next" onclick="wizardNext()">Continue
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ DASHBOARD SCREEN ============ -->
+<div id="scr-dashboard" class="screen hidden">
+  <div class="dash">
+    <aside class="sidebar">
+      <div class="sb-brand">
+        <div class="brand-logo"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3z"/></svg></div>
+        Agently
+      </div>
+      <nav class="sb-nav">
+        <div class="sb-group" data-i18n="Main">Main</div>
+        <button class="nav-item" data-page="dashboard" onclick="go('dashboard')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg> <span data-i18n="Dashboard">Dashboard</span></button>
+        <button class="nav-item" data-page="chatagent" onclick="toggleAgentMenu(this)"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> <span data-i18n="Chat Agent">Chat Agent</span>
+          <span class="chev"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+        </button>
+        <div class="submenu" id="agent-submenu">
+          <button class="nav-item" data-page="knowledge" onclick="go('knowledge')"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> <span data-i18n="Knowledge Base">Knowledge Base</span></button>
+          <button class="nav-item" data-page="agents" onclick="go('agents')"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="2.5"/><circle cx="9" cy="14" r="1"/><circle cx="15" cy="14" r="1"/><path d="M12 8V5a2 2 0 0 1 4 0"/><line x1="9" y1="17.5" x2="15" y2="17.5"/></svg> <span data-i18n="My Agents">My Agents</span></button>
+          <button class="nav-item" data-page="prompts" onclick="go('prompts')"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3z"/><path d="M19 3v4"/><path d="M21 5h-4"/></svg> <span data-i18n="AI Prompts">AI Prompts</span></button>
+        </div>
+        <button class="nav-item" data-page="leads" onclick="go('leads')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> <span data-i18n="Leads">Leads</span> <span class="badge">12</span></button>
+        <button class="nav-item" data-page="whatsapp" onclick="go('whatsapp')"><svg viewBox="0 0 24 24" width="20" height="20" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg> <span data-i18n="WhatsApp">WhatsApp</span></button>
+        <div id="sb-orders-slot"></div><div id="sb-catalog-slot"></div><button class="nav-item" data-page="analytics" onclick="go('analytics')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> <span data-i18n="Analytics">Analytics</span></button>
+        <div class="sb-group" data-i18n="System">System</div>
+        <button class="nav-item" data-page="integrations" onclick="go('integrations')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v6"/><path d="M15 2v6"/><path d="M12 8v5"/><path d="M4 13h16v2a4 4 0 0 1-4 4h-2v3h-4v-3H8a4 4 0 0 1-4-4z"/></svg> <span data-i18n="Integrations">Integrations</span></button>
+        <button class="nav-item" data-page="settings" onclick="go('settings')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> <span data-i18n="Settings">Settings</span></button>
+      </nav>
+      <div class="sb-bottom">
+        <div class="sb-user">
+          <div class="avatar" id="sb-avatar">S</div>
+          <div><b id="sb-name">Sarah</b><span id="sb-email">sarah@gmail.com</span></div>
+          <button class="btn btn-ghost" style="margin-left:auto;" onclick="logout()"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></button>
+        </div>
+      </div>
+    </aside>
+    <div class="dash-main">
+      <div class="dash-top">
+        <h2 id="page-title">Dashboard</h2>
+        <div class="spacer"></div>
+        <div class="top-search"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="top-search-in" placeholder="Search agents, leads, docs..." /></div>
+        <button class="icon-btn" title="Notifications"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span class="dotp"></span></button>
+        <button class="btn btn-primary" onclick="toast('New agent wizard will open')"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> <span data-i18n="New Agent">New Agent</span></button>
+      </div>
+      <div class="dash-body" id="dash-body"></div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#6CE9A6" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><span id="toast-msg">Done</span></div>
+
+<div class="lang-switch" title="Language">
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+  <select id="lang-select" onchange="setLang(this.value)">
+    <option value="en">EN · English</option>
+    <option value="bd">BD · বাংলা</option>
+  </select>
+</div>
+
+<script>
+/* ============ ICONS ============ */
+const I = {
+  grid:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+  message:'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  book:'<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
+  users:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  chart:'<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+  settings:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+  bell:'<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
+  logout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
+  chev:'<polyline points="6 9 12 15 18 9"/>',
+  chevr:'<polyline points="9 18 15 12 9 6"/>',
+  check:'<polyline points="20 6 9 17 4 12"/>',
+  checkcircle:'<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+  plus:'<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+  search:'<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+  upload:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
+  file:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
+  filetext:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>',
+  sheet:'<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/>',
+  bot:'<rect x="4" y="8" width="16" height="12" rx="2.5"/><circle cx="9" cy="14" r="1"/><circle cx="15" cy="14" r="1"/><path d="M12 8V5a2 2 0 0 1 4 0"/><line x1="9" y1="17.5" x2="15" y2="17.5"/>',
+  send:'<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>',
+  phone:'<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>',
+  globe:'<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
+  sparkles:'<path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3z"/><path d="M19 3v4"/><path d="M21 5h-4"/>',
+  link:'<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  zap:'<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
+  trash:'<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+  plug:'<path d="M9 2v6"/><path d="M15 2v6"/><path d="M12 8v5"/><path d="M4 13h16v2a4 4 0 0 1-4 4h-2v3h-4v-3H8a4 4 0 0 1-4-4z"/>',
+  eye:'<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+  refresh:'<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
+  x:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+  image:'<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
+  trend:'<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>',
+  cart:'<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>',
+  grad:'<path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>',
+  plane:'<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>',
+  heart:'<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/><polyline points="3.27 12 8.5 12 10 8.5 13 15.5 14.5 12 20.73 12"/>',
+  home:'<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+  utensils:'<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/>',
+  dumbbell:'<path d="M14.4 14.4 9.6 9.6"/><path d="M18.657 21.485a2 2 0 1 1-2.829-2.828l-1.767 1.768a2 2 0 1 1-2.829-2.829l6.364-6.364a2 2 0 1 1 2.829 2.829l-1.768 1.767a2 2 0 1 1 2.828 2.829z"/><path d="m21.5 21.5-1.4-1.4"/><path d="M3.9 3.9 2.5 2.5"/><path d="M6.404 12.768a2 2 0 1 1-2.829-2.829l1.768-1.767a2 2 0 1 1-2.828-2.829l2.828-2.828a2 2 0 1 1 2.829 2.828l1.767-1.768a2 2 0 1 1 2.829 2.829z"/>',
+  funnel:'<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>',
+  wrench:'<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+  clock:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  instagram:'<rect x="2" y="2" width="20" height="20" rx="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>',
+  telegram:'<path d="M21.5 4.5 2.8 12.3c-1 .4-1 1.6-.1 1.9l4.7 1.5 1.8 5.6c.3.8 1.2 1.1 1.9.6l2.7-2 4.6 3.4c.7.5 1.7.1 1.9-.8l3-14.1c.2-1-.8-1.9-1.8-1.6z"/>',
+  star:'<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+  pencil:'<path d="M17 3a2.83 2.83 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5z"/>',
+  calendar:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
+  drive:'<polygon points="12 3 22 21 2 21 12 3"/><line x1="12" y1="3" x2="12" y2="21"/>',
+  layers:'<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
+  slack:'<line x1="5" y1="9" x2="19" y2="9"/><line x1="5" y1="15" x2="19" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/>',
+  fb:'<path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/>',
+  wa:'<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>'
+};
+const icon = (n,s=20) => '<svg viewBox="0 0 24 24" width="'+s+'" height="'+s+'" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+(I[n]||'')+'</svg>';
+
+/* ============ DATA ============ */
+const BUSINESSES = [
+  {id:'ecommerce', name:'E-Commerce', icon:'cart', color:'#6366F1', blurb:'Sell products online'},
+  {id:'education', name:'Education', icon:'grad', color:'#F59E0B', blurb:'Courses & coaching'},
+  {id:'travel', name:'Travel', icon:'plane', color:'#0EA5E9', blurb:'Tours & bookings'},
+  {id:'healthcare', name:'Healthcare', icon:'heart', color:'#F43F5E', blurb:'Clinics & wellness'},
+  {id:'realestate', name:'Real Estate', icon:'home', color:'#B45309', blurb:'Properties & rentals'},
+  {id:'food', name:'Food & Restaurants', icon:'utensils', color:'#10B981', blurb:'Orders & delivery'},
+  {id:'fitness', name:'Fitness', icon:'dumbbell', color:'#8B5CF6', blurb:'Gym & classes'},
+  {id:'finance', name:'Finance', icon:'trend', color:'#14B8A6', blurb:'Loans & insurance'},
+  {id:'leadgen', name:'Lead Generation', icon:'funnel', color:'#EF4444', blurb:'Capture & track leads'},
+  {id:'services', name:'Home Services', icon:'wrench', color:'#64748B', blurb:'Repairs & cleaning'}
+];
+const CHANNELS = [
+  {id:'website', name:'Website', icon:'site', color:'#0EA5E9', desc:'Live chat widget'},
+  {id:'facebook', name:'Facebook', icon:'fb', color:'#1877F2', desc:'Pages & Messenger'},
+  {id:'whatsapp', name:'WhatsApp', icon:'wa', color:'#25D366', desc:'Business messages'},
+  {id:'instagram', name:'Instagram', icon:'insta', color:'#E4405F', desc:'DMs & comments'},
+  {id:'google', name:'Google Business', icon:'ggl', color:'#4285F4', desc:'Maps & reviews'},
+  {id:'telegram', name:'Telegram', icon:'tlg', color:'#2AABEE', desc:'Channel & bot'}
+];
+const CHANNEL_ICON = {
+  fb: '<svg viewBox="0 0 24 24" width="26" height="26" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>',
+  wa: '<svg viewBox="0 0 24 24" width="26" height="26" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>',
+  insta: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#E4405F" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>',
+  ggl: '<svg viewBox="0 0 48 48" width="26" height="26"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.1 5.7l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>',
+  site: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#0EA5E9" stroke-width="1.8"><rect x="2.5" y="3.5" width="19" height="17" rx="3"/><polyline points="9 10.2 6.6 12 9 13.8"/><polyline points="15 10.2 17.4 12 15 13.8"/><line x1="13.2" y1="9.4" x2="10.8" y2="14.6"/></svg>',
+  tlg: '<svg viewBox="0 0 24 24" width="26" height="26" fill="#2AABEE"><path d="M21.5 4.5 2.8 12.3c-1 .4-1 1.6-.1 1.9l4.7 1.5 1.8 5.6c.3.8 1.2 1.1 1.9.6l2.7-2 4.6 3.4c.7.5 1.7.1 1.9-.8l3-14.1c.2-1-.8-1.9-1.8-1.6z"/></svg>'
+};
+
+/* ============ TOOLS (connect your tools) ============ */
+const TOOLS = [
+  {id:'sheets', name:'Google Sheets', icon:'sheet', color:'#12B76A', desc:'Sync product & lead lists'},
+  {id:'docs', name:'Google Docs', icon:'filetext', color:'#4285F4', desc:'Index policies & SOPs'},
+  {id:'calendar', name:'Google Calendar', icon:'calendar', color:'#F79009', desc:'Check slots & book appointments'},
+  {id:'drive', name:'Google Drive', icon:'drive', color:'#FBBF24', desc:'Folders & shared files'},
+  {id:'notion', name:'Notion', icon:'layers', color:'#111827', desc:'Workspace pages'},
+  {id:'slack', name:'Slack', icon:'slack', color:'#E4405F', desc:'Answer in channels'},
+  {id:'airtable', name:'Airtable', icon:'grid', color:'#F43F5E', desc:'Tables & records'},
+  {id:'hubspot', name:'HubSpot CRM', icon:'users', color:'#F97316', desc:'Contacts & deals'}
+];
+
+/* ============ LANGUAGE (EN / BD) ============ */
+let LANG = 'en';
+const L10N = {
+  'Main':'প্রধান', 'System':'সিস্টেম',
+  'Dashboard':'ড্যাশবোর্ড', 'Chat Agent':'চ্যাট এজেন্ট', 'Knowledge Base':'নলেজ বেস', 'My Agents':'আমার এজেন্ট', 'AI Prompts':'এআই প্রম্পট',
+  'Leads':'লিড', 'WhatsApp':'হোয়াটসঅ্যাপ', 'Orders':'অর্ডার', 'Product Catalog':'প্রোডাক্ট ক্যাটালগ', 'Analytics':'অ্যানালিটিক্স', 'Integrations':'ইন্টিগ্রেশন', 'Settings':'সেটিংস',
+  'Search agents, leads, docs...':'এজেন্ট, লিড, ডক খুঁজুন...', 'New Agent':'নতুন এজেন্ট', 'Notifications':'নোটিফিকেশন',
+  'Welcome to Agently':'Agently-তে স্বাগতম', 'Sign in to set up your AI chat agent':'আপনার এআই চ্যাট এজেন্ট সেট আপ করতে সাইন ইন করুন',
+  'Continue with Google':'গুগল দিয়ে চালিয়ে যান', 'Continue with Facebook':'ফেসবুক দিয়ে চালিয়ে যান', 'or':'অথবা',
+  'By continuing you agree to our Terms of Service & Privacy Policy.':'চালিয়ে যাওয়ার মাধ্যমে আপনি আমাদের পরিষেবার শর্তাবলী ও গোপনীয়তা নীতিতে সম্মত হচ্ছেন।',
+  'Build your AI chat agent in minutes.':'মিনিটেই তৈরি করুন আপনার এআই চ্যাট এজেন্ট।', 'No coding required.':'কোনো কোডিং প্রয়োজন নেই।',
+  'Connect your social channels, upload your knowledge, and let AI chat with your customers across Facebook, WhatsApp, Instagram and more — all from one simple dashboard.':'আপনার সোশ্যাল চ্যানেল কানেক্ট করুন, নলেজ আপলোড করুন, আর এআই-কে আপনার গ্রাহকদের সঙ্গে চ্যাট করতে দিন ফেসবুক, হোয়াটসঅ্যাপ, ইনস্টাগ্রামসহ আরও অনেক প্ল্যাটফর্মে — সব এক ড্যাশবোর্ড থেকে।',
+  'Channels connected':'চ্যানেল কানেক্টেড', 'Faster replies':'দ্রুত উত্তর', 'AI availability':'এআই প্রাপ্যতা',
+  'Step 1 of 6':'ধাপ ১ এর ৬', 'Back':'পেছনে', 'Continue':'চালিয়ে যান', 'Go to Dashboard':'ড্যাশবোর্ডে যান',
+  'Skip setup → Dashboard':'সেটআপ বাদ → ড্যাশবোর্ড',
+  'Welcome':'স্বাগতম', 'Name':'নাম', 'Platform':'প্ল্যাটফর্ম', 'Connect':'কানেক্ট', 'Business':'ব্যবসা', 'Knowledge':'নলেজ',
+  'No credit card required · Takes under 60 seconds':'কোনো ক্রেডিট কার্ড লাগবে না · ৬০ সেকেন্ডের কম সময় লাগবে',
+  'Build my chatbot':'আমার চ্যাটবট তৈরি করুন',
+  'Give your bot a name':'আপনার বটের নাম দিন',
+  'Your bot is ready, Please select where you want to implement':'আপনার বট তৈরি, অনুগ্রহ করে নির্বাচন করুন কোথায় প্রয়োগ করতে চান',
+  'I want to use this bot for my business — choose one platform from the icons below.':'আমি আমার ব্যবসার জন্য এই বট ব্যবহার করতে চাই — নিচের আইকন থেকে একটি প্ল্যাটফর্ম বেছে নিন।',
+  'Chose your business platform':'আপনার ব্যবসার প্ল্যাটফর্ম বেছে নিন',
+  'You can add more platforms anytime after setup.':'সেটআপের পরে যেকোনো সময় আরও প্ল্যাটফর্ম যোগ করতে পারবেন।',
+  'What kind of business do you run in':'আপনি কোন ধরনের ব্যবসা করেন', '?':'?', 'your platform':'আপনার প্ল্যাটফর্ম',
+  'Share the knowledge to your bot or upload your product':'আপনার বটের সাথে নলেজ শেয়ার করুন বা প্রোডাক্ট আপলোড করুন',
+  'Upload your business or product information':'আপনার ব্যবসা বা প্রোডাক্টের তথ্য আপলোড করুন',
+  'New to Agently':'Agently-তে নতুন',
+  'Set up a ready-to-use AI chatbot in 60 seconds. No coding — just answer a few simple questions.':'মাত্র ৬০ সেকেন্ডে তৈরি করুন রেডি-টু-ইউজ এআই চ্যাটবট। কোনো কোডিং নেই — শুধু কয়েকটি সহজ প্রশ্নের উত্তর দিন।',
+  'Instant setup':'তাৎক্ষণিক সেটআপ', 'Answer a few steps and your bot goes live':'কয়েকটি ধাপে উত্তর দিন আর আপনার বট চালু হয়ে যাবে',
+  'Talks to your customers':'আপনার গ্রাহকদের সাথে কথা বলে', 'On Facebook, WhatsApp, Instagram & more':'ফেসবুক, হোয়াটসঅ্যাপ, ইনস্টাগ্রাম ও আরও অনেক প্ল্যাটফর্মে',
+  'Learns from your files':'আপনার ফাইল থেকে শেখে', 'Uses your PDFs, Excel and tools as its brain':'আপনার PDF, Excel ও টুলকে মস্তিষ্ক হিসেবে ব্যবহার করে',
+  'I want to use this bot for my business — choose one platform from the icons below.':'আমি আমার ব্যবসার জন্য এই বট ব্যবহার করতে চাই — নিচের আইকন থেকে একটি প্ল্যাটফর্ম বেছে নিন।',
+  'Give your bot a name':'আপনার বটের নাম দিন',
+  'Pick a friendly name your customers will remember.':'আপনার গ্রাহকদের মনে রাখার মতো একটি বন্ধুত্বপূর্ণ নাম বেছে নিন।',
+  'Bot name':'বটের নাম', 'Suggestions:':'পরামর্শ:', 'Your bot':'আপনার বট', 'AI powered':'এআই চালিত',
+  'Pick the one that fits best — we\'ll shape your AI agent around it.':'সবচেয়ে উপযুক্তটি বেছে নিন — আমরা আপনার এআই এজেন্টকে সেভাবে সাজাব।',
+  'your platform':'আপনার প্ল্যাটফর্ম',
+  'Upload knowledge base':'নলেজ বেস আপলোড', 'Upload product':'প্রোডাক্ট আপলোড', 'Type a message':'মেসেজ লিখুন',
+  'Yes, upload more':'হ্যাঁ, আরও আপলোড করুন', 'No, continue':'না, চালিয়ে যান',
+  'Yes, upload a product':'হ্যাঁ, প্রোডাক্ট আপলোড করুন', 'No, I\'m done':'না, শেষ', 'Upload product picture':'প্রোডাক্টের ছবি আপলোড',
+  'Online · learning from your files':'অনলাইন · আপনার ফাইল থেকে শেখা',
+  'Type anything you want the bot to know...':'বটকে যা জানাতে চান তা লিখুন...', 'Tell your bot anything...':'বটকে কিছু বলুন...',
+  'Chat with your bot below — upload files or anything you want it to know.':'নিচে আপনার বটের সাথে চ্যাট করুন — ফাইল বা যা কিছু জানাতে চান আপলোড করুন।',
+  'product image':'প্রোডাক্টের ছবি', 'knowledge base':'নলেজ বেস', 'uploaded':'আপলোড হয়েছে',
+  'Product image':'প্রোডাক্টের ছবি', 'Product title':'প্রোডাক্টের নাম', 'Product code':'প্রোডাক্ট কোড', 'Description':'বিবরণ',
+  'Sizes & colors — enter how many pieces per color per size':'সাইজ ও রঙ — প্রতি রঙ ও সাইজে কত পিস লিখুন',
+  'Add a color, e.g. Green':'একটি রঙ যোগ করুন, যেমন সবুজ', 'Add color':'রঙ যোগ করুন', 'Total pieces:':'মোট পিস:',
+  'Total quantity':'মোট পরিমাণ', 'Price ($)':'মূল্য ($)', 'Save to product catalog':'প্রোডাক্ট ক্যাটালগে সেভ করুন',
+  'How it works':'কীভাবে কাজ করে',
+  'Uploading product data teaches the AI to auto-fill every field in your store, so listing a product takes seconds.':'প্রোডাক্ট ডেটা আপলোড করলে এআই আপনার স্টোরের প্রতিটি ফিল্ড স্বয়ংক্রিয়ভাবে পূরণ করতে শেখে, ফলে একটি প্রোডাক্ট তালিকাভুক্ত করতে কয়েক সেকেন্ড লাগে।',
+  'Image detected':'ছবি শনাক্ত হয়েছে',
+  'Upload your files what you want to share with your bot':'আপনার বটের সাথে শেয়ার করতে চাওয়া ফাইলগুলো আপলোড করুন',
+  'You can upload your product catalog with size, color and price':'আপনি সাইজ, রঙ ও মূল্যসহ আপনার প্রোডাক্ট ক্যাটালগ আপলোড করতে পারেন',
+  'For product upload you can upload your image':'প্রোডাক্ট আপলোডের জন্য আপনি আপনার ছবি আপলোড করতে পারেন',
+  'Then put related data which asked by your bot':'তারপর বট যা যা জিজ্ঞাসা করবে সেই সম্পর্কিত তথ্য দিন',
+  'Crawl from a website':'ওয়েবসাইট থেকে ক্রল করুন', 'Crawl':'ক্রল', 'Title, product code &amp; description generated':'নাম, প্রোডাক্ট কোড ও বিবরণ তৈরি হয়েছে',
+  'Quantity &amp; price suggested':'পরিমাণ ও মূল্য সুপারিশ করা হয়েছে', 'Create a product catalog &amp; sync after each sell':'প্রোডাক্ট ক্যাটালগ তৈরি করুন ও প্রতিটি বিক্রির পর সিঙ্ক করুন', 'You approve &amp; publish':'আপনি অনুমোদন ও প্রকাশ করেন',
+  'Catalog sync':'ক্যাটালগ সিঙ্ক', 'Connect Google Sheets to import products in bulk':'বাল্কে প্রোডাক্ট ইমপোর্ট করতে গুগল শিট কানেক্ট করুন',
+  'Product catalog &amp; stock sync':'প্রোডাক্ট ক্যাটালগ ও স্টক সিঙ্ক',
+  'Auto-built from your uploaded products · linked to your left menu · quantity syncs after every sell':'আপনার আপলোড করা প্রোডাক্ট থেকে স্বয়ংক্রিয় তৈরি · আপনার বাম মেনুতে যুক্ত · প্রতিটি বিক্রির পর পরিমাণ সিঙ্ক হয়',
+  'Track sales &amp; orders':'বিক্রয় ও অর্ডার ট্র্যাক করুন',
+  'AI updates product, quantity, address, phone, email &amp; delivery status by chatting with the buyer':'এআই ক্রেতার সাথে চ্যাট করে প্রোডাক্ট, পরিমাণ, ঠিকানা, ফোন, ইমেইল ও ডেলিভারি স্ট্যাটাস আপডেট করে',
+  'For every image uploaded in chat, the AI prompts:':'চ্যাটে প্রতিটি ছবি আপলোডের জন্য এআই প্রম্পট করে:',
+  'Title · Product code · Product image · Description · Quantity · Price':'নাম · প্রোডাক্ট কোড · প্রোডাক্টের ছবি · বিবরণ · পরিমাণ · মূল্য',
+  'saved to your catalog, synced after each sale.':'আপনার ক্যাটালগে সেভ হয়, প্রতিটি বিক্রির পর সিঙ্ক হয়।',
+  'Signing in with':'সাইন ইন হচ্ছে', 'Google':'গুগল', 'Facebook':'ফেসবুক'
+};
+const tr = s => (LANG==='bd' && L10N[s] ? L10N[s] : s);
+function setLang(l){
+  LANG = l;
+  applyLang();
+}
+function applyLang(){
+  const els = document.querySelectorAll('[data-i18n]');
+  els.forEach(el=>{ const k = el.getAttribute('data-i18n'); el.textContent = LANG==='bd' ? (L10N[k]||el.textContent) : k; });
+  const si = document.getElementById('top-search-in');
+  if(si) si.placeholder = tr('Search agents, leads, docs...');
+  const sel = document.getElementById('lang-select');
+  if(sel) sel.value = LANG;
+  if(S.screen==='wizard') renderWizard();
+  else if(S.screen==='dashboard') { renderDash(); go(S.dashPage, true); }
+  else if(S.screen==='login') translateLogin();
+}
+function translateLogin(){
+  const h1 = document.getElementById('lg-h1');
+  if(h1) h1.innerHTML = LANG==='bd'
+    ? 'মিনিটেই তৈরি করুন আপনার <span>এআই চ্যাট এজেন্ট</span>।<br/>কোনো কোডিং প্রয়োজন নেই।'
+    : 'Build your <span>AI chat agent</span> in minutes.<br/>No coding required.';
+  const p = document.getElementById('lg-p');
+  if(p) p.textContent = LANG==='bd'
+    ? 'আপনার সোশ্যাল চ্যানেল কানেক্ট করুন, নলেজ আপলোড করুন, আর এআই-কে আপনার গ্রাহকদের সঙ্গে চ্যাট করতে দিন ফেসবুক, হোয়াটসঅ্যাপ, ইনস্টাগ্রামসহ আরও অনেক প্ল্যাটফর্মে — সব এক ড্যাশবোর্ড থেকে।'
+    : 'Connect your social channels, upload your knowledge, and let AI chat with your customers across Facebook, WhatsApp, Instagram and more — all from one simple dashboard.';
+  const tip = document.getElementById('lg-tip');
+  if(tip) tip.innerHTML = LANG==='bd'
+    ? '▶ <b>ডেমো টিপ:</b> যেকোনো লগইন বাটনে ক্লিক করুন — পুরো অনবোর্ডিং উইজার্ড ক্লিকযোগ্য। সেটআপ শেষে ড্যাশবোর্ডে চলে যাবেন, যেখানে <b>চ্যাট এজেন্ট → নলেজ বেস</b> মেনু আছে।'
+    : '▶ <b>Demo tip:</b> Click any login button — the whole onboarding wizard is clickable. After setup you\'ll land on the dashboard where the <b>Chat Agent → Knowledge Base</b> menu lives.';
+}
+
+/* ============ STATE ============ */
+let S = {
+  screen:'login',
+  step:1,
+  business:null,
+  channels:[],
+  fbLoggedIn:false,
+  fbPage:null,
+  waNumber:null, waVerified:false,
+  otpShown:false,
+  files:[],        // knowledge files
+  kbChat:[], kbPhase:'start',
+  sheetsConnected:false,
+  tools:{},
+  trackOrders:false,
+  catalogEnabled:false,
+  botName:null,
+  provider:null, user:'Sarah', email:'sarah@gmail.com',
+  dashPage:'dashboard'
+};
+
+const STEPS = [
+  {lbl:'Welcome', icon:'bot'},
+  {lbl:'Name', icon:'pencil'},
+  {lbl:'Platform', icon:'message'},
+  {lbl:'Connect', icon:'fb'},
+  {lbl:'Business', icon:'grid'},
+  {lbl:'Knowledge', icon:'book'}
+];
+const BIZ = id => BUSINESSES.find(b=>b.id===id);
+const CH = id => CHANNELS.find(c=>c.id===id);
+
+/* ============ NAVIGATION ============ */
+function show(id){
+  ['scr-login','scr-wizard','scr-dashboard'].forEach(x=>document.getElementById(x).classList.add('hidden'));
+  document.getElementById(id).classList.remove('hidden');
+}
+
+function ssoLogin(provider){
+  S.provider = provider;
+  S.user = provider==='google' ? 'Sarah Mitchell' : 'Sarah Mitchell';
+  S.email = provider==='google' ? 'sarah.mitchell@gmail.com' : 'sarah.mitchell@facebook.com';
+  const wrap = document.querySelector('.login-card');
+  wrap.innerHTML = '<div class="login-loading"><span class="spinner"></span> '+tr('Signing in with')+' '+(provider==='google'?tr('Google'):tr('Facebook'))+'...</div>';
+  setTimeout(()=>{ S.screen='wizard'; S.step=1; renderWizard(); show('scr-wizard'); },900);
+}
+
+function logout(){
+  show('scr-login');
+  location.reload();
+}
+
+function skipToDashboard(){ S.screen='dashboard'; renderDash(); show('scr-dashboard'); }
+
+/* ============ WIZARD ============ */
+function renderStepper(){
+  const el = document.getElementById('stepper');
+  const platIcon = {facebook:'fb', whatsapp:'wa', instagram:'instagram', google:'search', telegram:'telegram', website:'globe'};
+  el.innerHTML = STEPS.map((st,i)=>{
+    const n=i+1, cls = n<S.step?'done':(n===S.step?'active':'');
+    const lbl = (n===4 && S.channels[0]) ? (CH(S.channels[0]) ? CH(S.channels[0]).name : st.lbl) : tr(st.lbl);
+    const icn = (n===4 && S.channels[0]) ? (platIcon[S.channels[0]]||st.icon) : st.icon;
+    const inner = n<S.step ? icon('check',16) : (n===S.step ? icon(icn,16) : n);
+    return '<div class="step-node '+cls+'"><span class="step-line"></span><div class="dot">'+inner+'</div><div class="lbl">'+lbl+'</div></div>';
+  }).join('');
+  const label = (S.step===4 && S.channels[0]) ? CH(S.channels[0]).name : STEPS[S.step-1].lbl;
+  const stepWord = LANG==='bd' ? 'ধাপ' : 'Step';
+  const ofWord = LANG==='bd' ? 'এর' : 'of';
+  document.getElementById('wiz-step-label').textContent = stepWord+' '+S.step+' '+ofWord+' '+STEPS.length+' · '+tr(label);
+  document.getElementById('wiz-count').textContent = S.step+' / '+STEPS.length;
+  document.getElementById('wiz-back').style.visibility = S.step===1 ? 'hidden' : 'visible';
+  const nxt = document.getElementById('wiz-next');
+  nxt.innerHTML = S.step===STEPS.length ? '<span>'+tr('Go to Dashboard')+'</span>'+icon('chevr',16) : '<span>'+tr('Continue')+'</span>'+icon('chevr',16);
+}
+
+function renderWizard(){
+  renderStepper();
+  const body = document.getElementById('wizard-body');
+  if(S.step===1) body.innerHTML = stepWelcome();
+  else if(S.step===2) body.innerHTML = stepName();
+  else if(S.step===3) body.innerHTML = stepChannels();
+  else if(S.step===4) body.innerHTML = stepConnectPlatform();
+  else if(S.step===5) body.innerHTML = stepBusiness();
+  else body.innerHTML = stepKnowledge();
+  bindDynamic();
+}
+
+function stepWelcome(){
+  const name = S.user.split(' ')[0];
+  return '<div class="wiz-panel welcome-wrap">'+
+    '<div class="welcome-left">'+
+      '<div class="welcome-badge">'+icon('sparkles',14)+' '+tr('New to Agently')+'</div>'+
+      '<h2>'+(LANG==='bd' ? 'হাই '+name+',<br/>চলুন আপনার প্রথম বট তৈরি করি!' : 'Hi '+name+',<br/>let\'s build your first bot!')+'</h2>'+
+      '<p class="wiz-desc">'+tr('Set up a ready-to-use AI chatbot in 60 seconds. No coding — just answer a few simple questions.')+'</p>'+
+      '<div class="welcome-points">'+
+        '<div class="welcome-point"><div class="wp-ic">'+icon('zap',18)+'</div><div><b>'+tr('Instant setup')+'</b><span>'+tr('Answer a few steps and your bot goes live')+'</span></div></div>'+
+        '<div class="welcome-point"><div class="wp-ic">'+icon('message',18)+'</div><div><b>'+tr('Talks to your customers')+'</b><span>'+tr('On Facebook, WhatsApp, Instagram & more')+'</span></div></div>'+
+        '<div class="welcome-point"><div class="wp-ic">'+icon('book',18)+'</div><div><b>'+tr('Learns from your files')+'</b><span>'+tr('Uses your PDFs, Excel and tools as its brain')+'</span></div></div>'+
+      '</div>'+
+      '<button class="btn btn-primary btn-lg" onclick="wizardNext()">'+icon('bot',18)+' '+tr('Build my chatbot')+'</button>'+
+      '<div class="wiz-count" style="margin-top:14px;">'+tr('No credit card required · Takes under 60 seconds')+'</div>'+
+    '</div>'+
+    '<div class="welcome-right">'+botIllustration()+'</div>'+
+  '</div>';
+}
+function botIllustration(){
+  return '<svg viewBox="0 0 220 220" width="280" height="280">'+
+    '<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6366F1"/><stop offset="1" stop-color="#8B5CF6"/></linearGradient></defs>'+
+    '<circle cx="40" cy="40" r="14" fill="#C7D2FE" opacity=".5"/>'+
+    '<circle cx="190" cy="60" r="10" fill="#DDD6FE" opacity=".6"/>'+
+    '<circle cx="186" cy="172" r="16" fill="#EDE9FE"/>'+
+    '<circle cx="36" cy="176" r="10" fill="#F5F3FF"/>'+
+    '<rect x="52" y="34" width="116" height="100" rx="24" fill="url(#bg)"/>'+
+    '<rect x="44" y="62" width="16" height="30" rx="8" fill="#A5B4FC"/>'+
+    '<rect x="160" y="62" width="16" height="30" rx="8" fill="#A5B4FC"/>'+
+    '<line x1="110" y1="34" x2="110" y2="16" stroke="#A5B4FC" stroke-width="6" stroke-linecap="round"/>'+
+    '<circle cx="110" cy="14" r="8" fill="#F0ABFC"/>'+
+    '<circle cx="80" cy="78" r="11" fill="#fff"/><circle cx="140" cy="78" r="11" fill="#fff"/>'+
+    '<circle cx="84" cy="78" r="5" fill="#312E81"/><circle cx="144" cy="78" r="5" fill="#312E81"/>'+
+    '<path d="M82 106 q28 16 56 0" stroke="#fff" stroke-width="5" fill="none" stroke-linecap="round"/>'+
+    '<circle cx="110" cy="100" r="4" fill="#F0ABFC"/>'+
+    '<rect x="66" y="140" width="88" height="56" rx="18" fill="url(#bg)"/>'+
+    '<rect x="88" y="152" width="44" height="22" rx="10" fill="#312E81" opacity=".35"/>'+
+    '<circle cx="88" cy="158" r="3.5" fill="#6CE9A6"/>'+
+    '<rect x="24" y="150" width="34" height="14" rx="7" fill="#A5B4FC"/>'+
+    '<rect x="162" y="150" width="34" height="14" rx="7" fill="#A5B4FC"/>'+
+    '<rect x="80" y="196" width="22" height="16" rx="7" fill="#A5B4FC"/>'+
+    '<rect x="118" y="196" width="22" height="16" rx="7" fill="#A5B4FC"/>'+
+    '<path d="M30 96 q-12 -8 0 -18" stroke="#C7D2FE" stroke-width="4" fill="none" stroke-linecap="round"/>'+
+    '<circle cx="188" cy="106" r="3.5" fill="#C7D2FE"/>'+
+  '</svg>';
+}
+
+function stepName(){
+  const cur = S.botName || '';
+  return '<div class="wiz-panel"><h2>'+tr('Give your bot a name')+'</h2>'+
+  '<p class="wiz-desc">'+tr('Pick a friendly name your customers will remember.')+'</p>'+
+  '<div style="max-width:560px">'+
+    '<div class="form-group"><label>'+tr('Bot name')+'</label>'+
+      '<input id="bot-name" class="name-input" placeholder="e.g. Ava, Nova, Sara, SupportPro" value="'+cur+'" oninput="document.getElementById(\'bot-name-prev\').textContent=this.value.trim()||\''+tr('Your bot')+'\';" />'+
+    '</div>'+
+    '<div class="name-suggestions"><span class="wiz-count">'+tr('Suggestions:')+'</span>'+
+      ['Nova','Ava','Sara','Max','Luna'].map(n=>'<button class="quick-chip" onclick="pickName(\''+n+'\')">'+n+'</button>').join('')+
+    '</div>'+
+    '<div class="name-preview"><div class="ic">'+icon('bot',20)+'</div><div><span>'+tr('Your bot')+'</span><b id="bot-name-prev">'+(cur||tr('Your bot'))+'</b></div><span class="status-pill live" style="margin-left:auto">'+tr('AI powered')+'</span></div>'+
+    '<div class="demo-hint mt16">'+icon('sparkles',14)+' This bot will be your <b>customer support &amp; sales agent</b> — it will run your full business: answer questions, take orders and capture leads automatically.</div>'+
+  '</div></div>';
+}
+function pickName(n){ S.botName = n; renderWizard(); toast((LANG==='bd'?'আপনার বটের নাম হয়েছে ': 'Your bot is named ')+n); }
+
+function stepBusiness(){
+  const plats = S.channels.map(c=>CH(c).name).join(', ') || tr('your platform');
+  return '<div class="wiz-panel"><h2>'+(LANG==='bd' ? 'আপনি কোন ধরনের ব্যবসা করেন '+plats+'?' : 'What kind of business do you run in '+plats+'?')+'</h2><p class="wiz-desc">'+tr('Pick the one that fits best — we\'ll shape your AI agent around it.')+'</p>'+
+  '<div class="icon-grid">'+BUSINESSES.map(b=>{
+    const sel = S.business===b.id ? 'selected' : '';
+    return '<div class="icon-card '+sel+'" onclick="S.business=\''+b.id+'\'; renderWizard();">'+
+      '<div class="ic" style="background:linear-gradient(135deg,'+b.color+'cc,'+b.color+')">'+icon(b.icon,26)+'</div>'+
+      '<div class="nm">'+b.name+'</div><div class="ds">'+b.blurb+'</div>'+
+      '<div class="check-badge">'+icon('check',12)+'</div></div>';
+  }).join('')+'</div></div>';
+}
+
+function stepChannels(){
+  const botName = S.botName || 'Your Bot';
+  return '<div class="wiz-panel"><h2>'+tr('Your bot is ready, Please select where you want to implement')+'</h2>'+
+  '<p class="wiz-desc">'+tr('I want to use this bot for my business — choose one platform from the icons below.')+'</p>'+
+  '<div>'+
+    '<div class="platform-title">'+icon('plug',16)+' '+tr('Chose your business platform')+'</div>'+
+    '<div class="icon-grid">'+CHANNELS.map(c=>{
+      const sel = S.channels.includes(c.id) ? 'selected' : '';
+      return '<div class="icon-card '+sel+'" onclick="toggleChannel(\''+c.id+'\')">'+
+        '<div class="ic" style="background:#fff; border:1px solid var(--border)">'+CHANNEL_ICON[c.icon]+'</div>'+
+        '<div class="nm" style="color:'+c.color+'">'+c.name+'</div><div class="ds">'+c.desc+'</div>'+
+        '<div class="check-badge">'+icon('check',12)+'</div></div>';
+    }).join('')+'</div>'+
+    '<div class="demo-hint mt16">'+icon('bot',14)+' '+tr('You can add more platforms anytime after setup.')+'</div>'+
+  '</div></div>';
+}
+function stepConnectPlatform(){
+  const ch = S.channels[0];
+  if(!ch) return '<div class="wiz-panel"><h2>Connect your platform</h2><p class="wiz-desc">Go back and choose a platform first.</p></div>';
+  const full = BUSINESSES.find(b=>b.id===S.business);
+  const bizName = full ? full.name : (S.botName || 'Your Bot');
+  if(ch==='facebook') return stepFacebook();
+  if(ch==='whatsapp') return '<div class="wiz-panel"><p class="wiz-desc">Link your WhatsApp Business number so your AI can chat &amp; capture leads for <b>'+bizName+'</b>.</p>'+waCard({id:'whatsapp',icon:'wa'}, bizName)+'</div>';
+  if(ch==='instagram') return '<div class="wiz-panel"><p class="wiz-desc">Handle DMs &amp; comments automatically.</p>'+igCard({id:'instagram',icon:'insta'})+'</div>';
+  if(ch==='google') return '<div class="wiz-panel"><p class="wiz-desc">Reply to customers who find you on Google Maps &amp; search.</p>'+gglCard({id:'google',icon:'ggl'})+'</div>';
+  if(ch==='telegram') return '<div class="wiz-panel"><p class="wiz-desc">Run your bot on Telegram.</p>'+tgCard({id:'telegram',icon:'tlg'})+'</div>';
+  return '<div class="wiz-panel"><p class="wiz-desc">Add the chat widget to your website.</p>'+siteCard({id:'website',icon:'site'})+'</div>';
+}
+function stepFacebook(){
+  const botName = S.botName || 'Your Bot';
+  return '<div class="wiz-panel"><h2>Connect your Facebook page</h2>'+
+  '<p class="wiz-desc">Login to Facebook and pick the page where <b>'+botName+'</b> replies to your customers.</p>'+fbConnectPanel()+'</div>';
+}
+function fbConnectPanel(){
+  if(!S.fbLoggedIn){
+    return '<div class="fb-panel"><button class="btn fb-login" onclick="fbLogin()"><svg viewBox="0 0 24 24" width="16" height="16" fill="#1877F2"><path d="M24 12.073C24 5.405 18.627 0 12 0S0 5.405 0 12.073C0 18.1 4.388 23.094 10.125 24v-8.437H7.078v-3.49h3.047v-2.66c0-3.025 1.792-4.697 4.533-4.697 1.312 0 2.686.236 2.686.236v2.971H15.83c-1.491 0-1.956.93-1.956 1.886v2.264h3.328l-.532 3.49h-2.796V24C19.612 23.094 24 18.1 24 12.073z"/></svg> Login with Facebook</button>'+
+      '<p class="muted" style="font-size:11.5px;margin-top:8px">Demo: clicking logs you in and lists your pages.</p></div>';
+  }
+  const pages = ['Fashion Store','Fashion Store - Ads','Fashion Store Community'];
+  return '<div class="fb-panel"><h4 style="margin:0 0 12px;font-size:14px">Choose your Facebook page</h4>'+
+    pages.map(p=>'<label class="page-radio'+(S.fbPage===p?' selected':'')+'" onclick="selectFbPage(\''+p+'\')">'+
+      '<input type="radio" name="fb-page" '+(S.fbPage===p?'checked':'')+'/>'+
+      '<div class="avatar fb-ic" style="width:34px;height:34px"><svg viewBox="0 0 24 24" width="16" height="16" fill="#fff"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg></div>'+
+      '<div class="info"><b>'+p+'</b><span>'+icon('grid',12)+' 1,248 followers · 15 reviews</span></div>'+
+      '<span class="check-badge">'+icon('check',12)+'</span></label>').join('')+
+    '<button class="btn btn-outline btn-block mt16" style="padding:9px" onclick="S.fbLoggedIn=false; S.fbPage=null; renderWizard();">'+icon('refresh',14)+' Switch Facebook account</button>'+
+  '</div>';
+}
+function fbLogin(){ S.fbLoggedIn=true; S.fbPage=null; renderWizard(); toast('Logged in to Facebook'); }
+function selectFbPage(p){ S.fbPage=p; renderWizard(); toast('Facebook page "'+p+'" selected'); }
+function toggleChannel(id){
+  if(S.channels[0]===id) return;
+  S.channels = [id];
+  S.fbLoggedIn=false; S.fbPage=null; S.otpShown=false; S.waVerified=false;
+  renderWizard();
+}
+
+function stepConnect(){
+  const c = S.channels;
+  if(c.length===0) return '<div class="wiz-panel"><h2>Connect your channel</h2><p class="wiz-desc">No channel selected yet. Go back and pick at least one channel.</p></div>';
+  // multiple connect cards, one per channel
+  return '<div class="wiz-panel"><h2>Connect your platforms</h2><p class="wiz-desc">Securely link each platform. This takes under a minute.</p><div class="connect-wrap">'+
+    c.map(ch=>connectCard(ch)).join('')+'</div></div>';
+}
+
+function connectCard(ch){
+  const full = BUSINESSES.find(b=>b.id===S.business);
+  const bizName = full ? full.name : 'your business';
+  if(ch.id==='facebook') return fbCard(ch,bizName);
+  if(ch.id==='whatsapp') return waCard(ch,bizName);
+  if(ch.id==='instagram') return igCard(ch);
+  if(ch.id==='google') return gglCard(ch);
+  if(ch.id==='telegram') return tgCard(ch);
+  return siteCard(ch);
+}
+
+function fbCard(ch,bizName){
+  const pages = ['Fashion Store','Fashion Store - Ads','Fashion Store Community'];
+  const conn = S.fbPage;
+  return '<div class="conn-card"><h3><span class="ic" style="background:#fff;border:1px solid var(--border)">'+CHANNEL_ICON[ch.icon]+'</span> Connect your Facebook Page</h3>'+
+  '<p class="muted">Choose the page where '+bizName+' should reply to customers automatically.</p>'+
+  (conn ? '<div class="conn-badge mb16">'+icon('check',12)+' Connected to '+conn+'</div>' : '')+
+  pages.map(p=>'<div class="page-row"><div class="avatar">'+p[0]+'</div><div class="info"><b>'+p+'</b><span>'+icon('grid',13)+' 1,248 followers · 15 reviews</span></div>'+
+    (conn===p ? '<span class="conn-badge">'+icon('check',12)+' Connected</span>' : '<button class="btn btn-primary" style="padding:8px 14px;font-size:12.5px" onclick="connectFbPage(\''+p+'\')">Connect</button>')+
+    '</div>').join('')+
+  '<button class="btn btn-outline btn-block mt16" onclick="toast(\'This opens Facebook login to authorize a new page\')">'+icon('plus',16)+' Connect another page</button></div>';
+}
+function connectFbPage(p){ S.fbPage=p; renderWizard(); toast('Facebook page "'+p+'" connected'); }
+
+function waCard(ch,bizName){
+  return '<div class="conn-card"><h3><span class="ic" style="background:#fff;border:1px solid var(--border)">'+CHANNEL_ICON[ch.icon]+'</span> Connect WhatsApp Business</h3>'+
+  '<p class="muted">Link your WhatsApp Business number for <b>'+bizName+'</b>. Your AI will chat and capture leads right here.</p>'+
+  (S.waVerified ? '<div class="wa-status" style="background:var(--success-soft);border-color:#A6F4C5;margin-bottom:14px;"><div class="ic">'+CHANNEL_ICON.wa+'</div><div><b>'+S.waNumber+' verified</b><span>Receiving messages on this number.</span></div></div>'
+   : S.otpShown
+    ? '<div class="form-group"><label>Enter the 6-digit code sent to '+S.waNumber+'</label><div class="otp-boxes">'+[0,1,2,3,4,5].map(i=>'<input class="otp-box" maxlength="1" oninput="otpType(this)" />').join('')+'</div></div><button class="btn btn-primary btn-block mt16" onclick="verifyWa()">Verify number</button>'
+    : '<div class="form-group"><label>WhatsApp Business number</label><div class="form-row"><input id="wa-input" placeholder="+1 555 000 1234" style="flex:1" />'+
+      '<button class="btn btn-outline" onclick="requestOtp()">'+icon('send',15)+' Send code</button></div></div><div class="demo-hint" style="font-size:12px;color:#027A48;background:var(--success-soft);border-color:#A6F4C5;">Demo: type any number and click Send code.</div>')+
+  '</div>';
+}
+function requestOtp(){
+  const v = document.getElementById('wa-input').value.trim();
+  if(!v){ toast('Please enter a WhatsApp number'); return; }
+  S.waNumber = v; S.otpShown = true; renderWizard();
+  toast('Code sent to '+v);
+}
+function otpType(el){
+  if(el.value) { const nx = el.nextElementSibling; if(nx) nx.focus(); }
+}
+function verifyWa(){
+  S.waVerified = true; S.otpShown = false; renderWizard(); toast('WhatsApp number verified');
+}
+
+function igCard(ch){
+  return '<div class="conn-card"><h3><span class="ic" style="background:#fff;border:1px solid var(--border)">'+CHANNEL_ICON[ch.icon]+'</span> Connect Instagram</h3>'+
+  '<p class="muted">Instagram connects through your Facebook account for secure access.</p>'+
+  '<div class="page-row"><div class="avatar" style="background:linear-gradient(135deg,#FBC2EB,#A6C1EE);color:#fff">@</div><div class="info"><b>@fashionstore</b><span>'+icon('grid',13)+' 8,542 followers</span></div>'+
+  (S.fbPage ? '<span class="conn-badge">'+icon('check',12)+' Linked</span>' : '<button class="btn btn-primary" style="padding:8px 14px;font-size:12.5px" onclick="S.fbPage=\'Fashion Store\'; renderWizard(); toast(\'Instagram connected via Facebook\')">Connect via Facebook</button>')+
+  '</div></div>';
+}
+
+function gglCard(ch){
+  const conn = S.sheetsConnected;
+  return '<div class="conn-card"><h3><span class="ic" style="background:#fff;border:1px solid var(--border)">'+CHANNEL_ICON[ch.icon]+'</span> Connect Google Business</h3>'+
+  '<p class="muted">Reply to customers who find you on Google Maps & search.</p>'+
+  '<div class="page-row"><div class="avatar" style="background:#ECFDF3;color:var(--success)">G</div><div class="info"><b>Fashion Store</b><span>'+icon('star',13)+' 4.8 · 214 reviews</span></div>'+
+  (conn ? '<span class="conn-badge">'+icon('check',12)+' Connected</span>' : '<button class="btn btn-primary" style="padding:8px 14px;font-size:12.5px" onclick="S.sheetsConnected=true; renderWizard(); toast(\'Google Business connected\')">Connect</button>')+
+  '</div></div>';
+}
+function tgCard(ch){
+  return '<div class="conn-card"><h3><span class="ic" style="background:#fff;border:1px solid var(--border)">'+CHANNEL_ICON[ch.icon]+'</span> Connect Telegram</h3>'+
+  '<div class="form-group"><label>Bot token from @BotFather</label><input placeholder="123456:ABC-DEF..."/></div>'+
+  '<button class="btn btn-primary btn-block" onclick="toast(\'Telegram bot connected\')">Connect bot</button></div>';
+}
+function siteCard(ch){
+  return '<div class="conn-card"><h3><span class="ic" style="background:#fff;border:1px solid var(--border)">'+CHANNEL_ICON[ch.icon]+'</span> Website live chat</h3>'+
+  '<p class="muted">Add a chat widget to your website with one line of code.</p>'+
+  '<div class="code-box">'+
+    '<button type="button" class="copy-btn" title="'+tr('Copy code')+'" onclick="copySiteCode()">'+
+      '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>'+
+    '</button>'+
+    '<div id="site-code" style="background:#0B1220;color:#7EE787;border-radius:10px;padding:14px;padding-right:46px;font-family:monospace;font-size:12.5px;line-height:1.7;">&lt;script src="https://agently.ai/widget.js"&gt;&lt;/script&gt;<br/>&lt;script&gt;Agently.init({agent:"'+ (S.business||'demo') +'"})&lt;/script&gt;</div>'+
+  '</div></div>';
+}
+function copySiteCode(){
+  const txt = '<script src="https://agently.ai/widget.js"><\/'+'script>\n<script>Agently.init({agent:"'+(S.business||'demo')+'"})<\/'+'script>';
+  const done = ()=>toast(LANG==='bd'?'কোড ক্লিপবোর্ডে কপি হয়েছে':'Code copied to clipboard');
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(done).catch(()=>fallbackCopy(txt, done));
+  } else fallbackCopy(txt, done);
+}
+function fallbackCopy(txt, done){
+  const ta = document.createElement('textarea');
+  ta.value = txt; ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); done(); }catch(e){}
+  document.body.removeChild(ta);
+}
+
+function stepKnowledge(){
+  if(!S.kbChat || S.kbChat.length===0){ S.kbChat=[]; S.kbPhase='start';
+    kbBot('Hi, I\'m <b>'+(S.botName||'Your Bot')+'</b>! Upload your files — or anything you want to let me know. I\'ll learn from it and answer your customers based on it.',
+      'হাই, আমি <b>'+(S.botName||'আপনার বট')+'</b>! আপনার ফাইল — বা আপনি যা কিছু জানাতে চান সেগুলো আপলোড করুন। আমি সেগুলো থেকে শিখব এবং আপনার গ্রাহকদের উত্তর দেব।');
+  }
+  return '<div class="wiz-panel"><h2>'+tr('Share the knowledge to your bot or upload your product')+'</h2>'+
+  '<p class="wiz-desc">'+tr('Chat with your bot below — upload files or anything you want it to know.')+'</p>'+
+  '<div class="kb-stack">'+
+    '<div class="kb-section">'+howItWorks()+'</div>'+
+    '<div class="kb-section">'+
+      '<div class="chat-panel kb-chat">'+
+        '<div class="chat-head"><div class="bot-avatar">'+icon('bot',18)+'</div><div><b>'+(S.botName||'Your Bot')+'</b><br/><span><span class="dot-green"></span> '+tr('Online · learning from your files')+'</span></div></div>'+
+        '<div class="chat-body" id="kb-body">'+S.kbChat.map(m=>'<div class="msg '+m.who+'">'+(LANG==='bd'?m.bd:m.en)+'</div>').join('')+'</div>'+
+        kbActions()+
+        kbMainActions()+
+        '<div class="chat-input"><button class="attach-btn" onclick="kbFileClick(\'kb\')" title="Upload knowledge base">'+icon('file',17)+'</button>'+
+          '<button class="attach-btn" onclick="kbFileClick(\'product\')" title="Upload a product image">'+icon('image',17)+'</button>'+
+          '<input id="kb-in" placeholder="'+tr('Type anything you want the bot to know...')+'" onkeydown="if(event.key===\'Enter\')kbSend()"/>'+
+          '<button class="send-btn" onclick="kbSend()">'+icon('send',18)+'</button></div>'+
+        '<input type="file" id="kb-file" accept=".pdf,.xlsx,.xls,.csv,.docx,.txt,.jpg,.jpeg,.png,.webp" class="hidden" onchange="kbUpload(this.files)"/>'+
+      '</div>'+
+    '</div>'+
+    '<div class="kb-section">'+featureOptions()+'</div>'+
+  '</div></div>';
+}
+function howItWorks(){
+  return '<div class="setup-info"><h3>'+tr('How it works')+'</h3>'+
+    '<p class="muted">'+tr('Uploading product data teaches the AI to auto-fill every field in your store, so listing a product takes seconds.')+'</p>'+
+    '<ul class="checklist">'+
+      '<li><span class="ck ok">'+icon('check',12)+'</span> '+tr('Upload your files what you want to share with your bot')+'</li>'+
+      '<li><span class="ck ok">'+icon('check',12)+'</span> '+tr('You can upload your product catalog with size, color and price')+'</li>'+
+      '<li><span class="ck ok">'+icon('check',12)+'</span> '+tr('For product upload you can upload your image')+'</li>'+
+      '<li><span class="ck todo">'+icon('zap',12)+'</span> '+tr('Then put related data which asked by your bot')+'</li>'+
+    '</ul></div>';
+}
+function featureOptions(){
+  return '<div class="setup-info">'+
+    '<div class="feature-row"><div class="fic">'+icon('grid',18)+'</div><div><b>'+tr('Product catalog &amp; stock sync')+'</b><span>'+tr('Auto-built from your uploaded products · linked to your left menu · quantity syncs after every sell')+'</span></div><button class="switch'+(S.catalogEnabled?' on':'')+'" onclick="toggleCatalog(this)"></button></div>'+
+    '<div class="feature-row"><div class="fic">'+icon('cart',18)+'</div><div><b>'+tr('Track sales &amp; orders')+'</b><span>'+tr('AI updates product, quantity, address, phone, email &amp; delivery status by chatting with the buyer')+'</span></div><button class="switch'+(S.trackOrders?' on':'')+'" onclick="toggleOrderTrack(this)"></button></div>'+
+    '<div class="demo-hint" style="font-size:12px;margin-top:10px;color:#4338CA;">'+tr('For every image uploaded in chat, the AI prompts:')+' <b>'+tr('Title · Product code · Product image · Description · Quantity · Price')+'</b> — '+tr('saved to your catalog, synced after each sale.')+'</div>'+
+  '</div>';
+}
+function kbBot(en,bd){ S.kbChat.push({who:'bot', en, bd: bd || en}); }
+function kbUser(en,bd){ S.kbChat.push({who:'user', en, bd: bd || en}); }
+function kbRender(){
+  renderWizard();
+  const b = document.getElementById('kb-body'); if(b) b.scrollTop = b.scrollHeight;
+}
+function kbActions(){
+  const p = S.kbPhase;
+  if(p==='crawl') return '<div class="quick-row kb-actions"><div class="crawl-row"><input id="kb-url" placeholder="https://yourwebsite.com" onkeydown="if(event.key===\'Enter\')kbCrawlSubmit()"/><button class="quick-chip" onclick="kbCrawlSubmit()">'+icon('send',13)+' '+tr('Crawl')+'</button></div></div>';
+  if(p==='more') return '<div class="quick-row kb-actions"><button class="quick-chip" onclick="kbUploadMore(true)">'+icon('check',13)+' '+tr('Yes, upload more')+'</button><button class="quick-chip" onclick="kbUploadMore(false)">'+icon('x',13)+' '+tr('No, continue')+'</button></div>';
+  if(p==='productQ') return '<div class="quick-row kb-actions"><button class="quick-chip" onclick="kbProduct(true)">'+icon('image',13)+' '+tr('Yes, upload a product')+'</button><button class="quick-chip" onclick="kbProduct(false)">'+icon('x',13)+' '+tr('No, I\'m done')+'</button></div>';
+  if(p==='productImg') return '<div class="quick-row kb-actions"><button class="quick-chip" onclick="kbFileClick(\'product\')">'+icon('upload',13)+' '+tr('Upload product picture')+'</button></div>';
+  return '';
+}
+function kbMainActions(){
+  return '<div class="quick-row kb-actions kb-main"><button class="quick-chip" onclick="kbCrawl()">'+icon('globe',13)+' '+tr('Crawl from a website')+'</button><button class="quick-chip" onclick="kbFileClick(\'kb\')">'+icon('file',13)+' '+tr('Upload knowledge base')+'</button><button class="quick-chip" onclick="kbFileClick(\'product\')">'+icon('image',13)+' '+tr('Upload product')+'</button><button class="quick-chip" onclick="kbTypeHint()">'+icon('message',13)+' '+tr('Type a message')+'</button></div>';
+}
+function kbAttach(){ kbFileClick('kb'); }
+function kbFileClick(mode){
+  S.kbMode = mode;
+  const f = document.getElementById('kb-file'); if(f) f.click();
+}
+function kbUpload(files){
+  const f = files[0]; if(!f) return;
+  const ext = (f.name.split('.').pop()||'').toLowerCase();
+  const isImg = ['jpg','jpeg','png','webp','gif'].includes(ext);
+  if(S.kbMode==='product' && isImg){
+    kbUser('<div class="doc-mini"><div class="thumb">'+icon('image',15)+'</div><b>'+f.name+'</b><span class="mini">'+tr('product image')+'</span></div>');
+    prod.image=f.name;
+    S.kbMatrix = { colors:['Red','Blue'], sizes:['S','M','L','XL'], qty:{'Red|S':5,'Red|M':8,'Red|L':3,'Blue|S':4,'Blue|M':6} };
+    kbBot('Image detected! Now fill the <b>product fields</b> — including <b>size &amp; color-wise quantity</b> — then save.',
+      'ছবি শনাক্ত হয়েছে! এখন <b>প্রোডাক্টের তথ্যগুলো</b> পূরণ করুন — <b>সাইজ ও রঙ অনুযায়ী পরিমাণ</b>সহ — তারপর সেভ করুন।');
+    kbUser(kbProductForm(f.name));
+    S.kbPhase='productFields'; S.kbMode='kb'; kbRender();
+    return;
+  }
+  S.files.push({id:Date.now()+Math.random()*100|0, name:f.name, size:(f.size/1024).toFixed(0)+' KB', ext});
+  kbUser('<div class="doc-mini"><div class="thumb">'+icon(ext==='pdf'?'file':'sheet',15)+'</div><b>'+f.name+'</b><span class="mini">'+tr('knowledge base')+'</span></div>');
+  kbBot('Got it — I\'ve received <b>'+f.name+'</b> and I\'m learning from it. Do you want to <b>upload more</b>?',
+    'ঠিক আছে — আমি <b>'+f.name+'</b> পেয়েছি এবং এটি থেকে শিখছি। আপনি কি <b>আরও আপলোড</b> করতে চান?');
+  S.kbPhase='more'; kbRender();
+}
+function kbSend(){
+  const inp = document.getElementById('kb-in');
+  const v = (inp ? inp.value : '').trim();
+  if(!v) return;
+  inp.value='';
+  kbUser(v);
+  kbBot('Thanks, I\'ve noted: <i>"'+v.slice(0,60)+'"</i>. Do you want to <b>upload more</b>?',
+    'ধন্যবাদ, আমি লক্ষ্য করেছি: <i>"'+v.slice(0,60)+'"</i>। আপনি কি <b>আরও আপলোড</b> করতে চান?');
+  S.kbPhase='more'; kbRender();
+}
+function kbTypeHint(){ const i = document.getElementById('kb-in'); if(i){ i.focus(); i.placeholder=tr('Tell your bot anything...'); } }
+function kbCrawl(){
+  kbBot('Great choice! Paste your <b>website URL</b> below and I\'ll crawl its pages and learn from them.',
+    'দারুণ পছন্দ! নিচে আপনার <b>ওয়েবসাইটের URL</b> দিন এবং আমি এর পৃষ্ঠাগুলো ক্রল করে শিখে নেব।');
+  S.kbPhase='crawl'; kbRender();
+}
+function kbCrawlSubmit(){
+  const inp = document.getElementById('kb-url');
+  const v = (inp ? inp.value : '').trim();
+  if(!v){ if(inp) inp.focus(); return; }
+  kbUser(v);
+  kbBot('Crawling <b>'+v.replace(/^https?:\/\//,'')+'</b> ... done! I\'ve learned from its pages. Do you want to <b>upload more</b>?',
+    '<b>'+v.replace(/^https?:\/\//,'')+'</b> ক্রল করা হচ্ছে... সম্পন্ন! আমি এর পৃষ্ঠাগুলো থেকে শিখেছি। আপনি কি <b>আরও আপলোড</b> করতে চান?');
+  S.kbPhase='more'; kbRender();
+}
+function kbUploadMore(yes){
+  if(yes){
+    kbBot('Sure — upload the next file.','অবশ্যই — পরের ফাইলটি আপলোড করুন।');
+    S.kbPhase='more'; kbRender();
+    setTimeout(()=>kbAttach(),250);
+  } else {
+    kbBot('Perfect. Do you want to <b>upload a product</b> — for example a product picture?',
+      'দারুণ। আপনি কি একটি <b>প্রোডাক্ট আপলোড</b> করতে চান — যেমন একটি প্রোডাক্টের ছবি?');
+    S.kbPhase='productQ'; kbRender();
+  }
+}
+function kbProduct(yes){
+  if(yes){
+    kbBot('Great! <b>Upload a product picture</b> and I\'ll ask you to fill the product fields.',
+      'দারুণ! একটি <b>প্রোডাক্টের ছবি আপলোড</b> করুন এবং আমি আপনাকে প্রোডাক্টের তথ্যগুলো পূরণ করতে বলব।');
+    S.kbPhase='productImg'; kbRender();
+    setTimeout(()=>kbFileClick('product'),300);
+  } else {
+    kbBot('Perfect — your bot is now trained and ready to answer your customers!',
+      'দারুণ — আপনার বট এখন প্রশিক্ষিত এবং আপনার গ্রাহকদের উত্তর দিতে প্রস্তুত!');
+    S.kbPhase='done'; kbRender();
+  }
+}
+function kbProductForm(imgName){
+  return '<div class="prod-form">'+
+    '<div class="pf-row"><label>'+tr('Product image')+'</label><div class="pf-img"><div class="thumb">'+icon('image',14)+'</div><b>'+imgName+'</b><span class="mini">'+tr('uploaded')+'</span></div></div>'+
+    '<div class="pf-row"><label>'+tr('Product title')+'</label><input id="pf-title" placeholder="e.g. Wireless Headphone"/></div>'+
+    '<div class="pf-row"><label>'+tr('Product code')+'</label><input id="pf-code" placeholder="e.g. PRD-1004"/></div>'+
+    '<div class="pf-row"><label>'+tr('Description')+'</label><textarea id="pf-desc" rows="2" placeholder="Short description of the product"></textarea></div>'+
+    '<div class="pf-row"><label>'+tr('Sizes & colors — enter how many pieces per color per size')+'</label>'+
+      '<div class="mx" id="kb-mx">'+mxHtml()+'</div>'+
+      '<div class="mx-add"><input id="pf-newcolor" placeholder="'+tr('Add a color, e.g. Green')+'"/><button type="button" class="btn btn-outline" style="padding:8px 12px;font-size:12px" onclick="kbAddColor()">'+tr('Add color')+'</button></div>'+
+      '<div class="mx-total">'+tr('Total pieces:')+' <b id="kb-total">'+total()+'</b></div>'+
+    '</div>'+
+    '<div class="pf-2col"><div class="pf-row"><label>'+tr('Total quantity')+'</label><input id="pf-qty" type="number" value="'+total()+'" readonly/></div>'+
+      '<div class="pf-row"><label>'+tr('Price ($)')+'</label><input id="pf-price" type="number" min="0" step="0.01" placeholder="89.99"/></div></div>'+
+    '<button type="button" class="btn btn-success btn-block mt16" onclick="saveKbProduct()">'+icon('check',14)+' '+tr('Save to product catalog')+'</button>'+
+  '</div>';
+}
+function mxHtml(){
+  const m = S.kbMatrix;
+  let h = '<div class="mx-head"><span></span>'+m.sizes.map(s=>'<b>'+s+'</b>').join('')+'</div>';
+  h += m.colors.map((c,ci)=>{
+    const cells = m.sizes.map(s=>'<input type="number" min="0" class="mx-cell" value="'+(m.qty[c+'|'+s]==null?'':m.qty[c+'|'+s])+'" oninput="kbQty(\''+c.replace(/'/g,"\\'")+'\',\''+s+'\',this.value)"/>').join('');
+    return '<div class="mx-row"><span class="mx-color"><span class="mx-dot" style="background:'+c+'"></span>'+c+'<button type="button" class="mx-del" onclick="kbDelColor('+ci+')">'+icon('x',10)+'</button></span>'+cells+'</div>';
+  }).join('');
+  return h;
+}
+function kbQty(c,s,v){ S.kbMatrix.qty[c+'|'+s] = Math.max(0,parseInt(v,10)||0); kbTotals(); }
+function kbTotals(){
+  const t = document.getElementById('kb-total'); if(t) t.textContent = total();
+  const q = document.getElementById('pf-qty'); if(q) q.value = total();
+}
+function total(){ const m=S.kbMatrix; let t=0; m.colors.forEach(c=>m.sizes.forEach(s=>{ t += (m.qty[c+'|'+s]||0); })); return t; }
+function kbAddColor(){
+  const inp = document.getElementById('pf-newcolor');
+  const v = (inp ? inp.value.trim() : '');
+  if(!v){ toast('Type a color name first'); return; }
+  if(S.kbMatrix.colors.includes(v)){ toast('Color already added'); return; }
+  S.kbMatrix.colors.push(v);
+  if(inp) inp.value='';
+  kbRerenderForm();
+}
+function kbDelColor(i){ S.kbMatrix.colors.splice(i,1); kbRerenderForm(); }
+function kbRerenderForm(){
+  const el = document.getElementById('kb-mx');
+  if(el) el.innerHTML = mxHtml();
+  kbTotals();
+}
+function saveKbProduct(){
+  const title = (document.getElementById('pf-title') ? document.getElementById('pf-title').value.trim() : '');
+  if(!title){ toast('Please enter a product title'); return; }
+  const code = (document.getElementById('pf-code') ? document.getElementById('pf-code').value.trim() : '') || 'PRD-'+(1000+Math.floor(Math.random()*900));
+  const desc = (document.getElementById('pf-desc') ? document.getElementById('pf-desc').value.trim() : '');
+  const price = parseFloat(document.getElementById('pf-price') ? document.getElementById('pf-price').value : '89.99') || 0;
+  const m = S.kbMatrix;
+  const qty = total();
+  const detail = m.colors.map(c=>{
+    const per = m.sizes.map(s=>{
+      const n = m.qty[c+'|'+s]||0;
+      return n>0 ? s+'x'+n : null;
+    }).filter(Boolean).join(' ');
+    return per ? c+': '+per : null;
+  }).filter(Boolean).join(' · ');
+  const fullDesc = (desc ? desc+' — ' : '')+'Stock: '+detail;
+  CATALOG.unshift({code, title, desc:fullDesc, qty, price});
+  prod.code=code; prod.title=title; prod.desc=fullDesc; prod.qty=qty;
+  if(S.catalogEnabled) updateCatalogBadge();
+  kbBot('Saved! <b>'+title+'</b> is now in your catalog with <b>'+qty+' pieces</b> across sizes &amp; colors — quantity syncs after each sell.',
+    'সেভ হয়েছে! <b>'+title+'</b> এখন আপনার ক্যাটালগে <b>'+qty+' পিস</b>সহ সাইজ ও রঙ অনুযায়ী — প্রতিটি বিক্রির পর পরিমাণ আপডেট হয়।');
+  S.kbPhase='done'; kbRender(); toast((LANG==='bd'?'প্রোডাক্ট "':'Product "')+title+(LANG==='bd'?'" আপনার ক্যাটালগে সেভ হয়েছে':'" saved to your catalog'));
+}
+function toolCard(t){
+  const on = S.tools[t.id];
+  return '<div class="tool-card'+(on?' on':'')+'" onclick="toggleTool(\''+t.id+'\')">'+
+    '<div class="t-ic" style="background:'+t.color+'1a;color:'+t.color+'">'+icon(t.icon,18)+'</div>'+
+    '<div class="t-name">'+t.name+'</div>'+
+    '<div class="t-desc">'+t.desc+'</div>'+
+    '<span class="tool-status'+(on?' on':'')+'">'+(on?icon('check',11)+' Connected':'Connect')+'</span>'+
+  '</div>';
+}
+function toggleTool(id){
+  S.tools[id] = !S.tools[id];
+  const t = TOOLS.find(x=>x.id===id);
+  toast(t.name + (S.tools[id] ? ' connected' : ' disconnected'));
+  if(S.screen==='dashboard') go(S.dashPage,true); else renderWizard();
+}
+function docRow(d){
+  const cls = d.ext==='pdf' ? 'pdf' : 'sheet';
+  return '<div class="doc-row"><div class="doc-ic '+cls+'">'+icon(d.ext==='pdf'?'file':'sheet',19)+'</div>'+
+  '<div class="info"><b>'+d.name+'</b><span>'+d.size+' · '+(d.ext==='pdf'?'PDF document':'Excel sheet')+'</span></div>'+
+  '<span class="status-pill live">Ready</span>'+
+  '<button class="btn btn-ghost" onclick="removeFile('+d.id+')">'+icon('trash',16)+'</button></div>';
+}
+function handleFiles(files){
+  [...files].forEach(f=>{
+    const ext = (f.name.split('.').pop()||'').toLowerCase();
+    S.files.push({id:Date.now()+Math.random()*100|0, name:f.name, size:(f.size/1024).toFixed(0)+' KB', ext});
+  });
+  renderWizard(); toast(S.files.length+' file'+(S.files.length>1?'s':'')+' uploaded');
+}
+function handleDrop(e){ e.preventDefault(); e.currentTarget.classList.remove('drag'); handleFiles(e.dataTransfer.files); }
+function removeFile(id){ S.files = S.files.filter(f=>f.id!==id); renderWizard(); }
+
+let prodStage = 0, prod = {};
+function toggleCatalog(el){
+  S.catalogEnabled = !S.catalogEnabled;
+  el.classList.toggle('on', S.catalogEnabled);
+  toast(S.catalogEnabled ? 'Product catalog linked to your left menu' : 'Product catalog disabled');
+}
+function toggleOrderTrack(el){
+  S.trackOrders = !S.trackOrders;
+  el.classList.toggle('on', S.trackOrders);
+  toast(S.trackOrders ? 'Order tracking enabled — "Orders" added to your left menu' : 'Order tracking disabled');
+}
+function demoProduct(mode){
+  const body = document.getElementById('chat-body');
+  const add = (who,html)=>body.insertAdjacentHTML('beforeend','<div class="msg '+who+'">'+html+'</div>');
+  const scroll = ()=>body.scrollTop = body.scrollHeight;
+  const done = ()=>add('user',prod.title);
+  if(mode==='upload'){
+    prod.image='uploaded';
+    add('user','<div style="display:flex;align-items:center;gap:8px">'+icon('image',14)+' product.jpg</div>');
+    setTimeout(()=>{ add('bot','Great image! I can see it\'s a <b>Wireless Headphone</b>. I\'ll fill the <b>product image, title, product code, description, quantity &amp; price</b> — starting with the title. What should the product be called?'); scroll(); },450);
+  } else if(mode==='sneaker'||mode==='watch'||mode==='type'){
+    const input = document.getElementById('chat-in');
+    const val = mode==='type' ? (input.value.trim()||'Running shoes') : (mode==='sneaker'?'Nike Air Zoom Runner':'Classic Steel Watch');
+    input.value='';
+    prod.title = val;
+    add('user',val);
+    setTimeout(()=>{ add('bot','Nice pick! I\'ve filled these details for <b>'+val+'</b>:'); add('bot', productSummary(val)); scroll(); },450);
+  }
+  scroll();
+}
+function productSummary(title){
+  prod.code = prod.code || 'PRD-'+(1000+Math.floor(Math.random()*900));
+  prod.desc = prod.desc || 'AI-generated description for '+title+' — crafted from your uploaded content.';
+  prod.qty = prod.qty || 50;
+  return '<div class="prod-mini"><div class="thumb">'+icon('image',18)+'</div><div><b>'+title+'</b><span>Code '+prod.code+' · $89.99 · Qty '+prod.qty+'</span></div></div>'+
+  '<div style="font-size:12px;margin-top:8px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 10px">'+
+    '<span style="color:var(--success)">'+icon('check',11)+'</span> Product image'+
+    '<span style="color:var(--success)">'+icon('check',11)+'</span> Title'+
+    '<span style="color:var(--success)">'+icon('check',11)+'</span> Product code'+
+    '<span style="color:var(--success)">'+icon('check',11)+'</span> Description'+
+    '<span style="color:var(--success)">'+icon('check',11)+'</span> Quantity'+
+    '<span style="color:var(--success)">'+icon('check',11)+'</span> Price'+
+  '</div>'+
+  '<button class="btn btn-success" style="margin-top:10px;width:100%;padding:9px" onclick="publishProduct()">'+icon('check',14)+' Save to product catalog</button>';
+}
+function publishProduct(){
+  CATALOG.unshift({code:prod.code||('PRD-'+(1000+Math.floor(Math.random()*900))), title:prod.title||'New Product', desc:prod.desc||'', qty:prod.qty||50, price:89.99});
+  if(S.catalogEnabled) updateCatalogBadge();
+  toast('Product saved to your catalog — quantity syncs after each sale');
+}
+
+/* ---- Lead generation setup ---- */
+function leadSetup(){
+  return '<div class="wiz-panel"><h2>Set up Lead Generation</h2>'+
+  '<p class="wiz-desc">Every chat on <b>WhatsApp</b> is tracked as a lead — name, number, business type and source are captured automatically.</p>'+
+  '<div class="setup-grid"><div class="chat-panel">'+
+    '<div class="chat-head"><div class="bot-avatar">'+CHANNEL_ICON.wa+'</div><div><b>WhatsApp Lead Assistant</b><br/><span><span class="dot-green"></span> '+ (S.waNumber||'+1 555 000 1234') +' · tracking leads</span></div></div>'+
+    '<div class="chat-body" id="lead-chat">'+
+      '<div class="msg bot">Hi! I help patients book appointments. Can I get your <b>name</b> and <b>phone number</b>?</div>'+
+      '<div class="msg user">Priya Sharma, +91 98765 43210</div>'+
+      '<div class="msg bot">Thanks Priya! What\'s the best time for a <b>consultation</b>?</div>'+
+      '<div class="msg user">Tomorrow at 4 PM</div>'+
+      '<div class="msg bot"><div class="lead-mini">'+icon('checkcircle',12)+' <b>Lead captured & tracked</b><br/>Priya Sharma · +91 98765 43210<br/>Interest: Consultation · WhatsApp</div></div>'+
+    '</div>'+
+    '<div class="quick-row"><button class="quick-chip" onclick="simulateLead()">'+icon('zap',13)+' Simulate incoming lead</button><button class="quick-chip">Book appointment</button></div>'+
+    '<div class="chat-input"><input placeholder="Type a reply as the customer..."/><button class="send-btn" onclick="simulateLead()">'+icon('send',18)+'</button></div>'+
+  '</div>'+
+  '<div class="setup-info"><h3>Your lead pipeline</h3>'+
+    '<ul class="checklist">'+
+      '<li><span class="ck ok">'+icon('check',12)+'</span> WhatsApp number '+ (S.waNumber||'+1 555 000 1234') +' connected</li>'+
+      '<li><span class="ck ok">'+icon('check',12)+'</span> Knowledge base '+(S.files.length+' file(s)')+' uploaded</li>'+
+      '<li><span class="ck ok">'+icon('check',12)+'</span> Every chat tracked as a lead</li>'+
+      '<li><span class="ck todo">'+icon('zap',12)+'</span> Auto-reply & follow-up on</li>'+
+    '</ul>'+
+    '<div class="feature-row"><div class="fic">'+icon('users',18)+'</div><div><b>Track as lead</b><span>Capture name, number & interest</span></div><button class="switch on" onclick="toggleSwitch(this)"></button></div>'+
+    '<div class="feature-row"><div class="fic">'+icon('clock',18)+'</div><div><b>Auto follow-up</b><span>Remind leads after 24h</span></div><button class="switch" onclick="toggleSwitch(this)"></button></div>'+
+  '</div></div></div>';
+}
+let leadCount = 2;
+function simulateLead(){
+  const names=[['Rohan Mehta','+91 99887 76655','Looking for a home loan','Finance'],['Anita Rao','+1 415 555 0199','Book a dental checkup','Healthcare']];
+  const l = names[leadCount % names.length]; leadCount++;
+  const body = document.getElementById('lead-chat');
+  body.insertAdjacentHTML('beforeend','<div class="msg user">'+l[0]+': '+l[2]+'</div>');
+  setTimeout(()=>{
+    body.insertAdjacentHTML('beforeend','<div class="msg bot"><div class="lead-mini">'+icon('checkcircle',12)+' <b>Lead captured & tracked</b><br/>'+l[0]+' · '+l[1]+'<br/>Interest: '+l[2]+' · '+l[3]+'</div></div>');
+    body.scrollTop = body.scrollHeight;
+  },450);
+  body.scrollTop = body.scrollHeight;
+  toast('New lead captured: '+l[0]);
+}
+
+/* ---- Generic AI setup ---- */
+function genericSetup(){
+  const biz = BIZ(S.business), chName = S.channels.map(c=>CH(c).name).join(', ') || 'your channels';
+  return '<div class="wiz-panel"><h2>Your AI agent is ready to be launched</h2>'+
+  '<p class="wiz-desc">We trained your agent for <b>'+biz.name+'</b> and connected it to <b>'+chName+'</b>.</p>'+
+  '<div class="setup-grid"><div class="chat-panel">'+
+    '<div class="chat-head"><div class="bot-avatar">'+icon('sparkles',18)+'</div><div><b>'+biz.name+' Assistant</b><br/><span><span class="dot-green"></span> Online · 24/7</span></div></div>'+
+    '<div class="chat-body">'+
+      '<div class="msg bot">Hi! Welcome to <b>'+biz.name+'</b> How can I help you today?</div>'+
+      '<div class="msg user">What are your timings?</div>'+
+      '<div class="msg bot">We\'re open Mon–Sat, 9 AM to 7 PM. Want me to book an appointment for you?</div>'+
+      '<div class="msg bot"><span style="color:var(--muted)">(Answered from your knowledge base — no typing needed)</span></div>'+
+    '</div>'+
+    '<div class="quick-row"><button class="quick-chip" onclick="toast(\'Agent is live!\')">'+icon('eye',13)+' Preview chat</button><button class="quick-chip">Test on '+chName.split(',')[0]+'</button></div>'+
+    '<div class="chat-input"><input placeholder="Type a test message..."/><button class="send-btn">'+icon('send',18)+'</button></div>'+
+  '</div>'+
+  '<div class="setup-info"><h3>What you\'ve set up</h3>'+
+    '<ul class="checklist">'+
+      '<li><span class="ck ok">'+icon('check',12)+'</span> '+biz.name+' business profile</li>'+
+      '<li><span class="ck ok">'+icon('check',12)+'</span> '+chName+' connected</li>'+
+      '<li><span class="ck ok">'+icon('check',12)+'</span> Knowledge base '+(S.files.length+' file(s)')+' ready</li>'+
+      '<li><span class="ck todo">'+icon('zap',12)+'</span> Quick replies & bookings</li>'+
+    '</ul>'+
+    '<div class="feature-row"><div class="fic">'+icon('bot',18)+'</div><div><b>Agent name</b><span>'+(S.botName||(biz.name+' Support Bot'))+'</span></div><button class="btn btn-ghost">'+icon('pencil',15)+'</button></div>'+
+  '</div></div></div>';
+}
+
+function bindDynamic(){
+  document.querySelectorAll('#wizard-body input').forEach(i=>i.addEventListener('keydown',e=>{ if(e.key==='Enter') e.preventDefault(); }));
+}
+
+function wizardBack(){
+  if(S.step>1){ S.step--; renderWizard(); }
+}
+function wizardNext(){
+  if(S.step===2){
+    const inp = document.getElementById('bot-name');
+    const v = (inp ? inp.value.trim() : '') || S.botName || '';
+    if(!v){ toast('Please give your bot a name'); return; }
+    S.botName = v;
+  }
+  if(S.step===3 && S.channels.length===0){ toast('Please select a platform'); return; }
+  if(S.step===5 && !S.business){ toast('Please select a business type first'); return; }
+  if(S.step===6){
+    S.screen='dashboard'; renderDash(); show('scr-dashboard'); toast('Your AI agent is live!'); return;
+  }
+  S.step++; renderWizard();
+}
+
+/* ============ DASHBOARD ============ */
+function renderDash(){
+  document.getElementById('sb-name').textContent = S.user;
+  document.getElementById('sb-email').textContent = S.email;
+  document.getElementById('sb-avatar').textContent = S.user[0];
+  const slot = document.getElementById('sb-orders-slot');
+  if(slot) slot.innerHTML = (S.trackOrders
+    ? '<button class="nav-item" data-page="orders" onclick="go(\'orders\')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg> '+tr('Orders')+' <span class="badge">'+ordersBy('Placed','Processing')+'</span></button>'
+    : '');
+  const cslot = document.getElementById('sb-catalog-slot');
+  if(cslot) cslot.innerHTML = (S.catalogEnabled
+    ? '<button class="nav-item" data-page="catalog" onclick="go(\'catalog\')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg> '+tr('Product Catalog')+' <span class="badge">'+CATALOG.length+'</span></button>'
+    : '');
+  go(S.dashPage, true);
+}
+function toggleAgentMenu(btn){
+  btn.classList.toggle('open');
+  document.getElementById('agent-submenu').classList.toggle('open');
+  if(!document.querySelector('.submenu.open') && !btn.classList.contains('open')){
+    document.querySelector('.nav-item[data-page="chatagent"]').classList.remove('active');
+  }
+}
+function go(page, force){
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.querySelector('.nav-item[data-page="'+page+'"]')?.classList.add('active');
+  if(['knowledge','agents','prompts'].includes(page)){
+    document.querySelector('.nav-item[data-page="chatagent"]')?.classList.add('active','open');
+    document.getElementById('agent-submenu').classList.add('open');
+  }
+  S.dashPage = page;
+  const titles = {dashboard:'Dashboard', knowledge:'Knowledge Base', agents:'My Agents', prompts:'AI Prompts',
+    leads:'Leads', whatsapp:'WhatsApp', orders:'Orders', catalog:'Product Catalog', analytics:'Analytics', integrations:'Integrations', settings:'Settings'};
+  document.getElementById('page-title').textContent = tr(titles[page]||'Dashboard');
+  const body = document.getElementById('dash-body');
+  if(page==='dashboard') body.innerHTML = dashDashboard();
+  else if(page==='knowledge') body.innerHTML = dashKnowledge();
+  else if(page==='agents') body.innerHTML = dashAgents();
+  else if(page==='prompts') body.innerHTML = dashPrompts();
+  else if(page==='leads') body.innerHTML = dashLeads();
+  else if(page==='whatsapp') body.innerHTML = dashWhatsapp();
+  else if(page==='orders') body.innerHTML = dashOrders();
+  else if(page==='catalog') body.innerHTML = dashCatalog();
+  else if(page==='analytics') body.innerHTML = dashAnalytics();
+  else if(page==='integrations') body.innerHTML = dashIntegrations();
+  else if(page==='settings') body.innerHTML = dashSettings();
+}
+
+function dashDashboard(){
+  const liveBiz = S.business ? BIZ(S.business).name : 'E-Commerce';
+  return '<div class="stat-grid">'+
+    statCard('bot','Active agents','3','+1 this week','up',['#EEF2FF','#6366F1'])+
+    statCard('message','Messages handled','1,284','+12% vs last week','up',['#F0FDF4','#12B76A'])+
+    statCard('users','Leads captured','42','+8 this week','up',['#FFFAEB','#F79009'])+
+    statCard('book','Knowledge files',String(S.files.length||4),'Synced','flat',['#F5F3FF','#8B5CF6'])+
+  '</div>'+
+  '<div class="dash-cols">'+
+    '<div class="panel"><div class="panel-head"><h3>Your chat agents</h3><button class="btn btn-outline" style="padding:7px 12px;font-size:12.5px" onclick="go(\'agents\')">View all</button></div>'+
+      '<div class="agent-row"><div class="a-ic" style="background:linear-gradient(135deg,#6366F1,#8B5CF6)">'+icon('bot',20)+'</div><div class="info"><b>'+ (S.botName||(liveBiz+' Support Bot')) +'</b><span>Facebook · WhatsApp · Instagram</span></div><span class="status-pill live">Live</span></div>'+
+      '<div class="agent-row"><div class="a-ic" style="background:linear-gradient(135deg,#12B76A,#0E9F6E)">'+icon('funnel',20)+'</div><div class="info"><b>Lead Gen Agent</b><span>WhatsApp · tracks all chats as leads</span></div><span class="status-pill live">Live</span></div>'+
+      '<div class="agent-row"><div class="a-ic" style="background:linear-gradient(135deg,#F79009,#F04438)">'+icon('message',20)+'</div><div class="info"><b>Order Assistant</b><span>E-Commerce · product uploads</span></div><span class="status-pill setup">Setup</span></div>'+
+      '<button class="btn btn-outline btn-block mt16" style="border-style:dashed" onclick="skipToDashboard()">'+icon('plus',16)+' Create another agent</button>'+
+    '</div>'+
+    '<div>'+
+      '<div class="panel mb16"><div class="panel-head"><h3>Connections</h3></div>'+
+        connectionTile('fb','Facebook', S.fbPage||'Fashion Store', S.fbPage?'Connected':'Connect'),
+        connectionTile('wa','WhatsApp', S.waNumber||'+1 555 000 1234', S.waVerified?'Verified':'Connect'),
+        connectionTile('insta','Instagram','@fashionstore','Connected'),
+      '</div>'+
+      '<div class="panel"><div class="panel-head"><h3>Recent activity</h3></div>'+
+        activity('wa','New lead via WhatsApp','Priya Sharma · Consultation','2 min ago')+
+        activity('fb','AI answered 14 messages','Facebook page · FAQ about shipping','1 hr ago')+
+        activity('doc','Knowledge file uploaded','product_catalog_2026.pdf','3 hrs ago')+
+      '</div>'+
+    '</div>'+
+  '</div>';
+}
+function statCard(id,label,val,delta,dir,colors){
+  return '<div class="stat-card"><div class="head"><div class="s-ic" style="background:'+colors[0]+';color:'+colors[1]+'">'+icon(id,20)+'</div><span class="delta '+dir+'">'+delta+'</span></div>'+
+  '<div class="val">'+val+'</div><div class="lbl">'+label+'</div></div>';
+}
+function connectionTile(iconId,name,sub,status){
+  const ok = status==='Connected'||status==='Verified';
+  return '<div class="connection-tile"><div class="c-ic" style="background:#F2F4F7">'+CHANNEL_ICON[iconId]+'</div>'+
+  '<div><b>'+name+'</b><span>'+sub+'</span></div>'+
+  '<span class="status-pill '+(ok?'live':'setup')+'" style="margin-left:auto">'+status+'</span></div>';
+}
+function activity(t,title,sub,time){
+  const color = t==='wa'?'var(--success)':t==='fb'?'#1877F2':'#6366F1';
+  return '<div class="activity"><span class="t" style="background:'+color+'"></span><div><b>'+title+'</b><br/><span>'+sub+' · '+time+'</span></div></div>';
+}
+
+function dashAgents(){
+  return '<div class="panel"><div class="panel-head"><h3>My Agents</h3><button class="btn btn-primary" onclick="toast(\'New agent wizard opens\')">'+icon('plus',16)+' New agent</button></div>'+
+  '<div class="agent-row"><div class="a-ic" style="background:linear-gradient(135deg,#6366F1,#8B5CF6)">'+icon('bot',20)+'</div><div class="info"><b>'+ (S.botName||((S.business?BIZ(S.business).name:'E-Commerce')+' Support Bot')) +'</b><span>Facebook · WhatsApp · Instagram · 1,284 msgs</span></div><span class="status-pill live">Live</span><button class="btn btn-ghost">'+icon('eye',16)+'</button></div>'+
+  '<div class="agent-row"><div class="a-ic" style="background:linear-gradient(135deg,#12B76A,#0E9F6E)">'+icon('funnel',20)+'</div><div class="info"><b>Lead Gen Agent</b><span>WhatsApp · 42 leads captured</span></div><span class="status-pill live">Live</span><button class="btn btn-ghost">'+icon('eye',16)+'</button></div>'+
+  '<div class="agent-row"><div class="a-ic" style="background:linear-gradient(135deg,#F79009,#F04438)">'+icon('message',20)+'</div><div class="info"><b>Order Assistant</b><span>Product uploads · needs setup</span></div><span class="status-pill setup">Setup</span><button class="btn btn-ghost">'+icon('eye',16)+'</button></div>'+
+  '</div>';
+}
+
+function dashPrompts(){
+  return '<div class="dash-cols">'+
+  '<div class="panel"><div class="panel-head"><h3>Prompt templates</h3><button class="btn btn-primary" onclick="toast(\'New prompt template created\')">'+icon('plus',16)+' New prompt</button></div>'+
+    '<div class="feature-row"><div class="fic">'+icon('sparkles',18)+'</div><div><b>Product listing generator</b><span>E-Commerce · fills title, price, quantity</span></div><span class="status-pill live">Active</span></div>'+
+    '<div class="feature-row"><div class="fic">'+icon('funnel',18)+'</div><div><b>Lead qualification</b><span>WhatsApp · captures name, number, interest</span></div><span class="status-pill live">Active</span></div>'+
+    '<div class="feature-row"><div class="fic">'+icon('clock',18)+'</div><div><b>Appointment booking</b><span>Healthcare · checks slots from knowledge base</span></div><span class="status-pill setup">Draft</span></div>'+
+  '</div>'+
+  '<div class="panel"><div class="panel-head"><h3>Agent behavior</h3></div>'+
+    '<div class="form-group"><label>System instruction</label><textarea rows="3" style="width:100%;border:1px solid var(--border);border-radius:10px;padding:11px">You are a friendly assistant for the store. Answer only from the knowledge base. If unsure, hand off to a human.</textarea></div>'+
+    '<div class="feature-row"><div class="fic">'+icon('users',18)+'</div><div><b>Human handoff</b><span>Escalate when AI is unsure</span></div><button class="switch on" onclick="toggleSwitch(this)"></button></div>'+
+    '<button class="btn btn-primary mt16" onclick="toast(\'Prompt settings saved\')">Save prompt settings</button>'+
+  '</div></div>';
+}
+
+function dashKnowledge(){
+  const hasFiles = S.files.length>0;
+  return '<div class="flex-between mb16"><p style="color:var(--muted);max-width:520px">Your AI answers only from these sources. Upload PDFs, Excel, CSV or connect Google Sheets.</p>'+
+  '<button class="btn btn-primary" onclick="document.getElementById(\'dash-file\').click()">'+icon('upload',16)+' Upload files</button></div>'+
+  '<input type="file" id="dash-file" multiple class="hidden" onchange="handleFiles(this.files); go(\'knowledge\')" />'+
+  '<div class="dash-cols">'+
+    '<div class="panel"><div class="panel-head"><h3>Documents ('+(hasFiles?S.files.length:4)+')</h3><span class="wiz-count">Synced just now</span></div>'+
+      (hasFiles ? S.files.map(d=>docRow(d)).join('') :
+      '<div class="doc-row"><div class="doc-ic pdf">'+icon('file',19)+'</div><div class="info"><b>product_catalog_2026.pdf</b><span>2.4 MB · PDF</span></div><span class="status-pill live">Ready</span></div>'+
+      '<div class="doc-row"><div class="doc-ic sheet">'+icon('sheet',19)+'</div><div class="info"><b>pricing.xlsx</b><span>180 KB · Excel</span></div><span class="status-pill live">Ready</span></div>'+
+      '<div class="doc-row"><div class="doc-ic pdf">'+icon('file',19)+'</div><div class="info"><b>faq_healthcare.pdf</b><span>1.1 MB · PDF</span></div><span class="status-pill live">Ready</span></div>'+
+      '<div class="doc-row"><div class="doc-ic sheet">'+icon('sheet',19)+'</div><div class="info"><b>appointment_slots.csv</b><span>96 KB · CSV</span></div><span class="status-pill live">Ready</span></div>')+
+    '</div>'+
+    '<div>'+
+      '<div class="sheet-card" style="box-shadow:var(--shadow);flex-direction:column;align-items:stretch;gap:16px;"><div style="display:flex;align-items:center;gap:14px;"><div class="ic">'+icon('plug',22)+'</div><div><b>Connected tools</b><div class="muted" style="margin:2px 0 0;">Tap a tool to connect or disconnect it.</div></div></div>'+
+      '<div class="tool-grid">'+TOOLS.map(t=>toolCard(t)).join('')+'</div></div>'+
+      '<div class="panel mt16"><div class="panel-head"><h3>Usage</h3></div>'+
+        '<div class="wiz-count">1,284 messages answered from knowledge base this week</div>'+
+        '<div style="height:10px;background:#F2F4F7;border-radius:99px;margin-top:12px"><div style="width:72%;height:100%;background:linear-gradient(90deg,var(--primary),var(--primary-2));border-radius:99px"></div></div>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+}
+
+function dashLeads(){
+  const leads=[
+    {n:'Priya Sharma', p:'+91 98765 43210', src:'wa', biz:'Healthcare', st:'New', d:'2 min ago', c:'#F43F5E'},
+    {n:'Rohan Mehta', p:'+91 99887 76655', src:'wa', biz:'Finance', st:'Contacted', d:'18 min ago', c:'#14B8A6'},
+    {n:'Anita Rao', p:'+1 415 555 0199', src:'wa', biz:'Healthcare', st:'New', d:'1 hr ago', c:'#F43F5E'},
+    {n:'Mike Johnson', p:'+1 202 555 0147', src:'fb', biz:'E-Commerce', st:'Won', d:'3 hrs ago', c:'#6366F1'},
+    {n:'Lena Fischer', p:'+49 151 2345 678', src:'insta', biz:'Travel', st:'Contacted', d:'5 hrs ago', c:'#E4405F'},
+  ];
+  return '<div class="stat-grid" style="grid-template-columns:repeat(4,1fr)">'+
+    statCard('users','Total leads','42','+8 this week','up',['#FFFAEB','#F79009'])+
+    statCard('zap','New this week','12','from WhatsApp','up',['#F0FDF4','#12B76A'])+
+    statCard('checkcircle','Converted','18','43% rate','up',['#EEF2FF','#6366F1'])+
+    statCard('clock','Avg response','4 min','AI auto-reply','flat',['#F2F4F7','#475467'])+
+  '</div>'+
+  '<div class="panel"><div class="panel-head"><h3>All leads</h3><div class="filter-bar" style="margin:0">'+
+    '<button class="chip on">All</button><button class="chip">New</button><button class="chip">Contacted</button><button class="chip">Won</button>'+
+    '<select><option>All sources</option><option>WhatsApp</option><option>Facebook</option><option>Instagram</option></select>'+
+  '</div></div>'+
+  '<table class="table"><tr><th>Lead</th><th>Phone</th><th>Source</th><th>Business</th><th>Status</th><th>Date</th><th></th></tr>'+
+  leads.map(l=>'<tr><td><div style="display:flex;align-items:center;gap:10px"><div class="l-avatar" style="background:'+l.c+'">'+l.n[0]+'</div><b>'+l.n+'</b></div></td><td>'+l.p+'</td>'+
+    '<td><span class="lead-src">'+CHANNEL_ICON[l.src]+(l.src==='wa'?'WhatsApp':l.src==='fb'?'Facebook':'Instagram')+'</span></td>'+
+    '<td>'+l.biz+'</td><td><span class="status-pill '+(l.st==='Won'?'live':l.st==='Contacted'?'setup':'')+'">'+l.st+'</span></td><td class="wiz-count">'+l.d+'</td>'+
+    '<td><button class="btn btn-ghost" onclick="toast(\'Open lead: '+l.n+'\')">'+icon('eye',16)+'</button></td></tr>').join('')+
+  '</table></div>';
+}
+
+function dashWhatsapp(){
+  return '<div class="wa-hero">'+
+  '<div class="panel"><div class="panel-head"><h3>WhatsApp Business</h3><button class="btn btn-ghost">'+icon('refresh',16)+' Sync</button></div>'+
+    '<div class="wa-status"><div class="ic">'+CHANNEL_ICON.wa+'</div><div><b>'+ (S.waNumber||'+1 555 000 1234') +'</b><span>'+(S.waVerified?'Verified & receiving messages':'Not yet connected')+'</span></div>'+
+    (S.waVerified?'<span class="status-pill live" style="margin-left:auto">Live</span>':'<button class="btn btn-primary" style="margin-left:auto" onclick="skipToDashboard()">Connect</button>')+'</div>'+
+    '<div class="feature-row"><div class="fic">'+icon('bot',18)+'</div><div><b>Track every chat as a lead</b><span>Capture name, number & interest automatically</span></div><button class="switch on" onclick="toggleSwitch(this)"></button></div>'+
+    '<div class="feature-row"><div class="fic">'+icon('zap',18)+'</div><div><b>Auto-reply from knowledge base</b><span>Instant answers to FAQs 24/7</span></div><button class="switch on" onclick="toggleSwitch(this)"></button></div>'+
+    '<div class="feature-row"><div class="fic">'+icon('clock',18)+'</div><div><b>Follow-up reminders</b><span>Auto-nudge unresponsive leads</span></div><button class="switch" onclick="toggleSwitch(this)"></button></div>'+
+  '</div>'+
+  '<div class="panel"><div class="panel-head"><h3>Leads this week</h3><span class="status-pill live">12 new</span></div>'+
+    '<div class="bar-chart">'+[42,65,38,80,55,72,90].map((v,i)=>'<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%"><div class="bar" style="height:'+v+'%"></div><div class="bar-day">'+['M','T','W','T','F','S','S'][i]+'</div></div>').join('')+'</div>'+
+    '<div class="wiz-count mt16">Peak hours: 6–9 PM · Avg reply time 4 min</div>'+
+  '</div></div>';
+}
+
+/* ---- Orders: AI tracks the sale & updates orders by chatting with the buyer ---- */
+const ORDERS = [
+  {id:'#1001', product:'Nike Air Zoom Runner', qty:1, price:89, customer:'Rahul Verma', phone:'+91 98111 22334', email:'rahul@gmail.com', address:'14 MG Road, Bengaluru 560001', status:'Shipped', date:'Today, 10:24'},
+  {id:'#1002', product:'Classic Steel Watch', qty:2, price:129, customer:'Emma Wilson', phone:'+1 555 0102', email:'emma@outlook.com', address:'88 King St, Toronto', status:'Processing', date:'Today, 09:12'},
+  {id:'#1003', product:'Wireless Headphone', qty:1, price:79, customer:'Lena Fischer', phone:'+49 151 2345 678', email:'lena@web.de', address:'Potsdamer Str 9, Berlin', status:'Delivered', date:'Yesterday'},
+  {id:'#1004', product:'Yoga Mat Pro', qty:3, price:49, customer:'Arjun Nair', phone:'+91 98220 44556', email:'arjun@gmail.com', address:'22 Jubilee Hills, Hyderabad', status:'Placed', date:'Yesterday'}
+];
+let orderPending = null, newOrdN = 0;
+function ordersBy(){
+  const sts = [].slice.call(arguments);
+  return ORDERS.filter(o=>sts.includes(o.status)).length;
+}
+function ordersStats(){
+  return statCard('cart','Total orders', String(ORDERS.length), 'store + WhatsApp','up',['#EEF2FF','#6366F1'])+
+  statCard('zap','Pending', String(ordersBy('Placed','Processing')), 'need delivery','up',['#FFFAEB','#F79009'])+
+  statCard('checkcircle','Delivered', String(ordersBy('Delivered')), 'this month','up',['#F0FDF4','#12B76A'])+
+  statCard('trend','Revenue', '$'+ORDERS.reduce((s,o)=>s+o.price,0).toLocaleString(), '+14%','up',['#F5F3FF','#8B5CF6']);
+}
+function ordersTable(){
+  return '<table class="table"><tr><th>Order</th><th>Product</th><th>Qty</th><th>Customer</th><th>Delivery address</th><th>Status</th></tr>'+
+  ORDERS.map(o=>'<tr><td><b>'+o.id+'</b><br/><span class="wiz-count">'+o.date+'</span></td>'+
+    '<td>'+o.product+'</td><td>'+o.qty+'</td>'+
+    '<td>'+o.customer+'<br/><span class="wiz-count">'+o.phone+' · '+o.email+'</span></td>'+
+    '<td style="max-width:150px"><span class="wiz-count">'+o.address+'</span></td>'+
+    '<td><span class="status-pill '+(o.status==='Delivered'?'live':o.status==='Cancelled'?'off':'setup')+'">'+o.status+'</span></td></tr>').join('')+
+  '</table>';
+}
+function refreshOrders(){
+  const t = document.getElementById('orders-table-wrap'); if(t) t.innerHTML = ordersTable();
+  const s = document.getElementById('orders-stats'); if(s) s.innerHTML = ordersStats();
+}
+function dashOrders(){
+  return '<div class="stat-grid" id="orders-stats">'+ordersStats()+'</div>'+
+  '<div class="dash-cols">'+
+    '<div class="panel"><div class="panel-head"><h3>Orders</h3><div class="filter-bar" style="margin:0">'+
+      '<button class="chip on">All</button><button class="chip">Placed</button><button class="chip">Shipped</button><button class="chip">Delivered</button>'+
+      '<select><option>Sort: newest</option><option>Price</option></select></div></div>'+
+      '<div id="orders-table-wrap">'+ordersTable()+'</div>'+
+    '</div>'+
+    '<div class="chat-panel" style="height:540px">'+
+      '<div class="chat-head"><div class="bot-avatar">'+icon('cart',18)+'</div><div><b>Order Tracking Bot</b><br/><span><span class="dot-green"></span> Updates orders by chatting with the buyer</span></div></div>'+
+      '<div class="chat-body" id="order-chat">'+
+        '<div class="msg bot">Hi! I keep your sales and orders up to date. Ask me about an order or pick an action below.</div>'+
+        '<div class="msg bot">Example: <b>"Where is order #1001?"</b> or <b>"Buyer wants a new address"</b>.</div>'+
+      '</div>'+
+      '<div class="quick-row">'+
+        '<button class="quick-chip" onclick="orderChip(\'status\')">'+icon('refresh',12)+' Where is #1001?</button>'+
+        '<button class="quick-chip" onclick="orderChip(\'address\')">'+icon('home',12)+' New address</button>'+
+        '<button class="quick-chip" onclick="orderChip(\'qty\')">'+icon('plus',12)+' Change qty</button>'+
+        '<button class="quick-chip" onclick="orderChip(\'phone\')">'+icon('phone',12)+' New phone</button>'+
+        '<button class="quick-chip" onclick="orderChip(\'email\')">'+icon('send',12)+' New email</button>'+
+        '<button class="quick-chip" onclick="orderChip(\'delivered\')">'+icon('check',12)+' Mark delivered</button>'+
+        '<button class="quick-chip" onclick="orderChip(\'new\')">'+icon('cart',12)+' Simulate new order</button>'+
+      '</div>'+
+      '<div class="chat-input"><input id="order-in" placeholder="Reply as the buyer..." onkeydown="if(event.key===\'Enter\')orderSend()"/><button class="send-btn" onclick="orderSend()">'+icon('send',18)+'</button></div>'+
+    '</div>'+
+  '</div>';
+}
+function orderMsg(who,html){
+  const b = document.getElementById('order-chat'); if(!b) return;
+  b.insertAdjacentHTML('beforeend','<div class="msg '+who+'">'+html+'</div>');
+  b.scrollTop = b.scrollHeight;
+}
+function setOrder(id,patch){ const o = ORDERS.find(x=>x.id===id); if(o) Object.assign(o,patch); }
+function orderChip(a){
+  if(a==='status'){
+    orderMsg('user','Where is my order #1001?');
+    setTimeout(()=>{ const o = ORDERS.find(x=>x.id==='#1001');
+      orderMsg('bot','Order <b>#1001</b> ('+o.product+') is <b>'+o.status+'</b> — arriving tomorrow at '+o.address+'. Want the tracking link?'); },400);
+  } else if(a==='address'||a==='qty'||a==='phone'||a==='email'){
+    orderPending = {field:a, id:'#1001'};
+    const ask = {address:'Great! Please share the new delivery address.', qty:'Sure! How many pieces should #1001 be changed to?', phone:'No problem — what is the new phone number?', email:'Got it — what is the new email address?'};
+    orderMsg('bot',ask[a]);
+  } else if(a==='delivered'){
+    orderMsg('user','Order #1001 has been delivered. Please update it.');
+    setTimeout(()=>{ setOrder('#1001',{status:'Delivered'}); refreshOrders(); orderMsg('bot','Done! Order <b>#1001</b> is now <b>Delivered</b>. '+icon('check',11)); },400);
+  } else if(a==='new'){
+    simulateNewOrder();
+  }
+}
+function orderSend(){
+  const input = document.getElementById('order-in'); if(!input) return;
+  const val = input.value.trim(); if(!val) return; input.value='';
+  orderMsg('user',val);
+  if(orderPending){
+    const {field,id} = orderPending; orderPending = null;
+    setTimeout(()=>{
+      if(field==='address'){ setOrder(id,{address:val}); orderMsg('bot','Delivery address updated to <b>'+val+'</b> for '+id+'.'); }
+      else if(field==='qty'){ const q = parseInt(val,10)||1; setOrder(id,{qty:q}); orderMsg('bot','Quantity updated to <b>'+q+'</b> for '+id+'.'); }
+      else if(field==='phone'){ setOrder(id,{phone:val}); orderMsg('bot','Phone updated to <b>'+val+'</b> for '+id+'.'); }
+      else if(field==='email'){ setOrder(id,{email:val}); orderMsg('bot','Email updated to <b>'+val+'</b> for '+id+'.'); }
+      refreshOrders();
+    },400);
+  } else {
+    setTimeout(()=>{ orderMsg('bot','Thanks! I\'ve updated the order. Anything else for your buyer?'); refreshOrders(); },400);
+  }
+}
+function simulateNewOrder(){
+  const pool=[
+    {product:'Wireless Headphone', qty:1, price:79, customer:'Aisha Khan', phone:'+971 50 123 4567', email:'aisha@gmail.com', address:'Marina Walk, Dubai', status:'Placed'},
+    {product:'Smart Yoga Mat', qty:2, price:49, customer:'Tom Carter', phone:'+44 7700 900123', email:'tom@hotmail.com', address:'22 Baker St, London', status:'Placed'},
+    {product:'Classic Steel Watch', qty:1, price:129, customer:'Priya Verma', phone:'+91 90000 11223', email:'priya@gmail.com', address:'5 Park Street, Kolkata', status:'Processing'}
+  ];
+  const l = pool[newOrdN % pool.length]; newOrdN++;
+  ORDERS.unshift({id:'#'+(1005+newOrdN), ...l, date:'Just now'});
+  refreshOrders();
+  orderMsg('bot','New order captured from chat:<div class="lead-mini" style="margin-top:6px">'+icon('check',11)+' <b>#'+(1005+newOrdN)+'</b> · '+l.product+' x'+l.qty+'<br/>'+l.customer+' · '+l.phone+' · '+l.email+'<br/>Deliver to: '+l.address+'<br/>Status: <b>'+l.status+'</b></div>');
+}
+
+/* ---- Product catalog: built from AI uploads, quantity syncs after each sell ---- */
+const CATALOG = [
+  {code:'PRD-1001', title:'Wireless Headphone', desc:'Over-ear noise-cancelling headphones, 30h battery life', qty:50, price:79.99},
+  {code:'PRD-1002', title:'Nike Air Zoom Runner', desc:'Breathable running shoes for daily training', qty:24, price:89.99},
+  {code:'PRD-1003', title:'Classic Steel Watch', desc:'Minimal stainless steel analog watch', qty:12, price:129.00}
+];
+function catalogTableRows(){
+  return CATALOG.map(p=>'<tr><td><div style="display:flex;align-items:center;gap:10px"><div class="l-avatar" style="background:linear-gradient(135deg,#6366F1,#8B5CF6)">'+icon('image',14)+'</div><b>'+p.title+'</b></div></td>'+
+    '<td>'+p.code+'</td>'+
+    '<td style="max-width:210px"><span class="wiz-count">'+p.desc+'</span></td>'+
+    '<td><b>'+p.qty+'</b></td>'+
+    '<td>$'+p.price.toFixed(2)+'</td>'+
+    '<td><span class="status-pill '+(p.qty>0?'live':'off')+'">'+(p.qty>0?'In stock':'Out of stock')+'</span></td>'+
+    '<td><button class="btn btn-outline" style="padding:7px 12px;font-size:12px" onclick="sellOne(\''+p.code+'\')">'+icon('cart',13)+' Sell 1</button></td></tr>').join('');
+}
+function updateCatalogBadge(){
+  const b = document.querySelector('.nav-item[data-page="catalog"] .badge');
+  if(b) b.textContent = CATALOG.length;
+}
+function renderCatalogTable(){
+  const t = document.getElementById('catalog-body'); if(t) t.innerHTML = catalogTableRows();
+  updateCatalogBadge();
+}
+function sellOne(code){
+  const p = CATALOG.find(x=>x.code===code);
+  if(!p) return;
+  p.qty = Math.max(0, p.qty-1);
+  renderCatalogTable();
+  toast('Sale recorded — '+p.title+' quantity synced to '+p.qty);
+}
+function dashCatalog(){
+  return '<div class="flex-between mb16"><p style="color:var(--muted);max-width:560px">Your product catalog is built automatically from AI uploads. <b>Quantity syncs after every sale.</b></p>'+
+  '<button class="btn btn-primary" onclick="toast(\'Upload a product image in the AI chat to add it here\')">'+icon('upload',16)+' Add product via AI</button></div>'+
+  '<div class="panel"><div class="panel-head"><h3>Product catalog <span class="wiz-count">( '+CATALOG.length+' products )</span></h3><span class="conn-badge">'+icon('zap',12)+' Auto-synced after each sell</span></div>'+
+  '<table class="table"><tr><th>Product</th><th>Product code</th><th>Description</th><th>Quantity</th><th>Price</th><th>Status</th><th></th></tr>'+
+  '<tbody id="catalog-body">'+catalogTableRows()+'</tbody></table></div>';
+}
+
+function dashAnalytics(){
+  return '<div class="stat-grid">'+
+    statCard('message','Messages','1,284','+12%','up',['#EEF2FF','#6366F1'])+
+    statCard('users','Leads','42','+23%','up',['#F0FDF4','#12B76A'])+
+    statCard('checkcircle','Resolved','1,101','86% auto','up',['#F5F3FF','#8B5CF6'])+
+    statCard('clock','Response time','4 min','AI handled','flat',['#F2F4F7','#475467'])+
+  '</div>'+
+  '<div class="panel"><div class="panel-head"><h3>Conversations — last 7 days</h3></div>'+
+  '<div class="bar-chart" style="height:190px">'+[38,52,44,60,70,58,82].map((v,i)=>'<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%"><div class="bar" style="height:'+v+'%"></div><div class="bar-day">'+['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][i]+'</div></div>').join('')+'</div></div>'+
+  '<div class="dash-cols mt16">'+
+    '<div class="panel"><div class="panel-head"><h3>Top channels</h3></div>'+
+      connectionTile('wa','WhatsApp','1,284 msgs','Connected')+connectionTile('fb','Facebook','986 msgs','Connected')+connectionTile('insta','Instagram','342 msgs','Connected')+
+    '</div>'+
+    '<div class="panel"><div class="panel-head"><h3>Top intents</h3></div>'+
+      '<div class="activity"><span class="t" style="background:#6366F1"></span><div><b>Product info</b><br/><span>34% of chats</span></div></div>'+
+      '<div class="activity"><span class="t" style="background:#12B76A"></span><div><b>Booking / appointment</b><br/><span>22% of chats</span></div></div>'+
+      '<div class="activity"><span class="t" style="background:#F79009"></span><div><b>Pricing</b><br/><span>18% of chats</span></div></div>'+
+    '</div>'+
+  '</div>';
+}
+
+function dashIntegrations(){
+  return '<div class="dash-cols">'+
+  '<div class="panel"><div class="panel-head"><h3>Available integrations</h3></div>'+
+    integrationRow('fb','Facebook','Pages, Messenger & ad replies', true)+
+    integrationRow('wa','WhatsApp','Business API & lead tracking', true)+
+    integrationRow('insta','Instagram','DMs & comment replies', true)+
+    integrationRow('ggl','Google Sheets','Live product & lead sync', S.sheetsConnected)+
+    integrationRow('tlg','Telegram','Channel & group bots', false)+
+    integrationRow('site','Shopify','Product catalog import', false)+
+  '</div>'+
+  '<div class="panel"><div class="panel-head"><h3>Connected accounts</h3></div>'+
+    '<div class="empty-state"><div class="big">'+icon('plug',26)+'</div>Accounts synced by the onboarding wizard appear here.</div>'+
+  '</div></div>';
+}
+function integrationRow(k,name,desc,on){
+  return '<div class="feature-row"><div class="fic" style="background:#fff;border:1px solid var(--border);width:40px;height:40px;border-radius:10px">'+CHANNEL_ICON[k]+'</div>'+
+  '<div><b>'+name+'</b><span>'+desc+'</span></div><button class="switch'+(on?' on':'')+'" onclick="toggleSwitch(this)"></button></div>';
+}
+
+function dashSettings(){
+  return '<div class="dash-cols">'+
+  '<div class="panel"><div class="panel-head"><h3>Business profile</h3></div>'+
+    '<div class="form-group"><label>Business name</label><input value="'+(S.business?BIZ(S.business).name:'E-Commerce')+' Store" /></div>'+
+    '<div class="form-group"><label>Business type</label><select><option>E-Commerce</option><option>Healthcare</option><option>Lead Generation</option><option>Education</option></select></div>'+
+    '<div class="form-group"><label>Support email</label><input value="'+S.email+'" /></div>'+
+    '<button class="btn btn-primary" onclick="toast(\'Settings saved\')">Save changes</button>'+
+  '</div>'+
+  '<div class="panel"><div class="panel-head"><h3>Team & preferences</h3></div>'+
+    '<div class="feature-row"><div class="fic">'+icon('bell',18)+'</div><div><b>New lead alerts</b><span>Notify me on WhatsApp</span></div><button class="switch on" onclick="toggleSwitch(this)"></button></div>'+
+    '<div class="feature-row"><div class="fic">'+icon('users',18)+'</div><div><b>Human handoff</b><span>Escalate when AI is unsure</span></div><button class="switch on" onclick="toggleSwitch(this)"></button></div>'+
+    '<div class="feature-row"><div class="fic">'+icon('globe',18)+'</div><div><b>Language</b><span>English (US)</span></div><button class="btn btn-ghost">'+icon('chevr',16)+'</button></div>'+
+  '</div></div>';
+}
+
+function toggleSwitch(el){ el.classList.toggle('on'); }
+
+/* ============ TOAST ============ */
+let toastTimer;
+function toast(msg){
+  const t = document.getElementById('toast');
+  document.getElementById('toast-msg').textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove('show'),2600);
+}
+
+/* ============ INIT ============ */
+show('scr-login');
+</script>
+</body>
+</html>
