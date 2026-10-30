@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: agently
+          POSTGRES_PASSWORD: agently
+          POSTGRES_DB: agently
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U agently"
+          --health-interval 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://agently:agently@localhost:5432/agently
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm build
+      - run: pnpm db:migrate
+      - name: Check migrations match the schema
+        run: pnpm db:generate && git diff --exit-code packages/db/migrations
+      - run: pnpm test

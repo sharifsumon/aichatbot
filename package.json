@@ -1,0 +1,22 @@
+{
+  "name": "agently",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter \"./apps/*\" dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "db:generate": "pnpm --filter @agently/db generate",
+    "db:migrate": "pnpm --filter @agently/db migrate",
+    "db:seed": "pnpm --filter @agently/db seed",
+    "infra:up": "docker compose up -d postgres redis"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.0",
+    "typescript": "~5.9.2"
+  }
+}

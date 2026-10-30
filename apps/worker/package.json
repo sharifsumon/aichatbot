@@ -1,0 +1,27 @@
+{
+  "name": "@agently/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=../../.env src/index.ts",
+    "build": "tsup",
+    "start": "node dist/index.js",
+    "typecheck": "tsc",
+    "test": "tsx --test 'src/**/*.test.ts'"
+  },
+  "dependencies": {
+    "@agently/ai": "workspace:*",
+    "@agently/db": "workspace:*",
+    "@agently/meta": "workspace:*",
+    "@agently/shared": "workspace:*",
+    "bullmq": "^5.58.0",
+    "drizzle-orm": "^0.44.5",
+    "ioredis": "^5.7.0",
+    "pino": "^9.9.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.0",
+    "tsx": "^4.20.5"
+  }
+}

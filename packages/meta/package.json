@@ -1,0 +1,19 @@
+{
+  "name": "@agently/meta",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc",
+    "test": "tsx --test 'src/**/*.test.ts'"
+  },
+  "dependencies": {
+    "@agently/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.5"
+  }
+}

@@ -1,0 +1,87 @@
+# Local: `pnpm infra:up` starts only Postgres and Redis; run the apps with `pnpm dev`.
+# VPS:   set the domains in .env, then `docker compose --profile app up -d --build`.
+
+x-app-env: &app-env
+  env_file: .env
+  environment:
+    DATABASE_URL: postgres://agently:${POSTGRES_PASSWORD:-agently}@postgres:5432/agently
+    REDIS_URL: redis://redis:6379
+  restart: unless-stopped
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis: { condition: service_healthy }
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: agently
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agently}
+      POSTGRES_DB: agently
+    ports: ["127.0.0.1:5432:5432"]
+    volumes: [postgres:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agently"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    # BullMQ needs noeviction so queued jobs are never dropped.
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    ports: ["127.0.0.1:6379:6379"]
+    volumes: [redis:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  migrate:
+    <<: *app-env
+    profiles: [app]
+    build: { context: ., target: tools }
+    command: ["sh", "-c", "pnpm db:migrate && pnpm db:seed"]
+    restart: "no"
+
+  api:
+    <<: *app-env
+    profiles: [app]
+    build: { context: ., target: api }
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  worker:
+    <<: *app-env
+    profiles: [app]
+    build: { context: ., target: worker }
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  web:
+    <<: *app-env
+    profiles: [app]
+    build: { context: ., target: web }
+
+  admin:
+    <<: *app-env
+    profiles: [app]
+    build: { context: ., target: admin }
+
+  # HTTPS for all three domains; Meta only sends webhooks to HTTPS URLs.
+  caddy:
+    image: caddy:2-alpine
+    profiles: [app]
+    env_file: .env
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy:/data
+    depends_on: [api, web, admin]
+    restart: unless-stopped
+
+volumes:
+  postgres:
+  redis:
+  caddy:
