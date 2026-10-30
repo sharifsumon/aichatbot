@@ -50,6 +50,7 @@ function setup(fbUser: { id: string; name: string; email?: string }, pages: Face
     inbound: { add: async () => {} },
     meta: { appSecret: 's', verifyToken: 'v' },
     facebook,
+    graph: { sendText: async () => ['mid'], replyToComment: async () => 'cid' },
     encryptionKey: key,
     urls: { web: WEB, api: 'https://api.agently.test' },
     cookies: { secure: true },

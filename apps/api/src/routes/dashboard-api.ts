@@ -1,6 +1,6 @@
 import { and, asc, eq } from 'drizzle-orm';
 import cors from '@fastify/cors';
-import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
+import type { FastifyPluginAsync } from 'fastify';
 import {
   activities,
   agents,
@@ -14,14 +14,17 @@ import {
 } from '@agently/db';
 import { GraphApiError, type FacebookApp } from '@agently/meta';
 import { decryptSecret, encryptSecret } from '@agently/shared';
-import { roleIn, sessionUser, type Role, type SessionUser } from '../auth/session.ts';
+import { sessionUser, type SessionUser } from '../auth/session.ts';
+import { MANAGERS, isUuid, requireRole } from './guard.ts';
+import { inboxRoutes, type InboxDeps } from './inbox.ts';
+import { ordersRoutes } from './orders.ts';
 
-export interface DashboardDeps {
+export type DashboardDeps = InboxDeps & {
   db: Db;
   facebook: Pick<FacebookApp, 'pages' | 'subscribePage' | 'unsubscribePage'>;
   encryptionKey: string;
   urls: { web: string };
-}
+};
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -50,13 +53,10 @@ export const dashboardApiRoutes: FastifyPluginAsync<DashboardDeps> = async (app,
     req.user = user;
   });
 
-  /** 404 rather than 403 for non-members, so workspace ids can't be probed. */
-  const requireRole = async (req: FastifyRequest<{ Params: { workspaceId: string } }>, allowed: Role[]) => {
-    const role = isUuid(req.params.workspaceId) ? await roleIn(db, req.user.id, req.params.workspaceId) : undefined;
-    if (!role) return { status: 404 as const, error: 'Workspace not found' };
-    if (!allowed.includes(role)) return { status: 403 as const, error: 'Only the owner or an admin can do this' };
-    return null;
-  };
+  // Pass the deps without this plugin's own `prefix`, or the children would nest it twice.
+  const { prefix: _prefix, ...childDeps } = deps as DashboardDeps & { prefix?: string };
+  app.register(inboxRoutes, childDeps);
+  app.register(ordersRoutes, childDeps);
 
   app.get('/me', async (req) => {
     const rows = await db
@@ -89,8 +89,7 @@ export const dashboardApiRoutes: FastifyPluginAsync<DashboardDeps> = async (app,
 
   /** Pages the signed-in user manages, and which are already connected. */
   app.get<{ Params: { workspaceId: string } }>('/workspaces/:workspaceId/facebook/pages', async (req, reply) => {
-    const denied = await requireRole(req, ['owner', 'admin']);
-    if (denied) return reply.code(denied.status).send({ error: denied.error });
+    if (!(await requireRole(db, req, reply, MANAGERS))) return reply;
 
     const pages = await listUserPages(req.user.id);
     if (!pages) return reply.code(409).send({ error: 'Sign in with Facebook again to see your pages', reconnect: true });
@@ -110,8 +109,7 @@ export const dashboardApiRoutes: FastifyPluginAsync<DashboardDeps> = async (app,
   });
 
   app.post<{ Params: { workspaceId: string; pageId: string } }>('/workspaces/:workspaceId/facebook/pages/:pageId/connect', async (req, reply) => {
-    const denied = await requireRole(req, ['owner', 'admin']);
-    if (denied) return reply.code(denied.status).send({ error: denied.error });
+    if (!(await requireRole(db, req, reply, MANAGERS))) return reply;
     const { workspaceId, pageId } = req.params;
 
     // The page must be one this user manages right now, with permission to message.
@@ -156,8 +154,7 @@ export const dashboardApiRoutes: FastifyPluginAsync<DashboardDeps> = async (app,
   });
 
   app.post<{ Params: { workspaceId: string; channelId: string } }>('/workspaces/:workspaceId/channels/:channelId/disconnect', async (req, reply) => {
-    const denied = await requireRole(req, ['owner', 'admin']);
-    if (denied) return reply.code(denied.status).send({ error: denied.error });
+    if (!(await requireRole(db, req, reply, MANAGERS))) return reply;
     if (!isUuid(req.params.channelId)) return reply.code(404).send({ error: 'Channel not found' });
     const channel = await db.query.channels.findFirst({
       where: and(eq(channels.id, req.params.channelId), eq(channels.workspaceId, req.params.workspaceId)),
@@ -195,7 +192,3 @@ export const dashboardApiRoutes: FastifyPluginAsync<DashboardDeps> = async (app,
     }
   }
 };
-
-function isUuid(v: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
-}

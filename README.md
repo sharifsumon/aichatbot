@@ -58,6 +58,14 @@ The API serves the dashboard at `/api` with a session cookie set by `/auth/faceb
 | `GET /api/workspaces/:id/facebook/pages` | The user's pages, and which are connected |
 | `POST /api/workspaces/:id/facebook/pages/:pageId/connect` | Connects a page: stores its token encrypted and subscribes the webhook |
 | `POST /api/workspaces/:id/channels/:channelId/disconnect` | Unsubscribes and forgets the token |
+| `GET /api/workspaces/:id/conversations` | Inbox: open conversations, newest first (`mode=ai\|human`, `status=closed`, `cursor`) |
+| `GET /api/workspaces/:id/conversations/:cid` | One conversation with its messages (`before` for older ones) and whether a reply is still allowed |
+| `POST …/conversations/:cid/takeover` · `return-to-ai` | Staff take over (the AI stops) or hand back |
+| `POST …/conversations/:cid/reply` | Staff reply; takes the conversation over. Messenger only within 24 hours of the customer's last message |
+| `GET /api/workspaces/:id/orders` | Orders CRM (`status`, `payment`, `q` for number, phone, name or transaction ID, `cursor`) |
+| `GET /api/workspaces/:id/orders/summary` | Counts per order status and payment status |
+| `GET /api/workspaces/:id/orders/:oid` | Order with items and customer |
+| `POST …/orders/:oid/verify-payment` · `cancel` · `ship` · `deliver` · `return` | Staff actions; a rule violation answers 409 with a readable message |
 
 ## Run it locally
 

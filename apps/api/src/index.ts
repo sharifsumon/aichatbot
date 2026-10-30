@@ -1,7 +1,7 @@
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 import { createDb } from '@agently/db';
-import { FacebookApp } from '@agently/meta';
+import { FacebookApp, GraphClient } from '@agently/meta';
 import { QUEUES, loadEnv, type InboundJob } from '@agently/shared';
 import { buildServer } from './server.ts';
 
@@ -16,6 +16,7 @@ const app = buildServer({
   inbound,
   meta: { appSecret: env.META_APP_SECRET, verifyToken: env.META_VERIFY_TOKEN },
   facebook: new FacebookApp({ appId: env.META_APP_ID, appSecret: env.META_APP_SECRET, version: env.META_GRAPH_VERSION }),
+  graph: new GraphClient({ version: env.META_GRAPH_VERSION }),
   encryptionKey: env.ENCRYPTION_KEY,
   urls: { web: env.WEB_URL, api: env.API_URL },
   cookies: { secure: env.API_URL.startsWith('https://'), domain: env.COOKIE_DOMAIN || undefined },

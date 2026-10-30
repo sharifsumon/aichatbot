@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import type { Db } from '@agently/db';
-import type { FacebookApp } from '@agently/meta';
+import type { FacebookApp, GraphClient } from '@agently/meta';
 import type { CookieSettings } from './auth/session.ts';
 import { facebookAuthRoutes } from './routes/auth-facebook.ts';
 import { dashboardApiRoutes } from './routes/dashboard-api.ts';
@@ -16,6 +16,7 @@ export type ServerDeps = HealthDeps &
       FacebookApp,
       'loginUrl' | 'exchangeCode' | 'me' | 'pages' | 'subscribePage' | 'unsubscribePage' | 'parseSignedRequest'
     >;
+    graph: Pick<GraphClient, 'sendText' | 'replyToComment'>;
     encryptionKey: string;
     urls: { web: string; api: string };
     cookies: CookieSettings;
