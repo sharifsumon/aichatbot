@@ -1,0 +1,16 @@
+{
+  "name": "@agently/ai",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc",
+    "test": "tsx --test 'src/**/*.test.ts'"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.5"
+  }
+}

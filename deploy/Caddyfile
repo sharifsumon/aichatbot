@@ -1,0 +1,12 @@
+{$WEB_DOMAIN} {
+	reverse_proxy web:3000
+}
+
+{$API_DOMAIN} {
+	reverse_proxy api:4000
+}
+
+# The super admin panel has its own domain and no link from the shop dashboard.
+{$ADMIN_DOMAIN} {
+	reverse_proxy admin:3001
+}
