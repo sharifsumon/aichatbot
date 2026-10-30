@@ -289,15 +289,7 @@ export async function cancelOrder(db: Db, workspaceId: string, orderId: string):
       .where(and(eq(orders.id, orderId), eq(orders.workspaceId, workspaceId), eq(orders.status, 'confirmed')))
       .returning();
     if (!cancelled) throw new OrderError('not_cancellable', 'Only confirmed orders that have not shipped can be cancelled.');
-
-    const items = await tx.select().from(orderItems).where(eq(orderItems.orderId, orderId));
-    for (const item of items) {
-      if (!item.variantId) continue;
-      await tx
-        .update(productVariants)
-        .set({ stock: sql`${productVariants.stock} + ${item.quantity}` })
-        .where(eq(productVariants.id, item.variantId));
-    }
+    await restock(tx, orderId);
     return cancelled;
   });
 }
@@ -306,6 +298,77 @@ export async function cancelOrder(db: Db, workspaceId: string, orderId: string):
 function isUniqueViolation(err: unknown): boolean {
   const e = err as { code?: string; cause?: { code?: string } };
   return e.code === '23505' || e.cause?.code === '23505';
+}
+
+/** Staff action: handed to a courier. Only a confirmed order with its details complete can ship. */
+export async function markShipped(
+  db: Db,
+  workspaceId: string,
+  input: { orderId: string; courier?: string; consignmentId?: string; trackingUrl?: string },
+): Promise<Order> {
+  const [updated] = await db
+    .update(orders)
+    .set({
+      status: 'shipped',
+      shippedAt: new Date(),
+      courier: input.courier?.trim() || null,
+      consignmentId: input.consignmentId?.trim() || null,
+      trackingUrl: input.trackingUrl?.trim() || null,
+    })
+    .where(
+      and(
+        eq(orders.id, input.orderId),
+        eq(orders.workspaceId, workspaceId),
+        eq(orders.status, 'confirmed'),
+        eq(orders.checkoutStep, 'complete'),
+      ),
+    )
+    .returning();
+  if (!updated) throw new OrderError('not_shippable', 'Only confirmed orders with the address and payment filled in can be shipped.');
+  return updated;
+}
+
+/** Staff action: the customer received the parcel. Cash on delivery counts as paid. */
+export async function markDelivered(db: Db, workspaceId: string, orderId: string): Promise<Order> {
+  const [updated] = await db
+    .update(orders)
+    .set({
+      status: 'delivered',
+      deliveredAt: new Date(),
+      paymentStatus: sql`case when ${orders.paymentStatus} = 'cod_due' then 'paid'::payment_status else ${orders.paymentStatus} end`,
+    })
+    .where(and(eq(orders.id, orderId), eq(orders.workspaceId, workspaceId), eq(orders.status, 'shipped')))
+    .returning();
+  if (!updated) throw new OrderError('not_shipped', 'Only shipped orders can be marked delivered.');
+  return updated;
+}
+
+/** Staff action: the customer refused the parcel. Stock comes back; uncollected cash is no longer due. */
+export async function markReturned(db: Db, workspaceId: string, orderId: string): Promise<Order> {
+  return db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(orders)
+      .set({
+        status: 'returned',
+        paymentStatus: sql`case when ${orders.paymentStatus} = 'cod_due' then 'unpaid'::payment_status else ${orders.paymentStatus} end`,
+      })
+      .where(and(eq(orders.id, orderId), eq(orders.workspaceId, workspaceId), eq(orders.status, 'shipped')))
+      .returning();
+    if (!updated) throw new OrderError('not_shipped', 'Only shipped orders can be marked returned.');
+    await restock(tx, orderId);
+    return updated;
+  });
+}
+
+async function restock(tx: Pick<Db, 'select' | 'update'>, orderId: string): Promise<void> {
+  const items = await tx.select().from(orderItems).where(eq(orderItems.orderId, orderId));
+  for (const item of items) {
+    if (!item.variantId) continue;
+    await tx
+      .update(productVariants)
+      .set({ stock: sql`${productVariants.stock} + ${item.quantity}` })
+      .where(eq(productVariants.id, item.variantId));
+  }
 }
 
 function assertEditable(order: Order): void {

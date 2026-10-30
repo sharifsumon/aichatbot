@@ -36,6 +36,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@agently/commerce':
+        specifier: workspace:*
+        version: link:../../packages/commerce
       '@agently/db':
         specifier: workspace:*
         version: link:../../packages/db

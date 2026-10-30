@@ -7,6 +7,9 @@ import {
   OrderError,
   cancelOrder,
   createOrder,
+  markDelivered,
+  markReturned,
+  markShipped,
   findOpenCheckout,
   normaliseBdPhone,
   setDeliveryDetails,
@@ -151,4 +154,31 @@ test('cancel puts stock back', { skip }, async () => {
   await cancelOrder(db, scope.workspaceId, order.id);
   assert.equal(await stockOf(blueL.id), 3);
   await rejectsWith(cancelOrder(db, scope.workspaceId, order.id), 'not_cancellable');
+});
+
+test('ship, deliver (COD becomes paid), and return puts stock back', { skip }, async () => {
+  const { scope, blueL } = await shop();
+  const details = { customerName: 'Rahim', phone: '01712345678', address: 'House 5, Road 2, Dhanmondi', zone: 'inside_dhaka' as const };
+
+  const a = await createOrder(db, scope, { source: 'ai', items: [{ variantId: blueL.id, quantity: 1 }] });
+  await rejectsWith(markShipped(db, scope.workspaceId, { orderId: a.id }), 'not_shippable');
+  await setDeliveryDetails(db, scope, { number: a.number, ...details });
+  await setPaymentMethod(db, scope, { number: a.number, method: 'cod' });
+  const shipped = await markShipped(db, scope.workspaceId, { orderId: a.id, courier: 'Steadfast', consignmentId: 'SF123' });
+  assert.equal(shipped.courier, 'Steadfast');
+  await rejectsWith(cancelOrder(db, scope.workspaceId, a.id), 'not_cancellable');
+  const delivered = await markDelivered(db, scope.workspaceId, a.id);
+  assert.equal(delivered.status, 'delivered');
+  assert.equal(delivered.paymentStatus, 'paid');
+
+  const b = await createOrder(db, scope, { source: 'ai', items: [{ variantId: blueL.id, quantity: 2 }] });
+  await setDeliveryDetails(db, scope, { number: b.number, ...details });
+  await setPaymentMethod(db, scope, { number: b.number, method: 'cod' });
+  await markShipped(db, scope.workspaceId, { orderId: b.id });
+  assert.equal(await stockOf(blueL.id), 0);
+  const returned = await markReturned(db, scope.workspaceId, b.id);
+  assert.equal(returned.status, 'returned');
+  assert.equal(returned.paymentStatus, 'unpaid');
+  assert.equal(await stockOf(blueL.id), 2);
+  await rejectsWith(markDelivered(db, scope.workspaceId, b.id), 'not_shipped');
 });
