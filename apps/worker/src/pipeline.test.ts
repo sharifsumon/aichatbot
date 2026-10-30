@@ -17,6 +17,7 @@ import {
   createDb,
   creditGrants,
   messages,
+  orders,
   productVariants,
   products,
   usageRecords,
@@ -65,7 +66,7 @@ function deps(): WorkerDeps {
 }
 
 async function makeShop(pageId: string) {
-  const [ws] = await db.insert(workspaces).values({ name: `Shop ${pageId}`, status: 'active' }).returning();
+  const [ws] = await db.insert(workspaces).values({ name: `Shop ${pageId}`, status: 'active', bkashNumber: '01811111111' }).returning();
   const [agent] = await db.insert(agents).values({ workspaceId: ws!.id, name: 'Mina', status: 'live' }).returning();
   await db.insert(channels).values({
     workspaceId: ws!.id,
@@ -179,4 +180,51 @@ test('a message for one shop never reaches another shop', { skip }, async () => 
 
   // A reply job naming the wrong workspace finds nothing.
   assert.equal(await handleReply(deps(), { workspaceId: b.id, messageId: rows[0]!.id }, { finalAttempt: true }), 'skipped_missing');
+});
+
+test('takes a bKash order through chat with tools', { skip }, async () => {
+  const page = `page-${randomBytes(4).toString('hex')}`;
+  const ws = await makeShop(page);
+
+  // A scripted model: each customer turn calls one tool, then answers.
+  const script: Record<string, { name: string; arguments: Record<string, unknown> }> = {
+    'yes confirm': { name: 'create_order', arguments: { items: [{ code: 'sh-01', color: 'blue', size: 'L', quantity: 2 }] } },
+    'Rahim 01712345678 House 5 Road 2 Dhanmondi': {
+      name: 'set_delivery_details',
+      arguments: { order_number: 1001, customer_name: 'Rahim', phone: '01712345678', address: 'House 5, Road 2, Dhanmondi', zone: 'inside_dhaka' },
+    },
+    bkash: { name: 'set_payment_method', arguments: { order_number: 1001, method: 'bkash' } },
+    'TrxID 9AB3XK2LQ1': { name: 'submit_transaction_id', arguments: { order_number: 1001, transaction_id: '9AB3XK2LQ1' } },
+  };
+  const toolResults: string[] = [];
+  aiImpl = async (req) => {
+    prompts.push(req);
+    const last = req.messages.at(-1)!;
+    if (last.role === 'tool') {
+      toolResults.push(last.content);
+      return { text: 'ok', toolCalls: [], usage: { inputTokens: 10, outputTokens: 5 }, model: 'fake' };
+    }
+    const call = script[last.content];
+    return { text: '', toolCalls: call ? [{ id: 'c1', ...call }] : [], usage: { inputTokens: 10, outputTokens: 5 }, model: 'fake' };
+  };
+
+  for (const [i, text] of Object.keys(script).entries()) {
+    await handleInbound(deps(), inbound(page, `${page}-${i}`, text, Date.now()));
+    assert.equal(await handleReply(deps(), queued.at(-1)!, { finalAttempt: false }), 'sent');
+  }
+
+  assert.equal(toolResults.length, 4);
+  assert.ok(toolResults.every((r) => !r.includes('"error"')), toolResults.join('\n'));
+  assert.match(toolResults[2]!, /01811111111/);
+
+  const [order] = await db.select().from(orders).where(eq(orders.workspaceId, ws.id));
+  assert.equal(order!.status, 'confirmed');
+  assert.equal(order!.total, '1760.00');
+  assert.equal(order!.paymentMethod, 'bkash');
+  assert.equal(order!.paymentStatus, 'pending_verification');
+  assert.equal(order!.checkoutStep, 'complete');
+
+  // While the order was open, the prompt told the model what to ask next.
+  const midway = prompts.find((p) => (p.messages[0]!.content as string).includes('Order in progress: #1001'));
+  assert.ok(midway);
 });
