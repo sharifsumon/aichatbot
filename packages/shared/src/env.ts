@@ -14,6 +14,13 @@ const schemas = {
     META_VERIFY_TOKEN: z.string().min(1),
     META_GRAPH_VERSION: z.string().default('v23.0'),
   }),
+  storage: z.object({
+    S3_ENDPOINT: z.string().url(),
+    S3_REGION: z.string().default('auto'),
+    S3_BUCKET: z.string().min(1),
+    S3_ACCESS_KEY_ID: z.string().min(1),
+    S3_SECRET_ACCESS_KEY: z.string().min(1),
+  }),
   ai: z.object({
     AI_BASE_URL: z.string().url(),
     AI_API_KEY: z.string().default(''),
