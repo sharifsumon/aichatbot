@@ -34,6 +34,31 @@ An AI sales and support agent for Facebook-first shops in Bangladesh. A shop tra
 
 Each knowledge source (file, text, Q&A, website, Google Sheet) is a job on the `knowledge` queue. The worker reads it, splits it into chunks (tables one row per line, Q&A one pair per chunk), embeds them, and swaps them in for the source's old chunks in one transaction. The source moves from queued to processing to ready, or to failed with a message the shop owner can act on ("Share the sheet as Anyone with the link"). Google Sheets are re-read every 6 hours. Website crawls stay on the same site, read at most 50 pages, and refuse private or internal addresses.
 
+## Set up the Meta app (development mode)
+
+In the Meta app's dashboard (developers.facebook.com):
+
+1. Add **Facebook Login for Business** (or Facebook Login) and set the valid OAuth redirect URI to `${API_URL}/auth/facebook/callback`.
+2. Add **Messenger**, and set the webhook callback URL to `${API_URL}/webhooks/meta` with `META_VERIFY_TOKEN` as the verify token. Subscribe to the `messages`, `messaging_postbacks` and `feed` fields.
+3. Under App settings → Basic, set the data deletion callback URL to `${API_URL}/webhooks/meta/data-deletion` and the deauthorize callback URL to `${API_URL}/webhooks/meta/deauthorize`.
+4. Copy the App ID and App Secret into `META_APP_ID` and `META_APP_SECRET`.
+
+In development mode only people with a role on the app (admins, developers, testers) can sign in and only their pages can be connected. Other shops need App Review for the permissions in `packages/meta/src/oauth.ts`.
+
+## Dashboard API
+
+The API serves the dashboard at `/api` with a session cookie set by `/auth/facebook`. Changes must come from `WEB_URL` (checked by the Origin header), and someone who isn't a member of a workspace gets 404 for it.
+
+| Route | What it does |
+| --- | --- |
+| `GET /auth/facebook` | Starts Facebook sign-in |
+| `POST /auth/logout` | Ends the session |
+| `GET /api/me` | The user and their workspaces |
+| `POST /api/workspaces` | Creates a shop on the free trial, with an agent and the trial's AI credits |
+| `GET /api/workspaces/:id/facebook/pages` | The user's pages, and which are connected |
+| `POST /api/workspaces/:id/facebook/pages/:pageId/connect` | Connects a page: stores its token encrypted and subscribes the webhook |
+| `POST /api/workspaces/:id/channels/:channelId/disconnect` | Unsubscribes and forgets the token |
+
 ## Run it locally
 
 Needs Node 22, pnpm 10 and Docker.

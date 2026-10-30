@@ -14,6 +14,12 @@ const schemas = {
     META_VERIFY_TOKEN: z.string().min(1),
     META_GRAPH_VERSION: z.string().default('v23.0'),
   }),
+  urls: z.object({
+    WEB_URL: z.string().url(),
+    API_URL: z.string().url(),
+    /** e.g. .example.com, so the session cookie set by api.example.com reaches app.example.com. */
+    COOKIE_DOMAIN: z.string().optional(),
+  }),
   storage: z.object({
     S3_ENDPOINT: z.string().url(),
     S3_REGION: z.string().default('auto'),

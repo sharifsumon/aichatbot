@@ -26,10 +26,37 @@ export const authAccounts = pgTable(
     userId: uuid().notNull().references(() => users.id, { onDelete: 'cascade' }),
     provider: authProviderEnum().notNull(),
     providerAccountId: text().notNull(),
+    /** Facebook: the long-lived user token, used to list and connect pages. Encrypted. */
+    accessTokenEncrypted: text(),
+    tokenExpiresAt: timestamp({ withTimezone: true }),
     createdAt: createdAt(),
+    updatedAt: updatedAt(),
   },
   (t) => [uniqueIndex().on(t.provider, t.providerAccountId)],
 );
+
+/** A signed-in browser. The cookie holds a random token; only its SHA-256 hash is stored. */
+export const sessions = pgTable(
+  'sessions',
+  {
+    id: id(),
+    tokenHash: text().notNull().unique(),
+    userId: uuid().notNull().references(() => users.id, { onDelete: 'cascade' }),
+    expiresAt: timestamp({ withTimezone: true }).notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index().on(t.userId)],
+);
+
+/** Meta's data deletion callback: one row per request, so the status URL can answer later. */
+export const dataDeletionRequests = pgTable('data_deletion_requests', {
+  id: id(),
+  confirmationCode: text().notNull().unique(),
+  provider: authProviderEnum().notNull(),
+  providerAccountId: text().notNull(),
+  status: text().$type<'completed' | 'not_found'>().notNull(),
+  createdAt: createdAt(),
+});
 
 /** One shop. Every other tenant table carries workspace_id. */
 export const workspaces = pgTable('workspaces', {
