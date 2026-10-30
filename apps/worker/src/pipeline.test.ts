@@ -62,6 +62,7 @@ function deps(): WorkerDeps {
     enqueueReply: async (job) => {
       queued.push(job);
     },
+    enqueueKnowledge: async () => {},
   };
 }
 

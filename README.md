@@ -15,6 +15,8 @@ An AI sales and support agent for Facebook-first shops in Bangladesh. A shop tra
 | `apps/worker` | Background jobs (BullMQ): saves incoming messages, writes and sends AI replies. |
 | `packages/db` | Database schema and migrations (Drizzle, Postgres + pgvector). |
 | `packages/commerce` | Order rules: confirm and reserve stock, delivery details, COD/bKash/Nagad, payment verification, cancel. |
+| `packages/knowledge` | Knowledge base reading: PDF, XLSX, CSV, TXT, Q&A, website crawl, Google Sheets, and chunking for Bangla and English. |
+| `packages/storage` | S3-compatible file storage (Cloudflare R2, MinIO, AWS S3). |
 | `packages/ai` | The AI provider interface and an OpenAI-compatible implementation. |
 | `packages/meta` | Meta webhook signature check, payload parsing and Graph API calls. |
 | `packages/shared` | Env loading, secret encryption, queue names and job types. |
@@ -27,6 +29,10 @@ An AI sales and support agent for Facebook-first shops in Bangladesh. A shop tra
 4. Otherwise it finds matching products and knowledge, asks the model with the shop's rules, sends the reply through the Graph API, and records token usage and one credit.
 5. In Messenger chat the model can also take an order with tools: once the customer confirms, `create_order` makes a Confirmed order and reserves stock; then it collects the address and delivery zone, the payment method, and for bKash or Nagad the transaction ID, which staff verify. Prices and totals always come from the catalog, never from the model.
 6. If the model fails after retries, the customer gets "a team member will reply shortly" and the conversation switches to staff.
+
+## How the knowledge base is built
+
+Each knowledge source (file, text, Q&A, website, Google Sheet) is a job on the `knowledge` queue. The worker reads it, splits it into chunks (tables one row per line, Q&A one pair per chunk), embeds them, and swaps them in for the source's old chunks in one transaction. The source moves from queued to processing to ready, or to failed with a message the shop owner can act on ("Share the sheet as Anyone with the link"). Google Sheets are re-read every 6 hours. Website crawls stay on the same site, read at most 50 pages, and refuse private or internal addresses.
 
 ## Run it locally
 
