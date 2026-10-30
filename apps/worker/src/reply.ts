@@ -104,10 +104,12 @@ export async function handleReply(deps: WorkerDeps, job: ReplyJob, opts: { final
       { db, ai: deps.ai, warn: (err, msg) => log.warn({ err }, msg) },
       {
         workspaceId: workspace.id,
+        customerId: conversation.customerId,
         conversationId: conversation.id,
         customerText: message.text,
         // With public_and_private, the full answer goes privately, so write it as a chat reply.
         kind: message.kind === 'comment' && commentMode === 'public' ? 'comment' : 'message',
+        canOrder: message.kind === 'message',
         shop,
       },
     );
