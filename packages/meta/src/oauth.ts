@@ -62,11 +62,16 @@ export class FacebookApp {
       redirect_uri: redirectUri,
       code,
     });
+    return this.longLivedUserToken(short.access_token);
+  }
+
+  /** A short-lived user token (from sign-in or the Graph API Explorer) → a long-lived one. */
+  async longLivedUserToken(shortToken: string): Promise<{ accessToken: string; expiresAt?: Date }> {
     const long = await this.call<{ access_token: string; expires_in?: number }>('GET', '/oauth/access_token', {
       grant_type: 'fb_exchange_token',
       client_id: this.options.appId,
       client_secret: this.options.appSecret,
-      fb_exchange_token: short.access_token,
+      fb_exchange_token: shortToken,
     });
     return {
       accessToken: long.access_token,
