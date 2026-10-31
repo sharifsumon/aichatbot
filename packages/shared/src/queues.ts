@@ -6,6 +6,8 @@ export const QUEUES = {
   reply: 'reply',
   /** Knowledge source ingestion: parse, chunk, embed. */
   knowledge: 'knowledge',
+  /** Scheduled housekeeping: monthly AI credits. */
+  billing: 'billing',
 } as const;
 
 export type ChannelKind = 'facebook_page';

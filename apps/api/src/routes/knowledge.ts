@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import { activities, agents, knowledgeChunks, knowledgeSources, plans, workspaces, type Db } from '@agently/db';
+import { limitsFor } from '@agently/billing';
+import { activities, agents, knowledgeChunks, knowledgeSources, type Db } from '@agently/db';
 import type { KnowledgeJob } from '@agently/shared';
 import { workspaceKey, type ObjectStore } from '@agently/storage';
 import { ALL_ROLES, MANAGERS, isUuid, requireRole } from './guard.ts';
@@ -17,8 +18,6 @@ export interface KnowledgeDeps {
 }
 
 export const MAX_KNOWLEDGE_FILE_BYTES = 20 * 1024 * 1024;
-/** Used when a workspace has no plan, matching the free trial. */
-const DEFAULT_KB_MB = 20;
 
 /** Extension → what we accept it as. The worker reads the type from the file name. */
 const FILE_TYPES: Record<string, string[]> = {
@@ -251,7 +250,7 @@ async function findSource(db: Db, p: Params) {
  * What counts against the plan's knowledge base size: an uploaded file's
  * size, and for other sources the larger of what was typed and what was read.
  */
-async function usedBytes(db: Db, workspaceId: string): Promise<number> {
+export async function usedBytes(db: Db, workspaceId: string): Promise<number> {
   const [row] = await db
     .select({
       bytes: sql<number>`coalesce(sum(case when ${knowledgeSources.type} = 'file' then coalesce(${knowledgeSources.fileSizeBytes}, 0)
@@ -265,12 +264,7 @@ async function usedBytes(db: Db, workspaceId: string): Promise<number> {
 }
 
 async function limitMbFor(db: Db, workspaceId: string): Promise<number> {
-  const [row] = await db
-    .select({ limits: plans.limits })
-    .from(workspaces)
-    .leftJoin(plans, eq(plans.id, workspaces.planId))
-    .where(eq(workspaces.id, workspaceId));
-  return row?.limits?.knowledgeBaseMb ?? DEFAULT_KB_MB;
+  return (await limitsFor(db, workspaceId)).knowledgeBaseMb;
 }
 
 /** An error message when adding `bytes` would go over the plan, else undefined. */

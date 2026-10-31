@@ -2,6 +2,7 @@ import { Queue, Worker } from 'bullmq';
 import { Redis } from 'ioredis';
 import { pino } from 'pino';
 import { OpenAICompatibleProvider } from '@agently/ai';
+import { grantMonthlyCredits } from '@agently/billing';
 import { createDb } from '@agently/db';
 import { GraphClient } from '@agently/meta';
 import { QUEUES, jobIdFor, loadEnv, type InboundJob, type KnowledgeJob, type ReplyJob } from '@agently/shared';
@@ -17,6 +18,7 @@ const { db, close: closeDb } = createDb(env.DATABASE_URL, { max: 20 });
 const connection = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
 const replyQueue = new Queue<ReplyJob>(QUEUES.reply, { connection });
 const knowledgeQueue = new Queue<KnowledgeJob>(QUEUES.knowledge, { connection });
+const billingQueue = new Queue(QUEUES.billing, { connection });
 
 const REPLY_ATTEMPTS = 4;
 const SHEET_RESYNC_MS = 6 * 3600 * 1000;
@@ -93,9 +95,13 @@ const workers = [
     // Crawls and embeddings are slow and heavy; keep a few at a time.
     { connection, concurrency: 3 },
   ),
+  // One at a time, so a month's credits are never granted twice.
+  new Worker(QUEUES.billing, async () => ({ granted: await grantMonthlyCredits(db) }), { connection, concurrency: 1 }),
 ];
 
 await knowledgeQueue.upsertJobScheduler('resync-sheets', { every: 3600 * 1000 }, { name: 'resync-sheets' });
+// Hourly, so a new month's credits arrive within the hour and a missed run catches up.
+await billingQueue.upsertJobScheduler('monthly-credits', { every: 3600 * 1000 }, { name: 'monthly-credits' });
 
 for (const w of workers) {
   w.on('completed', (job, result) => log.info({ queue: w.name, jobId: job.id, result }, 'Job done'));
@@ -107,6 +113,7 @@ const shutdown = async () => {
   await Promise.all(workers.map((w) => w.close()));
   await replyQueue.close();
   await knowledgeQueue.close();
+  await billingQueue.close();
   connection.disconnect();
   await closeDb();
   process.exit(0);

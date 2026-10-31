@@ -22,6 +22,9 @@ import { ordersRoutes } from './orders.ts';
 import { catalogRoutes, type CatalogDeps } from './catalog.ts';
 import { knowledgeRoutes, type KnowledgeDeps } from './knowledge.ts';
 import { settingsRoutes } from './settings.ts';
+import { teamRoutes } from './team.ts';
+import { billingRoutes } from './billing.ts';
+import { limitsFor, pagesInUse } from '@agently/billing';
 
 export type DashboardDeps = InboxDeps & CatalogDeps & KnowledgeDeps & {
   db: Db;
@@ -67,6 +70,8 @@ export const dashboardApiRoutes: FastifyPluginAsync<DashboardDeps> = async (app,
   app.register(catalogRoutes, childDeps);
   app.register(knowledgeRoutes, childDeps);
   app.register(settingsRoutes, childDeps);
+  app.register(teamRoutes, childDeps);
+  app.register(billingRoutes, childDeps);
 
   app.get('/me', async (req) => {
     const rows = await db
@@ -132,6 +137,18 @@ export const dashboardApiRoutes: FastifyPluginAsync<DashboardDeps> = async (app,
     const existing = await db.query.channels.findFirst({ where: and(eq(channels.type, 'facebook_page'), eq(channels.externalId, pageId)) });
     if (existing && existing.workspaceId !== workspaceId && existing.status !== 'disconnected') {
       return reply.code(409).send({ error: 'This page is already connected to another shop on Agently' });
+    }
+
+    // Reconnecting a page this shop already has is always fine; a new one needs room in the plan.
+    const alreadyHere = existing?.workspaceId === workspaceId && existing.status !== 'disconnected';
+    if (!alreadyHere) {
+      const [used, limits] = await Promise.all([pagesInUse(db, workspaceId), limitsFor(db, workspaceId)]);
+      if (used >= limits.pages) {
+        return reply.code(402).send({
+          error: `Your plan allows ${limits.pages} Facebook ${limits.pages === 1 ? 'page' : 'pages'}. Disconnect one or upgrade to add another.`,
+          limit: 'pages',
+        });
+      }
     }
 
     try {
