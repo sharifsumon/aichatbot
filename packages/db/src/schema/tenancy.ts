@@ -95,6 +95,29 @@ export const memberships = pgTable(
   (t) => [primaryKey({ columns: [t.workspaceId, t.userId] })],
 );
 
+/**
+ * A link that lets someone join a shop's team. Only the SHA-256 hash of the
+ * token is stored; the link is shown once to whoever created it.
+ */
+export const invitations = pgTable(
+  'invitations',
+  {
+    id: id(),
+    workspaceId: uuid().notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    role: memberRoleEnum().notNull().default('agent'),
+    tokenHash: text().notNull().unique(),
+    /** Optional, to remind the shop who the link was for. Not checked on accept. */
+    email: text(),
+    invitedByUserId: uuid().references(() => users.id, { onDelete: 'set null' }),
+    expiresAt: timestamp({ withTimezone: true }).notNull(),
+    acceptedAt: timestamp({ withTimezone: true }),
+    acceptedByUserId: uuid().references(() => users.id, { onDelete: 'set null' }),
+    revokedAt: timestamp({ withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index().on(t.workspaceId)],
+);
+
 /** Recent Activity feed. */
 export const activities = pgTable(
   'activities',

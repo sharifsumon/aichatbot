@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@agently/ai": "workspace:*",
+    "@agently/billing": "workspace:*",
     "@agently/commerce": "workspace:*",
     "@agently/db": "workspace:*",
     "@agently/knowledge": "workspace:*",

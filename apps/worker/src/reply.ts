@@ -5,7 +5,7 @@ import { GraphApiError } from '@agently/meta';
 import { decryptSecret, type ReplyJob } from '@agently/shared';
 import { generateReply, type ShopContext } from './agent/generate.ts';
 import { FALLBACK_REPLY, SENT_TO_INBOX, detectLanguage, type ReplyLanguage } from './agent/language.ts';
-import { creditsRemaining, recordUsage } from './credits.ts';
+import { creditsRemaining, noteCreditWarnings, recordUsage } from '@agently/billing';
 import type { WorkerDeps } from './deps.ts';
 
 export type ReplyOutcome =
@@ -146,6 +146,8 @@ export async function handleReply(deps: WorkerDeps, job: ReplyJob, opts: { final
   if (sent.some((s) => s.externalId)) {
     // One credit per AI reply that reached the customer.
     await recordUsage(db, { workspaceId: workspace.id, model: draft.model, aiReplies: 1, inputTokens: 0, outputTokens: 0, costUsd: 0 });
+    // Warn the owner at 80% and 100% used; a failure here must not fail the reply.
+    await noteCreditWarnings(db, workspace.id).catch((err: unknown) => deps.log.warn({ err }, 'Credit warning failed'));
   }
 
   if (draft.handoffReason || !draft.text) {

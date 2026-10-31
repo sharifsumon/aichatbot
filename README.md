@@ -76,8 +76,17 @@ The API serves the dashboard at `/api` with a session cookie set by `/auth/faceb
 | `GET` · `PATCH /api/workspaces/:id/settings` | Shop name, language, delivery charges, bKash and Nagad numbers, COD. At least one way to pay must stay on |
 | `POST /api/workspaces/:id/onboarding/complete` | Marks the setup checklist done |
 | `GET` · `PATCH /api/workspaces/:id/agent` | The AI agent: name, tone, instructions, handoff rules, comment replies, and `status` (going `live` needs a connected page) |
+| `GET /api/workspaces/:id/members` | Team members, pending invites, and seats used against the plan |
+| `POST /api/workspaces/:id/invites` · `DELETE …/invites/:iid` | Creates an invite link (role `agent`, or `admin` by the owner; 7 days; shown once) or cancels it. 402 when every seat is taken |
+| `GET /api/invites/:token` · `POST …/accept` | Shows what an invite is for, and joins the shop with it (signed in with Facebook) |
+| `PATCH` · `DELETE /api/workspaces/:id/members/:uid` | Owner changes a role; owner or admin removes someone (admins only agents); anyone but the owner can leave |
+| `POST /api/workspaces/:id/transfer-ownership` | Owner hands the shop to another member and becomes an admin |
+| `GET /api/workspaces/:id/billing` | Plan, AI credits this month (with the 80% `low` and 100% `out` warning), usage against each limit, plans to compare |
+| `GET /api/workspaces/:id/usage` | AI replies per day (`days`, up to 90) |
 
 Uploads need object storage (`S3_*` in `.env`; product photos also need `S3_PUBLIC_URL`). Without it the upload routes answer 503 and everything else works.
+
+**AI credits** are counted per calendar month (UTC). The worker gives every paying shop its plan's credits each month (an hourly job that never grants twice), notes "credits low" at 80% and "credits used up" at 100% in the activity feed once a month each, and the bot stops replying at 0 until a top-up or upgrade adds credits. Plan limits are checked when inviting staff (seats, the owner included), connecting a Facebook page, and adding to the knowledge base. Paying online (SSLCommerz, bKash, Stripe) is not built yet; until then the Agently team changes plans.
 
 ## Run it locally
 

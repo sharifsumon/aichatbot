@@ -36,6 +36,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@agently/billing':
+        specifier: workspace:*
+        version: link:../../packages/billing
       '@agently/commerce':
         specifier: workspace:*
         version: link:../../packages/commerce
@@ -110,6 +113,9 @@ importers:
       '@agently/ai':
         specifier: workspace:*
         version: link:../../packages/ai
+      '@agently/billing':
+        specifier: workspace:*
+        version: link:../../packages/billing
       '@agently/commerce':
         specifier: workspace:*
         version: link:../../packages/commerce
@@ -164,6 +170,19 @@ importers:
         version: 4.23.15
 
   packages/ai:
+    devDependencies:
+      tsx:
+        specifier: ^4.20.5
+        version: 4.23.15
+
+  packages/billing:
+    dependencies:
+      '@agently/db':
+        specifier: workspace:*
+        version: link:../db
+      drizzle-orm:
+        specifier: ^0.44.5
+        version: 0.44.7(postgres@3.4.9)
     devDependencies:
       tsx:
         specifier: ^4.20.5
