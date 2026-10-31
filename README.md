@@ -66,6 +66,18 @@ The API serves the dashboard at `/api` with a session cookie set by `/auth/faceb
 | `GET /api/workspaces/:id/orders/summary` | Counts per order status and payment status |
 | `GET /api/workspaces/:id/orders/:oid` | Order with items and customer |
 | `POST …/orders/:oid/verify-payment` · `cancel` · `ship` · `deliver` · `return` | Staff actions; a rule violation answers 409 with a readable message |
+| `GET /api/workspaces/:id/products` | Product Catalog (`status`, `q` for title or code, `cursor`); archived ones only with `status=archived` |
+| `POST /api/workspaces/:id/products` · `GET` · `PUT` · `DELETE …/products/:pid` | Create, read, replace or archive a product with its colour × size stock grid. Cells are matched by colour and size, so edited cells keep their ids |
+| `POST /api/workspaces/:id/uploads/images` | Product photo (JPEG, PNG or WebP, up to 5 MB, multipart `file`); returns the public URL |
+| `GET /api/workspaces/:id/knowledge` | Knowledge sources with status and section count, and the plan's size usage |
+| `POST /api/workspaces/:id/knowledge` | Adds a `text`, `qa`, `website` or `sheet` source and queues it for reading |
+| `POST /api/workspaces/:id/knowledge/files` | Uploads a PDF, Excel, CSV or text file (up to 20 MB, multipart `file`) as a source |
+| `GET` · `PATCH` · `DELETE …/knowledge/:sid`, `POST …/knowledge/:sid/resync` | Read, edit (text and Q&A), remove, or read again |
+| `GET` · `PATCH /api/workspaces/:id/settings` | Shop name, language, delivery charges, bKash and Nagad numbers, COD. At least one way to pay must stay on |
+| `POST /api/workspaces/:id/onboarding/complete` | Marks the setup checklist done |
+| `GET` · `PATCH /api/workspaces/:id/agent` | The AI agent: name, tone, instructions, handoff rules, comment replies, and `status` (going `live` needs a connected page) |
+
+Uploads need object storage (`S3_*` in `.env`; product photos also need `S3_PUBLIC_URL`). Without it the upload routes answer 503 and everything else works.
 
 ## Run it locally
 

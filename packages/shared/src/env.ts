@@ -26,6 +26,8 @@ const schemas = {
     S3_BUCKET: z.string().min(1),
     S3_ACCESS_KEY_ID: z.string().min(1),
     S3_SECRET_ACCESS_KEY: z.string().min(1),
+    /** Public base URL of the bucket (e.g. an R2 public domain), for product images. */
+    S3_PUBLIC_URL: z.string().url().optional().or(z.literal('')),
   }),
   ai: z.object({
     AI_BASE_URL: z.string().url(),

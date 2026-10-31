@@ -58,6 +58,7 @@ function server() {
     encryptionKey: key,
     urls: { web: WEB, api: 'https://api.agently.test' },
     cookies: { secure: true },
+    enqueueKnowledge: async () => {},
   });
 }
 
