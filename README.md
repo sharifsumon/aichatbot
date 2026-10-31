@@ -141,7 +141,7 @@ On the server, with Docker installed and three domains pointing at it:
 
 ```sh
 cp .env.example .env          # production values, a strong POSTGRES_PASSWORD, and the three *_DOMAIN values
-docker compose --profile app up -d --build
+docker compose up -d --build
 ```
 
 This runs migrations, then starts the API, worker, web, admin and Caddy, which gets HTTPS certificates automatically. Postgres and Redis listen only on localhost.

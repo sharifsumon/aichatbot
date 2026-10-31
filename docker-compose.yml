@@ -1,5 +1,13 @@
 # Local: `pnpm infra:up` starts only Postgres and Redis; run the apps with `pnpm dev`.
-# VPS:   set the domains in .env, then `docker compose --profile app up -d --build`.
+# VPS:   set the domains in .env, then `docker compose up -d --build`.
+#        COMPOSE_PROFILES in .env picks what runs: `app,caddy` on a server of its
+#        own, or `app` on a server shared with another site, whose web server
+#        then proxies to the *_HOST_PORT ports below (see docs/deploy-vps.md).
+#
+# No memory is reserved or capped: each service uses only what it needs at the
+# moment, and the rest stays free for anything else on the server.
+
+name: agently
 
 x-app-env: &app-env
   env_file: .env
@@ -18,7 +26,7 @@ services:
       POSTGRES_USER: agently
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agently}
       POSTGRES_DB: agently
-    ports: ["127.0.0.1:5432:5432"]
+    ports: ["127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"]
     volumes: [postgres:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U agently"]
@@ -30,7 +38,7 @@ services:
     image: redis:7-alpine
     # BullMQ needs noeviction so queued jobs are never dropped.
     command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
-    ports: ["127.0.0.1:6379:6379"]
+    ports: ["127.0.0.1:${REDIS_HOST_PORT:-6379}:6379"]
     volumes: [redis:/data]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -49,6 +57,8 @@ services:
     <<: *app-env
     profiles: [app]
     build: { context: ., target: api }
+    # Localhost only: reached through Caddy, or through the shared server's own web server.
+    ports: ["127.0.0.1:${API_HOST_PORT:-4000}:4000"]
     depends_on:
       migrate: { condition: service_completed_successfully }
 
@@ -63,16 +73,19 @@ services:
     <<: *app-env
     profiles: [app]
     build: { context: ., target: web }
+    ports: ["127.0.0.1:${WEB_HOST_PORT:-3000}:3000"]
 
   admin:
     <<: *app-env
     profiles: [app]
     build: { context: ., target: admin }
+    ports: ["127.0.0.1:${ADMIN_HOST_PORT:-3001}:3001"]
 
   # HTTPS for all three domains; Meta only sends webhooks to HTTPS URLs.
+  # Leave it out (COMPOSE_PROFILES=app) when another web server already has ports 80 and 443.
   caddy:
     image: caddy:2-alpine
-    profiles: [app]
+    profiles: [caddy]
     env_file: .env
     ports: ["80:80", "443:443"]
     volumes:
