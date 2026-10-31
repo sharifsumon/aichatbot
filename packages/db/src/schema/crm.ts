@@ -78,6 +78,8 @@ export interface MessageMeta {
   inputTokens?: number;
   outputTokens?: number;
   error?: string;
+  /** On replies from Agently support: the platform user who sent it. */
+  supportUserId?: string;
 }
 
 export const messages = pgTable(

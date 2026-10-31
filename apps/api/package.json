@@ -8,7 +8,8 @@
     "build": "tsup",
     "start": "node dist/index.js",
     "typecheck": "tsc",
-    "test": "tsx --test 'src/**/*.test.ts'"
+    "test": "tsx --test 'src/**/*.test.ts'",
+    "admin:create": "tsx --env-file-if-exists=../../.env src/scripts/create-admin.ts"
   },
   "dependencies": {
     "@agently/billing": "workspace:*",

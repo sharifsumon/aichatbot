@@ -13,7 +13,8 @@
     "db:generate": "pnpm --filter @agently/db generate",
     "db:migrate": "pnpm --filter @agently/db migrate",
     "db:seed": "pnpm --filter @agently/db seed",
-    "infra:up": "docker compose up -d postgres redis"
+    "infra:up": "docker compose up -d postgres redis",
+    "admin:create": "pnpm --filter @agently/api admin:create"
   },
   "devDependencies": {
     "@types/node": "^22.18.0",

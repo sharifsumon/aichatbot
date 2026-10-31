@@ -75,7 +75,7 @@ export const dashboardApiRoutes: FastifyPluginAsync<DashboardDeps> = async (app,
 
   app.get('/me', async (req) => {
     const rows = await db
-      .select({ id: workspaces.id, name: workspaces.name, role: memberships.role, status: workspaces.status, onboardingCompletedAt: workspaces.onboardingCompletedAt })
+      .select({ id: workspaces.id, name: workspaces.name, role: memberships.role, status: workspaces.status, suspendedReason: workspaces.suspendedReason, onboardingCompletedAt: workspaces.onboardingCompletedAt })
       .from(memberships)
       .innerJoin(workspaces, eq(workspaces.id, memberships.workspaceId))
       .where(eq(memberships.userId, req.user.id))
