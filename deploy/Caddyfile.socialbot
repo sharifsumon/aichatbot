@@ -1,0 +1,22 @@
+# Agently on a server whose Caddy already serves another site (minuteflow.tech).
+# Append these blocks to /etc/caddy/Caddyfile, then: caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy
+# The ports match API_HOST_PORT, WEB_HOST_PORT and ADMIN_HOST_PORT in Agently's .env.
+
+socialbot.online {
+	reverse_proxy 127.0.0.1:13000
+}
+
+www.socialbot.online {
+	redir https://socialbot.online{uri} permanent
+}
+
+api.socialbot.online {
+	request_body {
+		max_size 25MB
+	}
+	reverse_proxy 127.0.0.1:14000
+}
+
+admin.socialbot.online {
+	reverse_proxy 127.0.0.1:13001
+}

@@ -6,11 +6,17 @@
 #
 # No memory is reserved or capped: each service uses only what it needs at the
 # moment, and the rest stays free for anything else on the server.
+#
+# Images: `docker compose pull` downloads the ones GitHub built (Images
+# workflow), so a small server never builds; `--build` builds locally instead.
 
 name: agently
 
 x-app-env: &app-env
   env_file: .env
+  # If the server runs out of memory, the kernel stops Agently's processes
+  # before anything else on the box (another site keeps running).
+  oom_score_adj: 500
   environment:
     DATABASE_URL: postgres://agently:${POSTGRES_PASSWORD:-agently}@postgres:5432/agently
     REDIS_URL: redis://redis:6379
@@ -22,6 +28,7 @@ x-app-env: &app-env
 services:
   postgres:
     image: pgvector/pgvector:pg17
+    oom_score_adj: 300
     environment:
       POSTGRES_USER: agently
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agently}
@@ -36,6 +43,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    oom_score_adj: 300
     # BullMQ needs noeviction so queued jobs are never dropped.
     command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
     ports: ["127.0.0.1:${REDIS_HOST_PORT:-6379}:6379"]
@@ -49,6 +57,7 @@ services:
   migrate:
     <<: *app-env
     profiles: [app]
+    image: ${AGENTLY_IMAGES:-ghcr.io/sharifsumon/aichatbot}-tools:${AGENTLY_TAG:-latest}
     build: { context: ., target: tools }
     command: ["sh", "-c", "pnpm db:migrate && pnpm db:seed"]
     restart: "no"
@@ -56,6 +65,7 @@ services:
   api:
     <<: *app-env
     profiles: [app]
+    image: ${AGENTLY_IMAGES:-ghcr.io/sharifsumon/aichatbot}-api:${AGENTLY_TAG:-latest}
     build: { context: ., target: api }
     # Localhost only: reached through Caddy, or through the shared server's own web server.
     ports: ["127.0.0.1:${API_HOST_PORT:-4000}:4000"]
@@ -65,6 +75,7 @@ services:
   worker:
     <<: *app-env
     profiles: [app]
+    image: ${AGENTLY_IMAGES:-ghcr.io/sharifsumon/aichatbot}-worker:${AGENTLY_TAG:-latest}
     build: { context: ., target: worker }
     depends_on:
       migrate: { condition: service_completed_successfully }
@@ -72,12 +83,14 @@ services:
   web:
     <<: *app-env
     profiles: [app]
+    image: ${AGENTLY_IMAGES:-ghcr.io/sharifsumon/aichatbot}-web:${AGENTLY_TAG:-latest}
     build: { context: ., target: web }
     ports: ["127.0.0.1:${WEB_HOST_PORT:-3000}:3000"]
 
   admin:
     <<: *app-env
     profiles: [app]
+    image: ${AGENTLY_IMAGES:-ghcr.io/sharifsumon/aichatbot}-admin:${AGENTLY_TAG:-latest}
     build: { context: ., target: admin }
     ports: ["127.0.0.1:${ADMIN_HOST_PORT:-3001}:3001"]
 

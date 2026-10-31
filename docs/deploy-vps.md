@@ -177,12 +177,18 @@ POSTGRES_HOST_PORT=15432
 REDIS_HOST_PORT=16379
 ```
 
-These ports listen on `127.0.0.1` only, so they can't be reached from outside the server. Agently has its own Postgres and Redis in Docker, separate from the other site's data. Then start it:
+These ports listen on `127.0.0.1` only, so they can't be reached from outside the server. Agently has its own Postgres and Redis in Docker, separate from the other site's data.
+
+On a small server, don't build there: a build takes more than 2 GB of memory and can push the other site out. GitHub builds the images on every merge to main (the **Images** workflow), and the server only downloads them. The images are private, so sign in once with a GitHub token that has the `read:packages` scope (GitHub → Settings → Developer settings → Personal access tokens):
 
 ```sh
-docker compose up -d --build
+echo YOUR_TOKEN | docker login ghcr.io -u sharifsumon --password-stdin
+docker compose pull
+docker compose up -d
 curl http://127.0.0.1:14000/health      # should answer ok
 ```
+
+If the server ever runs short of memory, the kernel stops Agently's processes first (they have a higher `oom_score_adj`), so the other site keeps running.
 
 **3. Add the subdomains to your existing web server.**
 
@@ -244,6 +250,8 @@ docker compose start     # start it again (data is kept)
 
 ```sh
 cd agently && git pull && docker compose up -d --build
+# On a shared or small server, download GitHub's images instead of building:
+cd agently && git pull && docker compose pull && docker compose up -d
 ```
 
 ## If something goes wrong
