@@ -1,8 +1,8 @@
 import { and, desc, eq, lt, or, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
-import { activities, channels, conversations, customerIdentities, customers, messages, type Db } from '@agently/db';
-import { GraphApiError, type GraphClient } from '@agently/meta';
-import { decryptSecret } from '@agently/shared';
+import { activities, channels, conversations, customers, messages, type Db } from '@agently/db';
+import type { GraphClient } from '@agently/meta';
+import { canReply, sendHumanReply } from './send-reply.ts';
 import { ALL_ROLES, isUuid, makeCursor, pageLimit, parseCursor, requireRole } from './guard.ts';
 
 export interface InboxDeps {
@@ -11,9 +11,6 @@ export interface InboxDeps {
   encryptionKey: string;
 }
 
-/** Meta lets a page answer a Messenger customer for 24 hours after their last message. */
-const REPLY_WINDOW_MS = 24 * 3600 * 1000;
-const MAX_REPLY = 2000;
 
 type Params = { workspaceId: string; conversationId: string };
 
@@ -149,66 +146,11 @@ export const inboxRoutes: FastifyPluginAsync<InboxDeps> = async (app, deps) => {
     '/workspaces/:workspaceId/conversations/:conversationId/reply',
     async (req, reply) => {
       if (!(await requireRole(db, req, reply, ALL_ROLES))) return reply;
-      const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
-      if (!text) return reply.code(400).send({ error: 'The reply is empty' });
-      if (text.length > MAX_REPLY) return reply.code(400).send({ error: `Replies can be at most ${MAX_REPLY} characters` });
-
       const conversation = await findConversation(db, req.params);
       if (!conversation) return reply.code(404).send({ error: 'Conversation not found' });
-      const channel = await db.query.channels.findFirst({ where: eq(channels.id, conversation.channelId) });
-      if (!channel?.accessTokenEncrypted || channel.status !== 'connected') {
-        return reply.code(409).send({ error: 'This page is not connected. Reconnect it to reply.' });
-      }
-
-      const latestInbound = await db.query.messages.findFirst({
-        where: and(eq(messages.conversationId, conversation.id), eq(messages.direction, 'inbound')),
-        orderBy: desc(messages.createdAt),
-      });
-      const isComment = latestInbound?.kind === 'comment';
-      if (!isComment && !canReply(conversation.lastCustomerMessageAt)) {
-        return reply.code(409).send({ error: "Facebook only allows replies within 24 hours of the customer's last message." });
-      }
-
-      const token = decryptSecret(channel.accessTokenEncrypted, deps.encryptionKey);
-      let externalId: string | undefined;
-      try {
-        if (isComment) {
-          externalId = await deps.graph.replyToComment(token, latestInbound!.externalId!, text);
-        } else {
-          const identity = await db.query.customerIdentities.findFirst({
-            where: and(eq(customerIdentities.customerId, conversation.customerId), eq(customerIdentities.channelId, channel.id)),
-          });
-          if (!identity) return reply.code(409).send({ error: 'This customer has no Messenger id on this page' });
-          [externalId] = await deps.graph.sendText(token, identity.externalId, text);
-        }
-      } catch (err) {
-        if (err instanceof GraphApiError) {
-          if (err.tokenInvalid) {
-            await db.update(channels).set({ status: 'token_expired', lastError: err.message }).where(eq(channels.id, channel.id));
-          }
-          return reply.code(502).send({ error: `Facebook refused the message: ${err.message}` });
-        }
-        throw err;
-      }
-
-      const now = new Date();
-      const [message] = await db
-        .insert(messages)
-        .values({
-          workspaceId: conversation.workspaceId,
-          conversationId: conversation.id,
-          channelId: channel.id,
-          direction: 'outbound',
-          kind: isComment ? 'comment_reply' : 'message',
-          sender: 'staff',
-          senderUserId: req.user.id,
-          text,
-          externalId,
-          delivery: 'sent',
-          createdAt: now,
-        })
-        .returning();
-      await db.update(conversations).set({ lastMessageAt: now }).where(eq(conversations.id, conversation.id));
+      const sent = await sendHumanReply(deps, conversation, req.body?.text, { sender: 'staff', userId: req.user.id });
+      if (!sent.ok) return reply.code(sent.status).send({ error: sent.error });
+      const message = sent.message;
       if (conversation.mode !== 'human') await takeOver(db, conversation, req.user.id, 'Staff replied');
       return reply.code(201).send({ message });
     },
@@ -241,8 +183,4 @@ async function takeOver(
     actorUserId: userId,
     data: { conversationId: conversation.id },
   });
-}
-
-function canReply(lastCustomerMessageAt: Date | null): boolean {
-  return !!lastCustomerMessageAt && Date.now() - lastCustomerMessageAt.getTime() < REPLY_WINDOW_MS;
 }

@@ -17,6 +17,8 @@ const schemas = {
   urls: z.object({
     WEB_URL: z.string().url(),
     API_URL: z.string().url(),
+    /** The super admin panel. Leave empty and the admin API is not served. */
+    ADMIN_URL: z.string().url().optional().or(z.literal('')),
     /** e.g. .example.com, so the session cookie set by api.example.com reaches app.example.com. */
     COOKIE_DOMAIN: z.string().optional(),
   }),

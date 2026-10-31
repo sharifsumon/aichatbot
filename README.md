@@ -88,6 +88,35 @@ Uploads need object storage (`S3_*` in `.env`; product photos also need `S3_PUBL
 
 **AI credits** are counted per calendar month (UTC). The worker gives every paying shop its plan's credits each month (an hourly job that never grants twice), notes "credits low" at 80% and "credits used up" at 100% in the activity feed once a month each, and the bot stops replying at 0 until a top-up or upgrade adds credits. Plan limits are checked when inviting staff (seats, the owner included), connecting a Facebook page, and adding to the knowledge base. Paying online (SSLCommerz, bKash, Stripe) is not built yet; until then the Agently team changes plans.
 
+## Super admin API
+
+The Agently team's API is served at `/admin` when `ADMIN_URL` is set. It is separate from the shop dashboard: its own users (`platform_users`), its own `agently_admin` cookie (path `/admin`, SameSite strict), and changes must come from `ADMIN_URL`. A shop session is never accepted.
+
+**Sign-in** is an email and password, then a 6-digit code from an authenticator app (Google Authenticator, Authy, 1Password). The first sign-in returns a new secret (`otpauthUrl` for a QR code) and the first correct code confirms it. Five wrong passwords or codes lock the account for 15 minutes, and a code can't be used twice. Create the first super admin with:
+
+```sh
+ADMIN_EMAIL=you@example.com ADMIN_NAME="Your Name" pnpm admin:create   # prints a one-time password
+```
+
+**Roles:** super admin (everything), support (tenants and chats, no billing), finance (billing, no chats). Every view of a tenant or chat, every reveal of contact details, and every change is written to the audit log.
+
+| Route | What it does | Who |
+| --- | --- | --- |
+| `POST /admin/auth/login` · `totp` · `logout` · `password`, `GET /admin/auth/me` | Sign in, two-factor, sign out, change password | Everyone |
+| `GET /admin/overview` | Tenants by status, signups, today's messages, AI replies, handoffs, error rate, AI cost this month, MRR | All roles |
+| `GET /admin/usage` | AI replies, tokens and cost per day and per model; top tenants; shops at 80% of their credits or more | All roles |
+| `GET /admin/tenants` · `/tenants/:id` | All shops (`q`, `status`, `plan`, `cursor`) with owner, plan, pages, usage and last activity; one shop in full | All roles |
+| `POST /admin/tenants/:id/suspend` · `reactivate` · `extend-trial` | Suspend (the bot stops; the owner sees the reason), reactivate, add trial days | Super admin, support |
+| `POST /admin/tenants/:id/plan` · `credits` | Change plan (this month's credits topped up to the new plan), add or take back credits with a note | Super admin, finance |
+| `GET /admin/conversations` · `/conversations/:id` | Every shop's chats (filter by tenant, mode, handed off, flagged, failed reply) with the AI's sources. Phones and addresses masked unless `reveal=true` | Super admin, support |
+| `POST /admin/conversations/:id/reply` · `flag` | Reply as Agently support (labelled `support` in the shop's inbox; the AI stops), flag for review | Super admin, support |
+| `GET` · `POST /admin/plans`, `PATCH /admin/plans/:id` | Plans and their limits | Read: all; edit: super admin, finance |
+| `GET` · `POST /admin/team`, `PATCH /admin/team/:id` | The Agently team: add (one-time password), change role, disable, reset two-factor. One active super admin always remains | Super admin |
+| `GET /admin/audit` | The audit log (`workspaceId`, `actorId`, `action`, `cursor`) | Super admin |
+| `GET /admin/settings`, `PUT /admin/settings/:key`, `GET` · `PUT /admin/flags` | Default and fallback AI model, default instruction, top-up pack; feature flags globally, per plan or per shop | Super admin |
+
+Not built yet: logging in as a tenant, invoices and payments (with the payment gateways), channel health and system pages (Phase 2).
+
 ## Run it locally
 
 Needs Node 22, pnpm 10 and Docker.

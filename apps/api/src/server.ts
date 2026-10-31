@@ -7,6 +7,7 @@ import type { ObjectStore } from '@agently/storage';
 import type { CookieSettings } from './auth/session.ts';
 import { facebookAuthRoutes } from './routes/auth-facebook.ts';
 import { dashboardApiRoutes } from './routes/dashboard-api.ts';
+import { adminRoutes } from './admin/index.ts';
 import { healthRoutes, type HealthDeps } from './routes/health.ts';
 import { metaDataDeletionRoutes } from './routes/meta-data-deletion.ts';
 import { metaWebhookRoutes, type MetaWebhookDeps } from './routes/meta-webhook.ts';
@@ -20,7 +21,8 @@ export type ServerDeps = HealthDeps &
     >;
     graph: Pick<GraphClient, 'sendText' | 'replyToComment'>;
     encryptionKey: string;
-    urls: { web: string; api: string };
+    /** `admin` is the super admin panel's address; without it /admin is not served. */
+    urls: { web: string; api: string; admin?: string };
     cookies: CookieSettings;
     enqueueKnowledge: (job: KnowledgeJob) => Promise<void>;
     /** Object storage for uploads; without it upload routes answer 503. */
@@ -42,6 +44,7 @@ export function buildServer(deps: ServerDeps) {
   app.register(metaDataDeletionRoutes, { ...deps, prefix: '/webhooks/meta' });
   app.register(facebookAuthRoutes, deps);
   app.register(dashboardApiRoutes, { ...deps, prefix: '/api' });
+  if (deps.urls.admin) app.register(adminRoutes, { ...deps, adminUrl: deps.urls.admin, prefix: '/admin' });
 
   return app;
 }

@@ -17,10 +17,35 @@ export const platformUsers = pgTable('platform_users', {
   role: platformRoleEnum().notNull(),
   /** Encrypted TOTP secret; required before first sign-in completes. */
   totpSecretEncrypted: text(),
+  /** Set once the first code from the authenticator app was accepted. */
+  totpConfirmedAt: timestamp({ withTimezone: true }),
+  /** The last accepted TOTP step, so a code can't be used twice. */
+  lastTotpStep: integer(),
+  failedLogins: integer().notNull().default(0),
+  lockedUntil: timestamp({ withTimezone: true }),
+  lastLoginAt: timestamp({ withTimezone: true }),
   disabledAt: timestamp({ withTimezone: true }),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
+
+/**
+ * A signed-in admin browser. Starts unverified after the password; only a
+ * verified session (password and a TOTP code) reaches the admin API.
+ */
+export const platformSessions = pgTable(
+  'platform_sessions',
+  {
+    id: id(),
+    platformUserId: uuid().notNull().references(() => platformUsers.id, { onDelete: 'cascade' }),
+    tokenHash: text().notNull().unique(),
+    verified: boolean().notNull().default(false),
+    expiresAt: timestamp({ withTimezone: true }).notNull(),
+    ip: text(),
+    createdAt: createdAt(),
+  },
+  (t) => [index().on(t.platformUserId)],
+);
 
 export interface PlanLimits {
   pages: number;
