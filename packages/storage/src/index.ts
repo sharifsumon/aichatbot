@@ -1,9 +1,10 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 /** Where uploaded files (knowledge base files, product images) live. */
 export interface ObjectStore {
   get(key: string): Promise<Uint8Array>;
   put(key: string, body: Uint8Array, contentType: string): Promise<void>;
+  delete(key: string): Promise<void>;
 }
 
 export interface S3StoreOptions {
@@ -39,6 +40,10 @@ export class S3Store implements ObjectStore {
 
   async put(key: string, body: Uint8Array, contentType: string): Promise<void> {
     await this.client.send(new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: body, ContentType: contentType }));
+  }
+
+  async delete(key: string): Promise<void> {
+    await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
   }
 }
 

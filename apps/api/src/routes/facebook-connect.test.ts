@@ -54,6 +54,7 @@ function setup(fbUser: { id: string; name: string; email?: string }, pages: Face
     encryptionKey: key,
     urls: { web: WEB, api: 'https://api.agently.test' },
     cookies: { secure: true },
+    enqueueKnowledge: async () => {},
   });
   return { app, calls };
 }

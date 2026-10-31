@@ -2,6 +2,8 @@ import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import type { Db } from '@agently/db';
 import type { FacebookApp, GraphClient } from '@agently/meta';
+import type { KnowledgeJob } from '@agently/shared';
+import type { ObjectStore } from '@agently/storage';
 import type { CookieSettings } from './auth/session.ts';
 import { facebookAuthRoutes } from './routes/auth-facebook.ts';
 import { dashboardApiRoutes } from './routes/dashboard-api.ts';
@@ -20,6 +22,11 @@ export type ServerDeps = HealthDeps &
     encryptionKey: string;
     urls: { web: string; api: string };
     cookies: CookieSettings;
+    enqueueKnowledge: (job: KnowledgeJob) => Promise<void>;
+    /** Object storage for uploads; without it upload routes answer 503. */
+    storage?: ObjectStore;
+    /** Public URL for a stored key (product images). */
+    publicFileUrl?: (key: string) => string;
   };
 
 export function buildServer(deps: ServerDeps) {

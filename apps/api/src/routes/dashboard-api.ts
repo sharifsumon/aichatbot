@@ -1,5 +1,6 @@
 import { and, asc, eq } from 'drizzle-orm';
 import cors from '@fastify/cors';
+import multipart from '@fastify/multipart';
 import type { FastifyPluginAsync } from 'fastify';
 import {
   activities,
@@ -18,8 +19,11 @@ import { sessionUser, type SessionUser } from '../auth/session.ts';
 import { MANAGERS, isUuid, requireRole } from './guard.ts';
 import { inboxRoutes, type InboxDeps } from './inbox.ts';
 import { ordersRoutes } from './orders.ts';
+import { catalogRoutes, type CatalogDeps } from './catalog.ts';
+import { knowledgeRoutes, type KnowledgeDeps } from './knowledge.ts';
+import { settingsRoutes } from './settings.ts';
 
-export type DashboardDeps = InboxDeps & {
+export type DashboardDeps = InboxDeps & CatalogDeps & KnowledgeDeps & {
   db: Db;
   facebook: Pick<FacebookApp, 'pages' | 'subscribePage' | 'unsubscribePage'>;
   encryptionKey: string;
@@ -40,7 +44,10 @@ export const dashboardApiRoutes: FastifyPluginAsync<DashboardDeps> = async (app,
   const webOrigin = new URL(deps.urls.web).origin;
 
   // The dashboard runs on its own domain and calls this API with the session cookie.
-  await app.register(cors, { origin: webOrigin, credentials: true, methods: ['GET', 'POST', 'PATCH', 'DELETE'] });
+  await app.register(cors, { origin: webOrigin, credentials: true, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] });
+
+  // Uploads (product photos, knowledge files). Each route sets its own size limit.
+  await app.register(multipart, { limits: { files: 1, fields: 5, fileSize: 20 * 1024 * 1024 } });
 
   app.decorateRequest('user', null as unknown as SessionUser);
   app.addHook('preHandler', async (req, reply) => {
@@ -57,6 +64,9 @@ export const dashboardApiRoutes: FastifyPluginAsync<DashboardDeps> = async (app,
   const { prefix: _prefix, ...childDeps } = deps as DashboardDeps & { prefix?: string };
   app.register(inboxRoutes, childDeps);
   app.register(ordersRoutes, childDeps);
+  app.register(catalogRoutes, childDeps);
+  app.register(knowledgeRoutes, childDeps);
+  app.register(settingsRoutes, childDeps);
 
   app.get('/me', async (req) => {
     const rows = await db

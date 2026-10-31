@@ -106,7 +106,7 @@ test('a problem with the source fails at once with a message for the owner', { s
 
 test('files come from storage; sheets come as CSV', { skip }, async () => {
   const file = await source({ type: 'file', name: 'faq.txt', fileKey: 'ws/abc' });
-  const storage = { get: async () => new TextEncoder().encode('Return within 7 days.'), put: async () => {} };
+  const storage = { get: async () => new TextEncoder().encode('Return within 7 days.'), put: async () => {}, delete: async () => {} };
   assert.equal(await handleKnowledge(deps({ storage }), { workspaceId: file.workspaceId, sourceId: file.id }, { finalAttempt: false }), 'ready');
 
   const sheet = await source({ type: 'sheet', url: 'https://docs.google.com/spreadsheets/d/abc/edit' });
