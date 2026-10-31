@@ -1,0 +1,173 @@
+# Deploy Agently to a Hostinger VPS (test setup)
+
+This puts the API, worker, database and HTTPS on one VPS so Messenger can reach the bot. The dashboard and admin screens are still placeholders. Instead, a command connects your shop and Facebook page, and you test by messaging your page.
+
+You need:
+- A Hostinger VPS (KVM 2 or bigger, Ubuntu 24.04)
+- A domain you can add DNS records to
+- Your Meta developer app
+- An OpenAI API key
+
+Plan for about 30 minutes.
+
+## 1. Point three subdomains at the VPS
+
+In your domain's DNS (in hPanel → Domains → DNS, or wherever the domain is registered), add three **A records**. Each one points to the VPS's IP address, which is shown in hPanel → VPS → Overview.
+
+| Name | Type | Value |
+| --- | --- | --- |
+| `api` | A | your VPS IP |
+| `app` | A | your VPS IP |
+| `admin` | A | your VPS IP |
+
+This guide uses `api.example.com`, `app.example.com` and `admin.example.com`; replace `example.com` with your domain everywhere. DNS can take a few minutes to update.
+
+## 2. Install Docker on the VPS
+
+In hPanel you can reinstall the VPS with the **Ubuntu 24.04 with Docker** template, or install Docker yourself. To install it yourself, sign in over SSH:
+
+```sh
+ssh root@YOUR_VPS_IP
+curl -fsSL https://get.docker.com | sh
+```
+
+Open the web ports if the firewall is on:
+
+```sh
+ufw allow OpenSSH && ufw allow 80 && ufw allow 443 && ufw --force enable
+```
+
+## 3. Get the code and fill in `.env`
+
+```sh
+git clone https://github.com/sharifsumon/aichatbot.git agently
+cd agently
+cp .env.example .env
+nano .env
+```
+
+The repository is private, so `git clone` asks you to sign in. Use your GitHub username, and a personal access token as the password (GitHub → Settings → Developer settings → Personal access tokens).
+
+Set these values in `.env` and leave the rest as they are:
+
+```sh
+POSTGRES_PASSWORD=            # a long random password: openssl rand -hex 24
+ENCRYPTION_KEY=               # openssl rand -base64 32   (keep it; losing it loses page connections)
+
+WEB_URL=https://app.example.com
+ADMIN_URL=https://admin.example.com
+API_URL=https://api.example.com
+COOKIE_DOMAIN=.example.com
+
+META_APP_ID=                  # Meta app → App settings → Basic
+META_APP_SECRET=
+META_VERIFY_TOKEN=            # any random string: openssl rand -hex 16
+
+AI_BASE_URL=https://api.openai.com/v1
+AI_API_KEY=                   # your OpenAI key
+AI_CHAT_MODEL=gpt-4o-mini
+AI_EMBEDDING_MODEL=text-embedding-3-small
+AI_EMBEDDING_DIMENSIONS=1024
+AI_INPUT_COST_PER_MTOK=0.15
+AI_OUTPUT_COST_PER_MTOK=0.6
+
+WEB_DOMAIN=app.example.com
+API_DOMAIN=api.example.com
+ADMIN_DOMAIN=admin.example.com
+```
+
+Delete the `DATABASE_URL` and `REDIS_URL` lines, or leave them alone; Docker sets its own values for these. Leave the `S3_*` lines empty for now. Without them only file uploads are off.
+
+## 4. Start everything
+
+```sh
+docker compose --profile app up -d --build
+```
+
+The first build takes a few minutes. It runs the database migrations, then starts the API, worker, web, admin and Caddy, which gets HTTPS certificates by itself. Check that the API is up:
+
+```sh
+curl https://api.example.com/health
+docker compose logs -f api worker    # Ctrl+C to stop following
+```
+
+## 5. Point the Meta app at the server
+
+At developers.facebook.com, open your app:
+
+1. **Messenger → Messenger API Settings → Webhooks:** set the callback URL to `https://api.example.com/webhooks/meta` and the verify token to your `META_VERIFY_TOKEN`. Click **Verify and save**, then subscribe to `messages`, `messaging_postbacks` and `feed`.
+2. **App settings → Basic:**
+   - Set the data deletion callback URL to `https://api.example.com/webhooks/meta/data-deletion`.
+   - Set the deauthorize callback URL to `https://api.example.com/webhooks/meta/deauthorize`.
+   - Add `example.com` to the App domains.
+3. **Facebook Login → Settings:** add `https://api.example.com/auth/facebook/callback` as a valid OAuth redirect URI.
+
+The app stays in development mode. Only people with a role on it get replies from the bot, so add the accounts you will test with under **App roles → Roles** (as testers or admins).
+
+## 6. Connect your shop and page
+
+1. Open the Graph API Explorer at developers.facebook.com/tools/explorer.
+2. Pick your app, and add these permissions:
+   - `pages_show_list`
+   - `pages_manage_metadata`
+   - `pages_messaging`
+   - `pages_read_engagement`
+   - `pages_manage_engagement`
+   - `pages_read_user_content`
+3. Click **Generate Access Token**, allow it for your page, and copy the token.
+
+On the VPS, list your pages:
+
+```sh
+docker compose --profile app run --rm -e FB_USER_TOKEN=PASTE_TOKEN migrate pnpm shop:connect
+```
+
+Then connect one. `SAMPLE=1` adds a demo T-shirt (code TS-01, black and white, M and L) and a short text about delivery and returns, so the bot has something to answer from:
+
+```sh
+docker compose --profile app run --rm -e FB_USER_TOKEN=PASTE_TOKEN -e PAGE_ID=YOUR_PAGE_ID -e SHOP_NAME="My Shop" -e SAMPLE=1 migrate pnpm shop:connect
+```
+
+The command swaps the token for a long-lived one, subscribes the page to the webhook, and switches the bot live. Running it again later refreshes the page token.
+
+## 7. Try it
+
+From an account with a role on the app, message your page on Messenger. Try these:
+- "T-shirt er dam koto?"
+- "Black L ache?"
+- "Delivery charge koto Dhakar baire?"
+- "Ami 1ta black M nibo." The bot confirms the order and asks for your address and payment method.
+
+A comment on one of the page's posts gets a reply too.
+
+Watch what happens:
+
+```sh
+docker compose logs -f worker
+```
+
+## 8. Make your super admin account (optional for now)
+
+```sh
+docker compose --profile app run --rm -e ADMIN_EMAIL=you@example.com -e ADMIN_NAME="Your Name" migrate pnpm admin:create
+```
+
+It prints a one-time password. The admin screens aren't built yet; the account is ready for when they are.
+
+## Updating to a new version
+
+```sh
+cd agently && git pull && docker compose --profile app up -d --build
+```
+
+## If something goes wrong
+
+- **Meta says the webhook could not be verified:**
+  - Check that `curl https://api.example.com/health` works from your own computer.
+  - Check that the verify token matches `META_VERIFY_TOKEN` exactly.
+- **No reply on Messenger:**
+  - Check the sender has a role on the app.
+  - Run `docker compose logs worker`. "skipped_agent_not_live" means run step 6 again. "skipped_no_credits" means the trial's credits are used up.
+- **HTTPS certificate errors:**
+  - DNS may still be updating. Run `docker compose logs caddy`.
+  - Ports 80 and 443 must be open.

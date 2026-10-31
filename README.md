@@ -145,3 +145,5 @@ docker compose --profile app up -d --build
 ```
 
 This runs migrations, then starts the API, worker, web, admin and Caddy, which gets HTTPS certificates automatically. Postgres and Redis listen only on localhost.
+
+Step by step for a Hostinger VPS, including the Meta app settings and a test shop: [docs/deploy-vps.md](docs/deploy-vps.md). Until the dashboard exists, `pnpm shop:connect` creates a shop and connects a Facebook page from a Graph API Explorer token (run it without `PAGE_ID` to list pages; `SAMPLE=1` adds a demo product and knowledge text).
