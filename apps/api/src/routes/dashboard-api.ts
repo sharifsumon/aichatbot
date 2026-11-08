@@ -15,7 +15,7 @@ import {
 } from '@agently/db';
 import { GraphApiError, type FacebookApp } from '@agently/meta';
 import { decryptSecret, encryptSecret } from '@agently/shared';
-import { sessionUser, type SessionUser } from '../auth/session.ts';
+import { endSession, sessionUser, type CookieSettings, type SessionUser } from '../auth/session.ts';
 import { MANAGERS, isUuid, requireRole } from './guard.ts';
 import { inboxRoutes, type InboxDeps } from './inbox.ts';
 import { ordersRoutes } from './orders.ts';
@@ -24,6 +24,7 @@ import { knowledgeRoutes, type KnowledgeDeps } from './knowledge.ts';
 import { settingsRoutes } from './settings.ts';
 import { teamRoutes } from './team.ts';
 import { billingRoutes } from './billing.ts';
+import { homeRoutes } from './home.ts';
 import { limitsFor, pagesInUse } from '@agently/billing';
 
 export type DashboardDeps = InboxDeps & CatalogDeps & KnowledgeDeps & {
@@ -31,6 +32,7 @@ export type DashboardDeps = InboxDeps & CatalogDeps & KnowledgeDeps & {
   facebook: Pick<FacebookApp, 'pages' | 'subscribePage' | 'unsubscribePage'>;
   encryptionKey: string;
   urls: { web: string };
+  cookies: CookieSettings;
 };
 
 declare module 'fastify' {
@@ -72,6 +74,13 @@ export const dashboardApiRoutes: FastifyPluginAsync<DashboardDeps> = async (app,
   app.register(settingsRoutes, childDeps);
   app.register(teamRoutes, childDeps);
   app.register(billingRoutes, childDeps);
+  app.register(homeRoutes, childDeps);
+
+  /** Sign out from the dashboard (same origin rules as every other change). */
+  app.post('/logout', async (req, reply) => {
+    await endSession(db, req, reply, deps.cookies);
+    return reply.code(204).send();
+  });
 
   app.get('/me', async (req) => {
     const rows = await db

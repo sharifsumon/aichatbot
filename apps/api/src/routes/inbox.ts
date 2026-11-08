@@ -1,6 +1,6 @@
-import { and, desc, eq, lt, or, sql } from 'drizzle-orm';
+import { and, desc, eq, ilike, inArray, lt, or, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
-import { activities, channels, conversations, customers, messages, type Db } from '@agently/db';
+import { activities, channels, conversations, customers, messages, orderItems, orders, type Db } from '@agently/db';
 import type { GraphClient } from '@agently/meta';
 import { canReply, sendHumanReply } from './send-reply.ts';
 import { ALL_ROLES, isUuid, makeCursor, pageLimit, parseCursor, requireRole } from './guard.ts';
@@ -18,7 +18,7 @@ type Params = { workspaceId: string; conversationId: string };
 export const inboxRoutes: FastifyPluginAsync<InboxDeps> = async (app, deps) => {
   const { db } = deps;
 
-  app.get<{ Params: { workspaceId: string }; Querystring: { mode?: string; status?: string; cursor?: string; limit?: string } }>(
+  app.get<{ Params: { workspaceId: string }; Querystring: { mode?: string; status?: string; q?: string; cursor?: string; limit?: string } }>(
     '/workspaces/:workspaceId/conversations',
     async (req, reply) => {
       if (!(await requireRole(db, req, reply, ALL_ROLES))) return reply;
@@ -27,6 +27,8 @@ export const inboxRoutes: FastifyPluginAsync<InboxDeps> = async (app, deps) => {
       const cursor = parseCursor(req.query.cursor);
       const mode = req.query.mode === 'ai' || req.query.mode === 'human' ? req.query.mode : undefined;
       const status = req.query.status === 'closed' ? 'closed' : 'open';
+      const q = req.query.q?.trim().slice(0, 100);
+      const like = q ? `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%` : '';
 
       const rows = await db
         .select({
@@ -49,6 +51,7 @@ export const inboxRoutes: FastifyPluginAsync<InboxDeps> = async (app, deps) => {
             eq(conversations.workspaceId, workspaceId),
             eq(conversations.status, status),
             mode ? eq(conversations.mode, mode) : undefined,
+            q ? or(ilike(customers.name, like), ilike(customers.phone, like)) : undefined,
             cursor
               ? or(
                   lt(conversations.lastMessageAt, cursor.at),
@@ -100,11 +103,25 @@ export const inboxRoutes: FastifyPluginAsync<InboxDeps> = async (app, deps) => {
 
       const page = rows.slice(0, limit);
       const oldest = page.at(-1);
+      // The customer's recent orders, for the panel beside the chat.
+      const recent = await db
+        .select()
+        .from(orders)
+        .where(and(eq(orders.workspaceId, conversation.workspaceId), eq(orders.customerId, conversation.customerId)))
+        .orderBy(desc(orders.createdAt))
+        .limit(5);
+      const items = recent.length ? await db.select().from(orderItems).where(inArray(orderItems.orderId, recent.map((o) => o.id))) : [];
+      const [history] = await db
+        .select({ count: sql<number>`count(*)::int`, total: sql<string>`coalesce(sum(${orders.total}), 0)`, first: sql<Date | null>`min(${orders.createdAt})` })
+        .from(orders)
+        .where(and(eq(orders.workspaceId, conversation.workspaceId), eq(orders.customerId, conversation.customerId), sql`${orders.status} <> 'cancelled'`));
       return {
         conversation: {
           ...conversation,
           canReply: canReply(conversation.lastCustomerMessageAt),
         },
+        orders: recent.map((o) => ({ ...o, items: items.filter((i) => i.orderId === o.id) })),
+        history: { orders: history?.count ?? 0, total: history?.total ?? '0', firstOrderAt: history?.first ?? null },
         // Oldest first, as the chat shows them.
         messages: page.reverse(),
         olderCursor: rows.length > limit && oldest ? makeCursor(oldest.createdAt, oldest.id) : null,
