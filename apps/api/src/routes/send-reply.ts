@@ -34,6 +34,8 @@ export async function sendHumanReply(
   conversation: { id: string; workspaceId: string; channelId: string; customerId: string; lastCustomerMessageAt: Date | null },
   rawText: unknown,
   as: ReplyAs,
+  /** A specific customer comment to answer; by default the latest thing the customer sent. */
+  toComment?: { id: string; externalId: string | null },
 ): Promise<SendResult> {
   const { db } = deps;
   const text = typeof rawText === 'string' ? rawText.trim() : '';
@@ -44,11 +46,14 @@ export async function sendHumanReply(
   if (!channel?.accessTokenEncrypted || channel.status !== 'connected') {
     return { ok: false, status: 409, error: 'This page is not connected. Reconnect it to reply.' };
   }
-  const latestInbound = await db.query.messages.findFirst({
-    where: and(eq(messages.conversationId, conversation.id), eq(messages.direction, 'inbound')),
-    orderBy: desc(messages.createdAt),
-  });
-  const isComment = latestInbound?.kind === 'comment';
+  const latestInbound =
+    toComment ??
+    (await db.query.messages.findFirst({
+      where: and(eq(messages.conversationId, conversation.id), eq(messages.direction, 'inbound')),
+      orderBy: desc(messages.createdAt),
+    }));
+  const isComment = !!toComment || (latestInbound as { kind?: string } | undefined)?.kind === 'comment';
+  if (isComment && !latestInbound?.externalId) return { ok: false, status: 409, error: 'This comment can no longer be answered' };
   if (!isComment && !canReply(conversation.lastCustomerMessageAt)) {
     return { ok: false, status: 409, error: "Facebook only allows replies within 24 hours of the customer's last message." };
   }
@@ -86,7 +91,11 @@ export async function sendHumanReply(
       kind: isComment ? 'comment_reply' : 'message',
       sender: as.sender,
       senderUserId: as.sender === 'staff' ? as.userId : null,
-      meta: as.sender === 'support' ? { supportUserId: as.platformUserId } : {},
+      meta: {
+        ...(as.sender === 'support' ? { supportUserId: as.platformUserId } : {}),
+        // Ties a public reply to the comment it answers, for the Comments page.
+        ...(isComment ? { replyToMessageId: latestInbound!.id } : {}),
+      },
       text,
       externalId,
       delivery: 'sent',

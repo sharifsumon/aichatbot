@@ -14,7 +14,7 @@ export const adminInsightRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { 
     const dayStart = new Date(`${today()}T00:00:00Z`);
     const monthStart = billingMonth(now).start.toISOString().slice(0, 10);
 
-    const [byStatus, signups, messagesToday, aiToday, handoffsToday, monthCost, mrr] = await Promise.all([
+    const [byStatus, signups, messagesToday, aiToday, handoffsToday, monthCost, mrr, outOfCredits] = await Promise.all([
       db.select({ status: workspaces.status, n: sql<number>`count(*)::int` }).from(workspaces).groupBy(workspaces.status),
       db
         .select({
@@ -47,12 +47,23 @@ export const adminInsightRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { 
         .from(workspaces)
         .innerJoin(plans, eq(plans.id, workspaces.planId))
         .where(and(eq(workspaces.status, 'active'), sql`${plans.trialDays} is null`)),
+      // Shops not suspended whose AI replies this month reached what they were granted.
+      db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(workspaces)
+        .where(
+          and(
+            sql`${workspaces.status} <> 'suspended'`,
+            sql`(select coalesce(sum(${usageRecords.aiReplies}), 0) from ${usageRecords} where ${usageRecords.workspaceId} = ${workspaces.id} and ${usageRecords.day} >= ${monthStart})
+              >= (select coalesce(sum(${creditGrants.credits}), 0) from ${creditGrants} where ${creditGrants.workspaceId} = ${workspaces.id} and ${creditGrants.expiresAt} > now())`,
+          ),
+        ),
     ]);
     const status = Object.fromEntries(byStatus.map((s) => [s.status, s.n]));
     const replies = aiToday[0]?.replies ?? 0;
     const failed = aiToday[0]?.failed ?? 0;
     return {
-      tenants: { trial: status.trial ?? 0, active: status.active ?? 0, pastDue: status.past_due ?? 0, suspended: status.suspended ?? 0 },
+      tenants: { trial: status.trial ?? 0, active: status.active ?? 0, pastDue: status.past_due ?? 0, suspended: status.suspended ?? 0, outOfCredits: outOfCredits[0]?.n ?? 0 },
       signups: signups[0],
       today: {
         customerMessages: messagesToday[0]?.n ?? 0,

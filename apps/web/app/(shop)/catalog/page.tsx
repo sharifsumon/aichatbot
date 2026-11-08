@@ -1,0 +1,360 @@
+'use client';
+
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useShop } from '@/components/Shell';
+import { Empty, Loading, Notice, Pill, SearchBox, TopBar } from '@/components/ui';
+import { ApiError, qs, useApi, useUpload } from '@/lib/api';
+import { bdt, num } from '@/lib/format';
+import type { Product } from '@/lib/types';
+
+const LOW_STOCK = 10;
+
+export default function CatalogPage() {
+  const { ws, manager, reloadHome } = useShop();
+  const api = useApi();
+  const [q, setQ] = useState('');
+  const [rows, setRows] = useState<Product[]>([]);
+  const [next, setNext] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string>();
+  const [editing, setEditing] = useState<Product | 'new'>();
+  const [done, setDone] = useState<string>();
+
+  const load = useCallback(
+    async (cursor?: string) => {
+      setLoading(true);
+      setError(undefined);
+      try {
+        const r = await api<{ products: Product[]; nextCursor: string | null }>(`${ws}/products${qs({ q, cursor })}`);
+        setRows((prev) => (cursor ? [...prev, ...r.products] : r.products));
+        setNext(r.nextCursor);
+      } catch (e) {
+        setError((e as Error).message);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [api, ws, q],
+  );
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const onSearch = useCallback((v: string) => setQ(v), []);
+  const current = editing === 'new' ? undefined : editing;
+
+  return (
+    <>
+      <TopBar title="Product Catalog">
+        <SearchBox label="Search products" placeholder="Name or product code…" onSearch={onSearch} />
+        {manager && (
+          <button type="button" className="btn primary" onClick={() => setEditing('new')}>
+            + Add product
+          </button>
+        )}
+      </TopBar>
+      <div className="content">
+        {done && <Notice tone="ok">{done}</Notice>}
+        {error && <Notice tone="error">{error}</Notice>}
+        <div className="catalog">
+          <section className="products" aria-label="Products">
+            {rows.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className={`product${current?.id === p.id ? ' on' : ''}`}
+                onClick={() => manager && setEditing(p)}
+                disabled={!manager}
+                style={manager ? undefined : { cursor: 'default' }}
+              >
+                <div className="ph">{p.imageUrl ? <img src={p.imageUrl} alt="" loading="lazy" /> : 'No photo'}</div>
+                <div className="info">
+                  <div>
+                    <strong>{p.title}</strong>
+                    <StockPill p={p} />
+                  </div>
+                  <span className="sub">
+                    {p.code}
+                    {p.colors.length > 0 && ` · ${p.colors.length} colour${p.colors.length === 1 ? '' : 's'}`}
+                    {p.sizes.length > 0 && ` · ${p.sizes.length} size${p.sizes.length === 1 ? '' : 's'}`}
+                  </span>
+                  <div>
+                    <strong>{bdt(p.price)}</strong>
+                    <span className="sub">{num(p.totalStock)} pcs</span>
+                  </div>
+                </div>
+              </button>
+            ))}
+            {loading && <Loading />}
+            {!loading && rows.length === 0 && (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <Empty>{q ? 'No products match.' : manager ? 'No products yet. Add the things you sell, so the bot can quote prices and stock.' : 'No products yet.'}</Empty>
+              </div>
+            )}
+            {next && !loading && (
+              <div className="more" style={{ gridColumn: '1 / -1' }}>
+                <button type="button" className="btn" onClick={() => load(next)}>
+                  Show more
+                </button>
+              </div>
+            )}
+          </section>
+          {editing && (
+            <Editor
+              key={current?.id ?? 'new'}
+              product={current}
+              onClose={() => setEditing(undefined)}
+              onSaved={(p, message) => {
+                setDone(message);
+                setEditing(p ?? undefined);
+                load();
+                reloadHome();
+              }}
+            />
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function StockPill({ p }: { p: Product }) {
+  if (p.status === 'draft') return <Pill>Draft</Pill>;
+  if (p.totalStock === 0) return <Pill tone="red">Out of stock</Pill>;
+  if (p.totalStock < LOW_STOCK) return <Pill tone="amber">Low stock</Pill>;
+  return <Pill tone="green">In stock</Pill>;
+}
+
+/** The colour × size grid, kept as two lists and a stock count per cell. */
+interface Grid {
+  colors: string[];
+  sizes: string[];
+  stock: Record<string, string>;
+}
+
+const cell = (c: string, s: string) => `${c.toLowerCase()}|${s.toLowerCase()}`;
+
+function gridOf(p?: Product): Grid {
+  if (!p) return { colors: [], sizes: [], stock: { [cell('', '')]: '0' } };
+  const stock: Record<string, string> = {};
+  for (const v of p.variants) stock[cell(v.color, v.size)] = String(v.stock);
+  return { colors: p.colors, sizes: p.sizes, stock };
+}
+
+function variantsOf(g: Grid) {
+  const colors = g.colors.length ? g.colors : [''];
+  const sizes = g.sizes.length ? g.sizes : [''];
+  return colors.flatMap((color) => sizes.map((size) => ({ color, size, stock: Math.max(0, Number.parseInt(g.stock[cell(color, size)] ?? '0', 10) || 0), price: null })));
+}
+
+function Editor({ product, onClose, onSaved }: { product?: Product; onClose: () => void; onSaved: (p: Product | null, message: string) => void }) {
+  const { ws } = useShop();
+  const api = useApi();
+  const upload = useUpload();
+  const file = useRef<HTMLInputElement>(null);
+  const [title, setTitle] = useState(product?.title ?? '');
+  const [code, setCode] = useState(product?.code ?? '');
+  const [description, setDescription] = useState(product?.description ?? '');
+  const [price, setPrice] = useState(product ? String(Number(product.price)) : '');
+  const [imageUrl, setImageUrl] = useState(product?.imageUrl ?? '');
+  const [draft, setDraft] = useState(product?.status === 'draft');
+  const [grid, setGrid] = useState<Grid>(() => gridOf(product));
+  const [newColor, setNewColor] = useState('');
+  const [newSize, setNewSize] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  const total = variantsOf(grid).reduce((n, v) => n + v.stock, 0);
+  const setStock = (c: string, s: string, v: string) => setGrid((g) => ({ ...g, stock: { ...g.stock, [cell(c, s)]: v.replace(/\D/g, '') } }));
+
+  function addColor() {
+    const c = newColor.trim();
+    if (!c || grid.colors.some((x) => x.toLowerCase() === c.toLowerCase())) return;
+    setGrid((g) => {
+      // The first colour takes over the stock entered without one.
+      const stock = { ...g.stock };
+      if (!g.colors.length) for (const s of g.sizes.length ? g.sizes : ['']) stock[cell(c, s)] = stock[cell('', s)] ?? '0';
+      return { ...g, colors: [...g.colors, c], stock };
+    });
+    setNewColor('');
+  }
+
+  function addSize() {
+    const s = newSize.trim();
+    if (!s || grid.sizes.some((x) => x.toLowerCase() === s.toLowerCase())) return;
+    setGrid((g) => {
+      const stock = { ...g.stock };
+      if (!g.sizes.length) for (const c of g.colors.length ? g.colors : ['']) stock[cell(c, s)] = stock[cell(c, '')] ?? '0';
+      return { ...g, sizes: [...g.sizes, s], stock };
+    });
+    setNewSize('');
+  }
+
+  async function pickPhoto(f: File | undefined) {
+    if (!f) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      const r = await upload<{ url: string }>(`${ws}/uploads/images`, f);
+      setImageUrl(r.url);
+    } catch (e) {
+      setError((e as ApiError).status === 503 ? 'Photo uploads are not switched on yet. Paste a link to the photo instead.' : (e as Error).message);
+    } finally {
+      setBusy(false);
+      if (file.current) file.current.value = '';
+    }
+  }
+
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(undefined);
+    const body = { title, code, description, price, imageUrl: imageUrl.trim() || null, status: draft ? 'draft' : 'active', variants: variantsOf(grid) };
+    try {
+      const r = product
+        ? await api<{ product: Product }>(`${ws}/products/${product.id}`, { method: 'PUT', body })
+        : await api<{ product: Product }>(`${ws}/products`, { method: 'POST', body });
+      onSaved(r.product, `${r.product.title} saved. The bot quotes the new price and stock from now on.`);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function archive() {
+    if (!product || !window.confirm(`Remove ${product.title} from the catalog? Past orders keep it.`)) return;
+    setBusy(true);
+    try {
+      await api(`${ws}/products/${product.id}`, { method: 'DELETE' });
+      onSaved(null, `${product.title} removed from the catalog.`);
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  }
+
+  const colors = grid.colors.length ? grid.colors : [''];
+  const sizes = grid.sizes.length ? grid.sizes : [''];
+
+  return (
+    <form className="editor" aria-label={product ? `Edit ${product.title}` : 'Add a product'} onSubmit={save}>
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        <h2>{product ? 'Edit product' : 'Add a product'}</h2>
+        <button type="button" className="icon-btn" aria-label="Close" onClick={onClose}>
+          ×
+        </button>
+      </div>
+      <div className="photo">
+        <div className="ph">{imageUrl ? <img src={imageUrl} alt="" /> : 'No photo'}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 0 }}>
+          <button type="button" className="btn sm" onClick={() => file.current?.click()} disabled={busy}>
+            {imageUrl ? 'Change photo' : 'Upload photo'}
+          </button>
+          <input ref={file} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => pickPhoto(e.target.files?.[0])} />
+          <input className="input" aria-label="Photo link" placeholder="or paste a photo link" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} style={{ height: 34, fontSize: 13 }} />
+        </div>
+      </div>
+      <div className="row">
+        <label className="field" style={{ flex: '2 1 160px' }}>
+          Product title
+          <input value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={200} />
+        </label>
+        <label className="field">
+          Code
+          <input value={code} onChange={(e) => setCode(e.target.value)} required maxLength={60} placeholder="DS-204" />
+        </label>
+      </div>
+      <label className="field">
+        Description
+        <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={5000} placeholder="Fabric, fit, care. The bot uses this to answer questions." />
+      </label>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>Stock by colour and size</span>
+        <div style={{ overflowX: 'auto' }}>
+          <table className="grid">
+            <thead>
+              <tr>
+                <th>{grid.colors.length ? 'Colour' : ''}</th>
+                {sizes.map((s) => (
+                  <th key={s}>
+                    {s || 'Stock'}
+                    {s && (
+                      <button type="button" className="btn link" aria-label={`Remove size ${s}`} onClick={() => setGrid((g) => ({ ...g, sizes: g.sizes.filter((x) => x !== s) }))} style={{ marginLeft: 4 }}>
+                        ×
+                      </button>
+                    )}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {colors.map((c) => (
+                <tr key={c}>
+                  <td>
+                    {c}
+                    {c && (
+                      <button type="button" className="btn link" aria-label={`Remove ${c}`} onClick={() => setGrid((g) => ({ ...g, colors: g.colors.filter((x) => x !== c) }))} style={{ marginLeft: 4 }}>
+                        ×
+                      </button>
+                    )}
+                  </td>
+                  {sizes.map((s) => (
+                    <td key={s}>
+                      <input className="cell" aria-label={[c, s].filter(Boolean).join(' ') || 'Stock'} inputMode="numeric" value={grid.stock[cell(c, s)] ?? '0'} onChange={(e) => setStock(c, s, e.target.value)} />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="row" style={{ gap: 8 }}>
+          <span style={{ display: 'flex', gap: 6 }}>
+            <input className="cell wide" aria-label="New colour" placeholder="Colour" value={newColor} onChange={(e) => setNewColor(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addColor())} />
+            <button type="button" className="btn sm" onClick={addColor}>
+              + Add colour
+            </button>
+          </span>
+          <span style={{ display: 'flex', gap: 6 }}>
+            <input className="cell wide" aria-label="New size" placeholder="Size" value={newSize} onChange={(e) => setNewSize(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addSize())} />
+            <button type="button" className="btn sm" onClick={addSize}>
+              + Add size
+            </button>
+          </span>
+        </div>
+      </div>
+      <div className="row" style={{ alignItems: 'flex-end' }}>
+        <div className="field">
+          Total quantity
+          <strong style={{ fontSize: 18 }}>{num(total)} pcs</strong>
+        </div>
+        <label className="field">
+          Price (৳)
+          <input value={price} onChange={(e) => setPrice(e.target.value)} inputMode="decimal" required placeholder="1250" />
+        </label>
+      </div>
+      <label className="check">
+        <input type="checkbox" checked={draft} onChange={(e) => setDraft(e.target.checked)} /> Draft: the bot doesn&apos;t offer it yet
+      </label>
+      {error && <Notice tone="error">{error}</Notice>}
+      <div className="save-bar">
+        {product && (
+          <button type="button" className="btn link" style={{ marginRight: 'auto', color: 'var(--red)' }} onClick={archive} disabled={busy}>
+            Remove product
+          </button>
+        )}
+        <button type="button" className="btn" onClick={onClose} disabled={busy}>
+          Cancel
+        </button>
+        <button type="submit" className="btn primary" disabled={busy}>
+          {busy ? 'Saving…' : 'Save product'}
+        </button>
+      </div>
+      <p className="sub" style={{ margin: 0 }}>
+        The bot quotes this price and stock to customers the moment you save.
+      </p>
+    </form>
+  );
+}
