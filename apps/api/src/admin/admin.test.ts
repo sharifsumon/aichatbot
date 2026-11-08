@@ -176,6 +176,8 @@ test('tenants: search, detail is audited, suspend shows the owner why, reactivat
   assert.equal(row.owner.name, 'Owner');
   assert.equal(row.pagesConnected, 1);
   assert.ok(row.lastActiveAt);
+  assert.equal(typeof row.creditsGranted, 'number');
+  assert.equal(row.ordersLast30Days, 0);
 
   const detail = await app.inject({ url: `/admin/tenants/${t.ws.id}`, ...support.auth });
   assert.equal(detail.statusCode, 200);
@@ -270,6 +272,7 @@ test('overview and AI usage: tiles, top tenants, shops near their limit', { skip
   assert.ok(o.today.aiReplies >= 95);
   assert.ok(o.today.customerMessages >= 1);
   assert.ok(Number(o.aiCostThisMonthUsd) >= 0.5);
+  assert.equal(typeof o.tenants.outOfCredits, 'number');
 
   const usage = await app.inject({ url: '/admin/usage?days=7', ...boss.auth });
   const u = usage.json();

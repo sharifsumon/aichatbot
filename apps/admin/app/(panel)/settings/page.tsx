@@ -1,0 +1,260 @@
+'use client';
+
+import { useEffect, useState, type FormEvent } from 'react';
+import { Dialog, Empty, Loading, Notice, Pill, TopBar } from '@/components/ui';
+import { useApi, useLoad } from '@/lib/api';
+import type { Plan } from '@/lib/types';
+
+interface TopUp {
+  credits: number;
+  priceBdt: string;
+  priceUsd: string;
+}
+interface Settings {
+  'ai.defaultModel'?: string;
+  'ai.fallbackModel'?: string | null;
+  'ai.defaultSystemInstruction'?: string;
+  'credits.topUp'?: TopUp;
+}
+interface Flag {
+  id: string;
+  key: string;
+  enabled: boolean;
+  workspaceId: string | null;
+  planKey: string | null;
+}
+
+export default function SettingsPage() {
+  const api = useApi();
+  const settings = useLoad<{ settings: Settings }>('/settings');
+  const flags = useLoad<{ flags: Flag[] }>('/flags');
+  const plans = useLoad<{ plans: Plan[] }>('/plans');
+  const [model, setModel] = useState('');
+  const [fallback, setFallback] = useState('');
+  const [instruction, setInstruction] = useState('');
+  const [topUp, setTopUp] = useState({ credits: '', priceBdt: '', priceUsd: '' });
+  const [saving, setSaving] = useState<string>();
+  const [done, setDone] = useState<string>();
+  const [error, setError] = useState<string>();
+  const [newFlag, setNewFlag] = useState(false);
+
+  useEffect(() => {
+    const s = settings.data?.settings;
+    if (!s) return;
+    setModel(s['ai.defaultModel'] ?? '');
+    setFallback(s['ai.fallbackModel'] ?? '');
+    setInstruction(s['ai.defaultSystemInstruction'] ?? '');
+    const t = s['credits.topUp'];
+    setTopUp({ credits: t ? String(t.credits) : '', priceBdt: t ? String(t.priceBdt) : '', priceUsd: t ? String(t.priceUsd) : '' });
+  }, [settings.data]);
+
+  async function save(key: string, value: unknown, label: string) {
+    setSaving(key);
+    setError(undefined);
+    setDone(undefined);
+    try {
+      await api(`/settings/${encodeURIComponent(key)}`, { method: 'PUT', body: { value } });
+      setDone(`${label} saved.`);
+      settings.reload();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(undefined);
+    }
+  }
+
+  const submit = (key: string, value: () => unknown, label: string) => (e: FormEvent) => {
+    e.preventDefault();
+    save(key, value(), label);
+  };
+
+  async function toggle(f: Flag) {
+    setError(undefined);
+    try {
+      await api('/flags', { method: 'PUT', body: { key: f.key, enabled: !f.enabled, workspaceId: f.workspaceId, planKey: f.planKey } });
+      flags.reload();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  return (
+    <>
+      <TopBar title="Platform settings" />
+      <div className="content">
+        {done && <Notice tone="ok">{done}</Notice>}
+        {error && <Notice tone="error">{error}</Notice>}
+        {settings.error && <Notice tone="error">{settings.error}</Notice>}
+        {settings.loading && !settings.data && <Loading />}
+        {settings.data && (
+          <div className="grid2">
+            <form className="card pad" onSubmit={submit('ai.defaultModel', () => model.trim(), 'Default model')} aria-label="AI model">
+              <h2>AI model</h2>
+              <p className="sub" style={{ margin: 0 }}>
+                Leave empty to use AI_CHAT_MODEL from the server&apos;s settings file.
+              </p>
+              <label className="field">
+                Default model
+                <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="gpt-4o-mini" />
+              </label>
+              <button className="btn primary" style={{ alignSelf: 'flex-start' }} disabled={saving === 'ai.defaultModel' || !model.trim()}>
+                Save model
+              </button>
+              <label className="field" style={{ marginTop: 8 }}>
+                Fallback model
+                <input value={fallback} onChange={(e) => setFallback(e.target.value)} placeholder="None" />
+                <small>Used when the default model fails.</small>
+              </label>
+              <button type="button" className="btn" style={{ alignSelf: 'flex-start' }} disabled={saving === 'ai.fallbackModel'} onClick={() => save('ai.fallbackModel', fallback.trim() || null, 'Fallback model')}>
+                Save fallback
+              </button>
+            </form>
+
+            <form
+              className="card pad"
+              aria-label="Credit top-up"
+              onSubmit={submit('credits.topUp', () => ({ credits: Number.parseInt(topUp.credits, 10), priceBdt: topUp.priceBdt.trim(), priceUsd: topUp.priceUsd.trim() }), 'Credit top-up')}
+            >
+              <h2>Credit top-up pack</h2>
+              <p className="sub" style={{ margin: 0 }}>
+                What a shop gets when it buys extra AI credits.
+              </p>
+              <div className="row">
+                <label className="field">
+                  Credits
+                  <input type="number" min={1} required value={topUp.credits} onChange={(e) => setTopUp((t) => ({ ...t, credits: e.target.value }))} />
+                </label>
+                <label className="field">
+                  Price (৳)
+                  <input required inputMode="decimal" value={topUp.priceBdt} onChange={(e) => setTopUp((t) => ({ ...t, priceBdt: e.target.value }))} />
+                </label>
+                <label className="field">
+                  Price ($)
+                  <input required inputMode="decimal" value={topUp.priceUsd} onChange={(e) => setTopUp((t) => ({ ...t, priceUsd: e.target.value }))} />
+                </label>
+              </div>
+              <button className="btn primary" style={{ alignSelf: 'flex-start' }} disabled={saving === 'credits.topUp'}>
+                Save top-up
+              </button>
+            </form>
+
+            <form className="card pad" onSubmit={submit('ai.defaultSystemInstruction', () => instruction, 'Default instruction')} aria-label="Default instruction" style={{ gridColumn: '1 / -1' }}>
+              <h2>Default bot instruction</h2>
+              <p className="sub" style={{ margin: 0 }}>
+                Added to every shop&apos;s bot before the shop&apos;s own instructions. Keep it short.
+              </p>
+              <label className="field">
+                <span className="sr">Instruction</span>
+                <textarea rows={6} maxLength={4000} value={instruction} onChange={(e) => setInstruction(e.target.value)} />
+              </label>
+              <button className="btn primary" style={{ alignSelf: 'flex-start' }} disabled={saving === 'ai.defaultSystemInstruction'}>
+                Save instruction
+              </button>
+            </form>
+          </div>
+        )}
+
+        <section aria-label="Feature flags" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <h2 style={{ fontSize: 16 }}>Feature flags</h2>
+            <button type="button" className="btn" style={{ marginLeft: 'auto' }} onClick={() => setNewFlag(true)}>
+              + Set a flag
+            </button>
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Flag</th>
+                  <th>Applies to</th>
+                  <th>State</th>
+                  <th>
+                    <span className="sr">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {flags.data?.flags.map((f) => (
+                  <tr key={f.id}>
+                    <td>
+                      <code>{f.key}</code>
+                    </td>
+                    <td>{f.workspaceId ? <a href={`/tenants/${f.workspaceId}`}>One shop</a> : f.planKey ? `Plan: ${f.planKey}` : 'Everyone'}</td>
+                    <td>{f.enabled ? <Pill tone="green">On</Pill> : <Pill>Off</Pill>}</td>
+                    <td>
+                      <button type="button" className="btn sm" onClick={() => toggle(f)}>
+                        Turn {f.enabled ? 'off' : 'on'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {flags.loading && <Loading />}
+            {flags.data && flags.data.flags.length === 0 && <Empty>No flags set.</Empty>}
+          </div>
+        </section>
+      </div>
+      {newFlag && <FlagDialog plans={plans.data?.plans ?? []} onClose={() => setNewFlag(false)} onDone={() => (setNewFlag(false), flags.reload())} />}
+    </>
+  );
+}
+
+function FlagDialog({ plans, onClose, onDone }: { plans: Plan[]; onClose: () => void; onDone: () => void }) {
+  const api = useApi();
+  const [key, setKey] = useState('');
+  const [scope, setScope] = useState<'all' | 'plan' | 'shop'>('all');
+  const [planKey, setPlanKey] = useState('');
+  const [workspaceId, setWorkspaceId] = useState('');
+  const [enabled, setEnabled] = useState(true);
+  return (
+    <Dialog
+      title="Set a feature flag"
+      submitLabel="Save flag"
+      onClose={onClose}
+      onSubmit={async () => {
+        await api('/flags', {
+          method: 'PUT',
+          body: { key: key.trim(), enabled, planKey: scope === 'plan' ? planKey : null, workspaceId: scope === 'shop' ? workspaceId.trim() : null },
+        });
+        onDone();
+      }}
+    >
+      <label className="field">
+        Flag key
+        <input required pattern="[a-z0-9_.\-]{2,60}" placeholder="e.g. whatsapp.beta" value={key} onChange={(e) => setKey(e.target.value)} />
+      </label>
+      <label className="field">
+        Applies to
+        <select value={scope} onChange={(e) => setScope(e.target.value as typeof scope)}>
+          <option value="all">Everyone</option>
+          <option value="plan">One plan</option>
+          <option value="shop">One shop</option>
+        </select>
+      </label>
+      {scope === 'plan' && (
+        <label className="field">
+          Plan
+          <select required value={planKey} onChange={(e) => setPlanKey(e.target.value)}>
+            <option value="">Choose a plan</option>
+            {plans.map((p) => (
+              <option key={p.key} value={p.key}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {scope === 'shop' && (
+        <label className="field">
+          Shop id
+          <input required value={workspaceId} onChange={(e) => setWorkspaceId(e.target.value)} placeholder="From the shop's tenant page" />
+        </label>
+      )}
+      <label className="check">
+        <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+        On
+      </label>
+    </Dialog>
+  );
+}

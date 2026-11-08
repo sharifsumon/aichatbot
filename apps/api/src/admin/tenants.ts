@@ -61,6 +61,9 @@ export const adminTenantRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { d
         aiRepliesThisMonth: sql<number>`(select coalesce(sum(${usageRecords.aiReplies}), 0)::int from ${usageRecords} where ${usageRecords.workspaceId} = ${workspaces.id} and ${usageRecords.day} >= ${monthStart})`,
         aiCostThisMonth: sql<string>`(select coalesce(sum(${usageRecords.costUsd}), 0)::text from ${usageRecords} where ${usageRecords.workspaceId} = ${workspaces.id} and ${usageRecords.day} >= ${monthStart})`,
         lastActiveAt: sql<Date | null>`(select max(${conversations.lastMessageAt}) from ${conversations} where ${conversations.workspaceId} = ${workspaces.id})`.mapWith((v) => (v ? new Date(v) : null)),
+        // Credits granted for this month (unexpired grants), to show used against granted.
+        creditsGranted: sql<number>`(select coalesce(sum(${creditGrants.credits}), 0)::int from ${creditGrants} where ${creditGrants.workspaceId} = ${workspaces.id} and ${creditGrants.expiresAt} > now())`,
+        ordersLast30Days: sql<number>`(select count(*)::int from ${orders} where ${orders.workspaceId} = ${workspaces.id} and ${orders.createdAt} >= now() - interval '30 days')`,
       })
       .from(workspaces)
       .leftJoin(plans, eq(plans.id, workspaces.planId))
