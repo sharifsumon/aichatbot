@@ -3,7 +3,7 @@ import { Redis } from 'ioredis';
 import { createDb } from '@agently/db';
 import { FacebookApp, GraphClient } from '@agently/meta';
 import { QUEUES, jobIdFor, loadEnv, type InboundJob, type KnowledgeJob } from '@agently/shared';
-import { DiskStore, storageFromEnv } from '@agently/storage';
+import { S3Store } from '@agently/storage';
 import { buildServer } from './server.ts';
 
 const env = loadEnv('database', 'redis', 'meta', 'crypto', 'urls');
@@ -13,11 +13,17 @@ const inbound = new Queue<InboundJob>(QUEUES.inbound, { connection: redis });
 const knowledge = new Queue<KnowledgeJob>(QUEUES.knowledge, { connection: redis });
 
 // Uploads are optional in development; the routes answer 503 without storage.
-// An S3 bucket when S3_ENDPOINT is set, otherwise the server's disk (FILES_DIR).
-const storage = storageFromEnv(process.env);
-const s3Public = process.env.S3_PUBLIC_URL?.replace(/\/+$/, '');
-// Disk files are served by the API itself at /files/<key>.
-const publicBase = storage instanceof DiskStore ? `${env.API_URL.replace(/\/+$/, '')}/files` : s3Public || undefined;
+const storageEnv = process.env.S3_ENDPOINT ? loadEnv('storage') : undefined;
+const storage = storageEnv
+  ? new S3Store({
+      endpoint: storageEnv.S3_ENDPOINT,
+      region: storageEnv.S3_REGION,
+      bucket: storageEnv.S3_BUCKET,
+      accessKeyId: storageEnv.S3_ACCESS_KEY_ID,
+      secretAccessKey: storageEnv.S3_SECRET_ACCESS_KEY,
+    })
+  : undefined;
+const publicBase = storageEnv?.S3_PUBLIC_URL?.replace(/\/+$/, '');
 
 const app = buildServer({
   db,
@@ -30,7 +36,6 @@ const app = buildServer({
   urls: { web: env.WEB_URL, api: env.API_URL, admin: env.ADMIN_URL || undefined },
   cookies: { secure: env.API_URL.startsWith('https://'), domain: env.COOKIE_DOMAIN || undefined },
   storage,
-  diskFiles: storage instanceof DiskStore ? storage : undefined,
   publicFileUrl: publicBase ? (key) => `${publicBase}/${key}` : undefined,
   enqueueKnowledge: async (job) => {
     // Same job id as the worker's scheduler uses: repeated clicks in a minute merge.

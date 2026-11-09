@@ -78,7 +78,7 @@ API_DOMAIN=api.example.com
 ADMIN_DOMAIN=admin.example.com
 ```
 
-Delete the `DATABASE_URL` and `REDIS_URL` lines, or leave them alone; Docker sets its own values for these. Leave the `S3_*` lines empty: uploaded product photos and knowledge files are then kept on the server's disk, in the `agently_files` Docker volume, and photos are served from `https://<API_DOMAIN>/files/...`. Back that volume up along with the database. Fill in `S3_*` only if you move files to a bucket such as Cloudflare R2 later.
+Delete the `DATABASE_URL` and `REDIS_URL` lines, or leave them alone; Docker sets its own values for these. Leave the `S3_*` lines empty for now. Without them only file uploads are off.
 
 ## 4. Start everything
 

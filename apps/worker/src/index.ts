@@ -6,7 +6,7 @@ import { grantMonthlyCredits } from '@agently/billing';
 import { createDb } from '@agently/db';
 import { GraphClient } from '@agently/meta';
 import { QUEUES, jobIdFor, loadEnv, type InboundJob, type KnowledgeJob, type ReplyJob } from '@agently/shared';
-import { storageFromEnv } from '@agently/storage';
+import { S3Store } from '@agently/storage';
 import type { WorkerDeps } from './deps.ts';
 import { handleInbound } from './inbound.ts';
 import { handleKnowledge, staleSheetSources } from './knowledge.ts';
@@ -24,7 +24,18 @@ const REPLY_ATTEMPTS = 4;
 const SHEET_RESYNC_MS = 6 * 3600 * 1000;
 
 // Storage is optional until it is configured; file sources fail with a clear message meanwhile.
-const storage = storageFromEnv(process.env);
+const storage = process.env.S3_ENDPOINT
+  ? (() => {
+      const s = loadEnv('storage');
+      return new S3Store({
+        endpoint: s.S3_ENDPOINT,
+        region: s.S3_REGION,
+        bucket: s.S3_BUCKET,
+        accessKeyId: s.S3_ACCESS_KEY_ID,
+        secretAccessKey: s.S3_SECRET_ACCESS_KEY,
+      });
+    })()
+  : undefined;
 
 const deps: WorkerDeps = {
   db,

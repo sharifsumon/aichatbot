@@ -23,8 +23,6 @@ FROM node:22-alpine AS api
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build /out/api .
-# Mount point for the files volume, owned by the user the service runs as.
-RUN mkdir -p /data/files && chown node:node /data/files
 USER node
 EXPOSE 4000
 CMD ["node", "dist/index.js"]
@@ -33,8 +31,6 @@ FROM node:22-alpine AS worker
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build /out/worker .
-# Mount point for the files volume, owned by the user the service runs as.
-RUN mkdir -p /data/files && chown node:node /data/files
 USER node
 CMD ["node", "dist/index.js"]
 
