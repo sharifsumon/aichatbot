@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { GraphApiError } from './graph.ts';
 
-/** Permissions Phase 1 asks for: list pages, read and answer messages and comments. */
+/** Permissions Agently asks for: list pages, read and answer messages and comments, and publish product posts. */
 export const FACEBOOK_SCOPES = [
   'public_profile',
   'email',
@@ -11,6 +11,8 @@ export const FACEBOOK_SCOPES = [
   'pages_read_engagement',
   'pages_read_user_content',
   'pages_manage_engagement',
+  // Publishing a product as a post on the page.
+  'pages_manage_posts',
 ];
 
 /** Webhook fields each connected page is subscribed to. */

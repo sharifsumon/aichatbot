@@ -49,6 +49,7 @@ function server() {
     graph: {
       sendText: async (_t, psid, text) => (sent.push({ to: psid, text }), ['mid-staff']),
       replyToComment: async (_t, commentId, text) => (sent.push({ to: commentId, text }), `c-staff-${sent.length}`),
+      publishPost: async () => 'unused',
     },
     encryptionKey: key,
     urls: { web: WEB, api: 'https://api.agently.test' },

@@ -46,4 +46,9 @@ test('finds products by colour, size and description, best match first', { skip 
   const [found] = await searchProducts(db, ws!.id, 'TS-01');
   assert.deepEqual(found!.variants.map((v) => [v.color, v.size, v.stock]).sort(), [['Black', 'XL', 2], ['White', 'M', 0]]);
   assert.ok([tee.id, panjabi.id].includes(found!.id));
+  // A comment on a post about the T-shirt: "price?" lists the T-shirt first, among the fallback.
+  const pinned = await searchProducts(db, ws!.id, 'price koto?', 8, tee.id);
+  assert.equal(pinned[0]!.id, tee.id);
+  assert.equal(pinned.length, 8);
+  assert.equal(new Set(pinned.map((p) => p.id)).size, 8);
 });

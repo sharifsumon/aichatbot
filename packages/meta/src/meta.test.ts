@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { verifyMetaSignature } from './signature.ts';
 import { parsePageWebhook } from './webhook.ts';
-import { splitText } from './graph.ts';
+import { GraphApiError, GraphClient, splitText } from './graph.ts';
 
 test('verifies the signature over the raw body', () => {
   const body = Buffer.from('{"object":"page"}');
@@ -86,4 +86,32 @@ test('pages follows paging and sends appsecret_proof', async () => {
   assert.match(urls[1]!, /after=c/);
   const proof = createHmac('sha256', 'secret').update('user-token').digest('hex');
   assert.ok(urls.every((u) => u.includes(`appsecret_proof=${proof}`)));
+});
+
+test('publishPost uploads photos unpublished, then posts them together with the text', async () => {
+  const calls: { url: string; body: Record<string, unknown> }[] = [];
+  const graph = new GraphClient({
+    version: 'v23.0',
+    fetch: (async (url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+      calls.push({ url, body });
+      const id = url.endsWith('/photos') ? `photo-${calls.length}` : 'page1_post9';
+      return new Response(JSON.stringify({ id }), { status: 200 });
+    }) as typeof fetch,
+  });
+  const id = await graph.publishPost('tok', 'page1', { message: 'New in!', photoUrls: ['https://f.test/a.jpg', 'https://f.test/b.jpg'] });
+  assert.equal(id, 'page1_post9');
+  assert.deepEqual(
+    calls.map((c) => [c.url, c.body]),
+    [
+      ['https://graph.facebook.com/v23.0/page1/photos', { url: 'https://f.test/a.jpg', published: false }],
+      ['https://graph.facebook.com/v23.0/page1/photos', { url: 'https://f.test/b.jpg', published: false }],
+      ['https://graph.facebook.com/v23.0/page1/feed', { message: 'New in!', attached_media: [{ media_fbid: 'photo-1' }, { media_fbid: 'photo-2' }] }],
+    ],
+  );
+});
+
+test('a permission error is recognised as one', () => {
+  assert.ok(new GraphApiError('(#200) no', 403, 200).permissionMissing);
+  assert.ok(!new GraphApiError('expired', 400, 190).permissionMissing);
 });

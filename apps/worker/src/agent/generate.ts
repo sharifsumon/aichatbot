@@ -23,7 +23,7 @@ export interface ReplyDraft {
   model: string;
 }
 
-export type ShopContext = Omit<PromptContext, 'language' | 'kind' | 'knowledge' | 'products' | 'openOrder' | 'canOrder'>;
+export type ShopContext = Omit<PromptContext, 'language' | 'kind' | 'knowledge' | 'products' | 'openOrder' | 'canOrder' | 'postProduct'>;
 
 /** Retrieval, prompt, and model calls with order tools. Sends nothing to the customer. */
 export async function generateReply(
@@ -37,6 +37,8 @@ export async function generateReply(
     /** Orders are taken in Messenger chat only, never from a comment. */
     canOrder: boolean;
     shop: ShopContext;
+    /** For a comment on a post published from Agently: the product it showed. */
+    postProduct?: { id: string; title: string; code: string };
   },
 ): Promise<ReplyDraft> {
   const { db, ai } = deps;
@@ -50,7 +52,7 @@ export async function generateReply(
       deps.warn(err, 'Knowledge search failed');
       return [];
     }),
-    searchProducts(db, input.workspaceId, input.customerText),
+    searchProducts(db, input.workspaceId, input.customerText, undefined, input.postProduct?.id),
     db
       .select({ sender: messages.sender, text: messages.text })
       .from(messages)
@@ -63,7 +65,7 @@ export async function generateReply(
   const chat: ChatMessage[] = [
     {
       role: 'system',
-      content: buildSystemPrompt({ ...input.shop, language, kind: input.kind, knowledge, products, openOrder, canOrder }),
+      content: buildSystemPrompt({ ...input.shop, language, kind: input.kind, knowledge, products, openOrder, canOrder, postProduct: input.postProduct }),
     },
     ...history
       .reverse()

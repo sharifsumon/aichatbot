@@ -155,6 +155,15 @@ export interface Product {
   totalStock: number;
 }
 
+/** A product published as a post on the shop's Facebook page. */
+export interface FacebookPost {
+  id: string;
+  postId: string;
+  url: string;
+  pageName: string;
+  createdAt: string;
+}
+
 export interface Comment {
   id: string;
   text: string;

@@ -25,6 +25,8 @@ export interface PromptContext {
   canOrder: boolean;
   /** The customer's confirmed order that still needs details. */
   openOrder?: OpenOrder;
+  /** The product the commented post was about, when the shop posted it from Agently. */
+  postProduct?: { title: string; code: string };
 }
 
 export interface OpenOrder {
@@ -94,7 +96,7 @@ Next: ${NEXT_STEP[c.openOrder.step]}\n`
   return `You are ${c.agentName}, the sales and support assistant for ${c.shopName}, an online shop in Bangladesh.
 Tone: ${c.tone}. Keep replies short, like a helpful shop assistant in Messenger.
 ${LANGUAGE_RULE[c.language]}
-${c.kind === 'comment' ? 'This is a comment on a public Facebook post. Keep it to one or two sentences and never share the customer\'s personal details.' : ''}
+${c.kind === 'comment' ? 'This is a comment on a public Facebook post. Keep it to one or two sentences and never share the customer\'s personal details.' : ''}${c.postProduct ? `\nThe post is about ${c.postProduct.title} [code ${c.postProduct.code}]. Questions like "price?" or "available?" mean this product unless the customer names another.` : ''}
 
 Rules you must follow:
 - Use only the shop facts below. Never state a price, stock level, delivery charge or delivery time that is not written there.

@@ -48,7 +48,14 @@ export async function searchKnowledge(
  * When nothing matches (Bangla words, or just "this one"), falls back to the
  * newest products so the model can still ask which one they mean.
  */
-export async function searchProducts(db: Db, workspaceId: string, query: string, limit = 8): Promise<ProductFact[]> {
+export async function searchProducts(
+  db: Db,
+  workspaceId: string,
+  query: string,
+  limit = 8,
+  /** Listed first whatever the query says: the product of the post a comment is on. */
+  pinProductId?: string,
+): Promise<ProductFact[]> {
   const terms = [...new Set((query.toLowerCase().match(/[\p{L}\p{N}-]{2,}/gu) ?? []))].slice(0, 12);
   const active = and(eq(products.workspaceId, workspaceId), eq(products.status, 'active'));
   const like = (t: string) => `%${t.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
@@ -73,6 +80,10 @@ export async function searchProducts(db: Db, workspaceId: string, query: string,
     rows = await find(and(active, sql`(${score}) > 0`), [desc(sql`(${score})`), desc(products.updatedAt)]);
   }
   if (rows.length === 0) rows = await find(active, [desc(products.updatedAt)]);
+  if (pinProductId) {
+    const pinned = await db.query.products.findFirst({ where: and(active, eq(products.id, pinProductId)), with: { variants: true } });
+    if (pinned) rows = [pinned, ...rows.filter((p) => p.id !== pinned.id)].slice(0, limit);
+  }
 
   return rows.map((p) => ({
     id: p.id,
