@@ -1,12 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { PostComposer } from '@/components/PostComposer';
 import { useShop } from '@/components/Shell';
 import { Empty, Loading, Notice, Pill, SearchBox, TopBar } from '@/components/ui';
 import { ApiError, qs, useApi, useUpload } from '@/lib/api';
 import { shrinkImage } from '@/lib/image';
 import { bdt, num } from '@/lib/format';
-import type { Product, ProductImage } from '@/lib/types';
+import type { FacebookPost, Product, ProductImage } from '@/lib/types';
 
 /** Same limit as the API. */
 const MAX_PHOTOS = 10;
@@ -23,6 +24,9 @@ export default function CatalogPage() {
   const [error, setError] = useState<string>();
   const [editing, setEditing] = useState<Product | 'new'>();
   const [done, setDone] = useState<string>();
+  /** The product being written up as a Facebook post, and the last post made. */
+  const [posting, setPosting] = useState<Product>();
+  const [posted, setPosted] = useState<FacebookPost>();
 
   const load = useCallback(
     async (cursor?: string) => {
@@ -60,6 +64,14 @@ export default function CatalogPage() {
       </TopBar>
       <div className="content">
         {done && <Notice tone="ok">{done}</Notice>}
+        {posted && (
+          <Notice tone="ok">
+            Posted on {posted.pageName}.{' '}
+            <a href={posted.url} target="_blank" rel="noreferrer">
+              View the post on Facebook
+            </a>
+          </Notice>
+        )}
         {error && <Notice tone="error">{error}</Notice>}
         <div className="catalog">
           <section className="products" aria-label="Products">
@@ -112,6 +124,7 @@ export default function CatalogPage() {
               key={current?.id ?? 'new'}
               product={current}
               onClose={() => setEditing(undefined)}
+              onPost={current ? () => setPosting(current) : undefined}
               onSaved={(p, message) => {
                 setDone(message);
                 setEditing(p ?? undefined);
@@ -122,6 +135,17 @@ export default function CatalogPage() {
           )}
         </div>
       </div>
+      {/* Outside the editor: the composer is its own form, and forms can't nest. */}
+      {posting && (
+        <PostComposer
+          product={posting}
+          onClose={() => setPosting(undefined)}
+          onPosted={(post) => {
+            setDone(undefined);
+            setPosted(post);
+          }}
+        />
+      )}
     </>
   );
 }
@@ -155,7 +179,18 @@ function variantsOf(g: Grid) {
   return colors.flatMap((color) => sizes.map((size) => ({ color, size, stock: Math.max(0, Number.parseInt(g.stock[cell(color, size)] ?? '0', 10) || 0), price: null })));
 }
 
-function Editor({ product, onClose, onSaved }: { product?: Product; onClose: () => void; onSaved: (p: Product | null, message: string) => void }) {
+function Editor({
+  product,
+  onClose,
+  onSaved,
+  onPost,
+}: {
+  product?: Product;
+  onClose: () => void;
+  onSaved: (p: Product | null, message: string) => void;
+  /** Opens the Facebook post composer for the saved product. */
+  onPost?: () => void;
+}) {
   const { ws } = useShop();
   const api = useApi();
   const upload = useUpload();
@@ -279,7 +314,12 @@ function Editor({ product, onClose, onSaved }: { product?: Product; onClose: () 
     <form className="editor" aria-label={product ? `Edit ${product.title}` : 'Add a product'} onSubmit={save}>
       <div style={{ display: 'flex', alignItems: 'center' }}>
         <h2>{product ? 'Edit product' : 'Add a product'}</h2>
-        <button type="button" className="icon-btn" aria-label="Close" onClick={onClose}>
+        {product && onPost && product.status !== 'archived' && (
+          <button type="button" className="btn sm" style={{ marginLeft: 'auto', marginRight: 8 }} onClick={onPost} disabled={busy}>
+            Post to Facebook
+          </button>
+        )}
+        <button type="button" className="icon-btn" aria-label="Close" onClick={onClose} style={product ? { marginLeft: 0 } : undefined}>
           ×
         </button>
       </div>

@@ -1,5 +1,6 @@
 import { index, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { createdAt, id, updatedAt } from './common.ts';
+import { channels } from './agent.ts';
 import { conversations, customers } from './crm.ts';
 import { users, workspaces } from './tenancy.ts';
 
@@ -83,6 +84,28 @@ export const productVariants = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [uniqueIndex().on(t.productId, t.color, t.size), index().on(t.workspaceId)],
+);
+
+/**
+ * A product published as a post on a Facebook page from the dashboard. Comments
+ * on the post (webhook post_id) are matched to the product through `postId`,
+ * so the bot knows which product a "price?" comment is about.
+ */
+export const productPosts = pgTable(
+  'product_posts',
+  {
+    id: id(),
+    workspaceId: uuid().notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    productId: uuid().notNull().references(() => products.id, { onDelete: 'cascade' }),
+    channelId: uuid().notNull().references(() => channels.id, { onDelete: 'cascade' }),
+    /** Facebook's post id, "{pageId}_{postId}", as comment webhooks send it. */
+    postId: text().notNull(),
+    message: text().notNull(),
+    photoUrls: jsonb().$type<string[]>().notNull().default([]),
+    createdByUserId: uuid().references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex().on(t.channelId, t.postId), index().on(t.productId, t.createdAt)],
 );
 
 export const orders = pgTable(

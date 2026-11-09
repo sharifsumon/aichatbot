@@ -17,6 +17,11 @@ export class GraphApiError extends Error {
     return this.code === 190;
   }
 
+  /** The page token lacks a permission, e.g. pages_manage_posts on a page connected before posting existed. */
+  get permissionMissing(): boolean {
+    return this.code === 10 || (this.code !== undefined && this.code >= 200 && this.code < 300);
+  }
+
   get retryable(): boolean {
     return this.status === 429 || this.status >= 500;
   }
@@ -86,12 +91,32 @@ export class GraphClient {
     return res.message_id;
   }
 
-  private async post<T>(path: string, token: string, body: unknown): Promise<T> {
+  /**
+   * Publishes a post on the page's timeline and returns its id ("{pageId}_{postId}").
+   * Photos are uploaded unpublished first, then attached to one post, so
+   * several photos show as one album-style post rather than separate posts.
+   * Needs pages_manage_posts. Facebook fetches each photo from its URL.
+   */
+  async publishPost(pageToken: string, pageId: string, post: { message: string; photoUrls: string[] }): Promise<string> {
+    const media: { media_fbid: string }[] = [];
+    for (const url of post.photoUrls) {
+      // Facebook downloads the photo while we wait, which can take a while.
+      const photo = await this.post<{ id: string }>(`/${pageId}/photos`, pageToken, { url, published: false }, 60_000);
+      media.push({ media_fbid: photo.id });
+    }
+    const res = await this.post<{ id: string }>(`/${pageId}/feed`, pageToken, {
+      message: post.message,
+      ...(media.length ? { attached_media: media } : {}),
+    });
+    return res.id;
+  }
+
+  private async post<T>(path: string, token: string, body: unknown, timeoutMs = 15_000): Promise<T> {
     const res = await this.fetchImpl(`${this.base}${path}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(15_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     const json = (await res.json().catch(() => ({}))) as T & { error?: { message: string; code?: number } };
     if (!res.ok || json.error) {

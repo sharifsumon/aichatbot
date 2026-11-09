@@ -1,6 +1,6 @@
 import { and, eq, gt, sql } from 'drizzle-orm';
 import { AIProviderError, costUsd } from '@agently/ai';
-import { activities, agents, channels, conversations, messages, workspaces } from '@agently/db';
+import { activities, agents, channels, conversations, messages, productPosts, products, workspaces } from '@agently/db';
 import { GraphApiError } from '@agently/meta';
 import { decryptSecret, type ReplyJob } from '@agently/shared';
 import { generateReply, type ShopContext } from './agent/generate.ts';
@@ -98,6 +98,8 @@ export async function handleReply(deps: WorkerDeps, job: ReplyJob, opts: { final
     ],
   };
 
+  const postProduct = message.kind === 'comment' && message.meta.postId ? await findPostProduct(deps, channel.id, message.meta.postId) : undefined;
+
   let draft;
   try {
     draft = await generateReply(
@@ -111,6 +113,7 @@ export async function handleReply(deps: WorkerDeps, job: ReplyJob, opts: { final
         kind: message.kind === 'comment' && commentMode === 'public' ? 'comment' : 'message',
         canOrder: message.kind === 'message',
         shop,
+        postProduct,
       },
     );
   } catch (err) {
@@ -294,4 +297,15 @@ async function handOff(deps: WorkerDeps, conversationId: string, workspaceId: st
     text: reason,
     data: { conversationId },
   });
+}
+
+/** The product a post shows, when the shop published that post from Agently. */
+async function findPostProduct(deps: WorkerDeps, channelId: string, postId: string) {
+  const [row] = await deps.db
+    .select({ id: products.id, title: products.title, code: products.code })
+    .from(productPosts)
+    .innerJoin(products, eq(products.id, productPosts.productId))
+    .where(and(eq(productPosts.channelId, channelId), eq(productPosts.postId, postId)))
+    .limit(1);
+  return row;
 }
