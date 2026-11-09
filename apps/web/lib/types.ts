@@ -134,6 +134,11 @@ export interface Variant {
   price: string | null;
 }
 
+export interface ProductImage {
+  url: string;
+  color: string;
+}
+
 export interface Product {
   id: string;
   title: string;
@@ -141,6 +146,8 @@ export interface Product {
   description: string;
   price: string;
   imageUrl: string | null;
+  /** In order; the first is the main photo. `color` is '' for the whole product. */
+  images: ProductImage[];
   status: 'active' | 'draft' | 'archived';
   variants: Variant[];
   colors: string[];

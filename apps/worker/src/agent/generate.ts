@@ -17,6 +17,8 @@ export interface ReplyDraft {
   /** Set when the model asked to pass the conversation to staff. */
   handoffReason?: string;
   sources: { type: 'chunk' | 'product'; id: string }[];
+  /** Product photo URLs to send after the text. */
+  photos: string[];
   usage: Usage;
   model: string;
 }
@@ -72,6 +74,7 @@ export async function generateReply(
   const tools = canOrder ? [...ORDER_TOOLS, HANDOFF_TOOL] : [HANDOFF_TOOL];
   const usage: Usage = { inputTokens: 0, outputTokens: 0 };
   const productIds = new Set(products.map((p) => p.id));
+  const photos: string[] = [];
   let model = ai.chatModel;
 
   for (let round = 1; round <= MAX_ROUNDS; round++) {
@@ -92,6 +95,7 @@ export async function generateReply(
           ...knowledge.map((k) => ({ type: 'chunk' as const, id: k.id })),
           ...[...productIds].map((id) => ({ type: 'product' as const, id })),
         ],
+        photos,
         usage,
         model,
       };
@@ -99,7 +103,7 @@ export async function generateReply(
 
     chat.push({ role: 'assistant', content: result.text, toolCalls: calls });
     for (const call of calls) {
-      const out = await runTool({ db, scope, conversationId: input.conversationId }, call);
+      const out = await runTool({ db, scope, conversationId: input.conversationId, photos }, call);
       out.productIds?.forEach((id) => productIds.add(id));
       chat.push({ role: 'tool', toolCallId: call.id, content: out.content });
     }

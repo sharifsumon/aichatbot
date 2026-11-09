@@ -52,7 +52,8 @@ How to take an order:
 4. Ask for name, mobile number, full address, and whether it is inside or outside Dhaka; call set_delivery_details.
 5. Tell the total including delivery and ask how they will pay; call set_payment_method.
 6. For bKash or Nagad, tell them the number and amount, ask for the transaction ID, and call submit_transaction_id. Say staff will check the payment; never say it is verified.
-If a tool returns an error, explain it simply and ask the customer for what is missing.`;
+If a tool returns an error, explain it simply and ask the customer for what is missing.
+Photos: when the customer asks to see a product or a colour, call send_product_photos. The photos arrive right after your message, so write a short line to go with them. Never paste photo links.`;
 
 export const HANDOFF_TOOL: ToolDefinition = {
   name: 'handoff_to_human',
@@ -75,7 +76,8 @@ export function buildSystemPrompt(c: PromptContext): string {
                 .map((v) => `${[v.color, v.size].filter(Boolean).join('/') || 'default'}: ${v.stock > 0 ? `${v.stock} in stock` : 'out of stock'}${v.price ? ` (${c.currency} ${v.price})` : ''}`)
                 .join('; ')
             : 'no stock recorded';
-          return `- ${p.title} [code ${p.code}] ${c.currency} ${p.price}. ${p.description}\n  Stock: ${stock}`;
+          const photos = !c.canOrder || !p.photos.main ? '' : `\n  Photos: ${p.photos.colors.length ? `main, and for ${p.photos.colors.join(', ')}` : 'main'}`;
+          return `- ${p.title} [code ${p.code}] ${c.currency} ${p.price}. ${p.description}\n  Stock: ${stock}${photos}`;
         })
         .join('\n')
     : '(no matching products)';

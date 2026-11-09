@@ -51,6 +51,16 @@ export class GraphClient {
     return ids;
   }
 
+  /** Sends a photo in Messenger by its public URL (product photos). */
+  async sendImage(pageToken: string, psid: string, url: string): Promise<string> {
+    const res = await this.post<{ message_id: string }>('/me/messages', pageToken, {
+      recipient: { id: psid },
+      messaging_type: 'RESPONSE',
+      message: { attachment: { type: 'image', payload: { url, is_reusable: true } } },
+    });
+    return res.message_id;
+  }
+
   /** Public reply under a comment. */
   async replyToComment(pageToken: string, commentId: string, text: string): Promise<string> {
     const res = await this.post<{ id: string }>(`/${commentId}/comments`, pageToken, { message: text });

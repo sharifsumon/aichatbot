@@ -294,7 +294,16 @@ function Bubble({ m, botName }: { m: Message; botName: string }) {
   const where = m.kind === 'comment' ? 'Comment on a post' : m.kind === 'comment_reply' ? 'Public reply' : m.kind === 'private_reply' ? 'Private reply' : null;
   return (
     <div className={`msg ${cls}${m.kind === 'comment' ? ' is-comment' : ''}${m.delivery === 'failed' ? ' failed' : ''}`}>
-      {m.text || (m.attachments.length ? `[${m.attachments.map((a) => a.type).join(', ')}]` : '')}
+      {m.text}
+      {m.attachments.map((a, i) =>
+        a.type === 'image' && a.url ? (
+          <a key={i} className="msg-img" href={a.url} target="_blank" rel="noreferrer">
+            <img src={a.url} alt="Photo" loading="lazy" />
+          </a>
+        ) : (
+          <span key={i}>[{a.type}]</span>
+        ),
+      )}
       <div className="msg-meta">
         {[who, where, dateTime(m.createdAt), m.delivery === 'failed' ? 'Not delivered' : null].filter(Boolean).join(' · ')}
       </div>

@@ -21,6 +21,20 @@ export const ORDER_TOOLS: ToolDefinition[] = [
     parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
   },
   {
+    name: 'send_product_photos',
+    description:
+      "Send the product's photos to the customer in Messenger, right after your reply. With a colour, sends that colour's photos; " +
+      'without one, the main photo.',
+    parameters: {
+      type: 'object',
+      properties: {
+        code: { type: 'string', description: 'Product code from the catalog.' },
+        color: { type: 'string', description: 'A colour exactly as listed, or empty for the main photo.' },
+      },
+      required: ['code'],
+    },
+  },
+  {
     name: 'create_order',
     description:
       'Create the order. Call ONLY after you repeated the items and prices and the customer clearly confirmed. ' +
@@ -93,7 +107,12 @@ export interface ToolContext {
   db: Db;
   scope: OrderScope;
   conversationId: string;
+  /** Photo URLs to send after the reply; send_product_photos adds to it. */
+  photos: string[];
 }
+
+/** Photos sent with one reply, so a long colour list doesn't flood the chat. */
+export const MAX_PHOTOS_PER_REPLY = 4;
 
 export interface ToolResult {
   content: string;
@@ -109,6 +128,27 @@ export async function runTool(ctx: ToolContext, call: ToolCall): Promise<ToolRes
       case 'find_product': {
         const found = await searchProducts(ctx.db, ctx.scope.workspaceId, String(a.query ?? ''));
         return { content: JSON.stringify({ products: found.map(({ id: _id, ...p }) => p) }), productIds: found.map((p) => p.id) };
+      }
+      case 'send_product_photos': {
+        const code = String(a.code ?? '').trim();
+        const color = String(a.color ?? '').trim().toLowerCase();
+        const product = await ctx.db.query.products.findFirst({
+          columns: { id: true, images: true },
+          where: and(eq(products.workspaceId, ctx.scope.workspaceId), eq(products.status, 'active'), sql`lower(${products.code}) = lower(${code})`),
+        });
+        if (!product) return { content: JSON.stringify({ error: `${code} is not in the catalog.` }) };
+        if (product.images.length === 0) return { content: JSON.stringify({ error: 'This product has no photo yet. Say so; do not promise one.' }), productIds: [product.id] };
+        const forColor = color ? product.images.filter((i) => i.color.toLowerCase() === color) : [];
+        const picked = forColor.length ? forColor : [product.images[0]!];
+        let added = 0;
+        for (const img of picked) {
+          if (ctx.photos.length >= MAX_PHOTOS_PER_REPLY) break;
+          if (ctx.photos.includes(img.url)) continue;
+          ctx.photos.push(img.url);
+          added++;
+        }
+        const note = color && !forColor.length ? 'There is no photo of that colour; the main photo is sent instead. Say so.' : 'The photos are sent after your message.';
+        return { content: JSON.stringify({ photos_queued: added, note }), productIds: [product.id] };
       }
       case 'create_order': {
         const items = await resolveItems(ctx, Array.isArray(a.items) ? a.items : []);

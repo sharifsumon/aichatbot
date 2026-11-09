@@ -6,7 +6,10 @@ import { Empty, Loading, Notice, Pill, SearchBox, TopBar } from '@/components/ui
 import { ApiError, qs, useApi, useUpload } from '@/lib/api';
 import { shrinkImage } from '@/lib/image';
 import { bdt, num } from '@/lib/format';
-import type { Product } from '@/lib/types';
+import type { Product, ProductImage } from '@/lib/types';
+
+/** Same limit as the API. */
+const MAX_PHOTOS = 10;
 
 const LOW_STOCK = 10;
 
@@ -69,7 +72,10 @@ export default function CatalogPage() {
                 disabled={!manager}
                 style={manager ? undefined : { cursor: 'default' }}
               >
-                <div className="ph">{p.imageUrl ? <img src={p.imageUrl} alt="" loading="lazy" /> : 'No photo'}</div>
+                <div className="ph">
+                  {p.imageUrl ? <img src={p.imageUrl} alt="" loading="lazy" /> : 'No photo'}
+                  {p.images.length > 1 && <span className="count">{p.images.length} photos</span>}
+                </div>
                 <div className="info">
                   <div>
                     <strong>{p.title}</strong>
@@ -158,13 +164,16 @@ function Editor({ product, onClose, onSaved }: { product?: Product; onClose: () 
   const [code, setCode] = useState(product?.code ?? '');
   const [description, setDescription] = useState(product?.description ?? '');
   const [price, setPrice] = useState(product ? String(Number(product.price)) : '');
-  const [imageUrl, setImageUrl] = useState(product?.imageUrl ?? '');
+  const [images, setImages] = useState<ProductImage[]>(() => product?.images ?? []);
+  const [photoLink, setPhotoLink] = useState('');
+  /** The colour new photos are tagged with; '' for the whole product. */
+  const [photoColor, setPhotoColor] = useState('');
   const [draft, setDraft] = useState(product?.status === 'draft');
   const [grid, setGrid] = useState<Grid>(() => gridOf(product));
   const [newColor, setNewColor] = useState('');
   const [newSize, setNewSize] = useState('');
   const [busy, setBusy] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [uploading, setUploading] = useState<{ done: number; of: number }>();
   const [error, setError] = useState<string>();
 
   const total = variantsOf(grid).reduce((n, v) => n + v.stock, 0);
@@ -193,28 +202,52 @@ function Editor({ product, onClose, onSaved }: { product?: Product; onClose: () 
     setNewSize('');
   }
 
-  async function pickPhoto(f: File | undefined) {
-    if (!f) return;
+  async function pickPhotos(files: File[]) {
+    const room = MAX_PHOTOS - images.length;
+    if (!files.length) return;
+    if (room <= 0) {
+      setError(`A product can have at most ${MAX_PHOTOS} photos. Remove one first.`);
+      return;
+    }
+    const list = files.slice(0, room);
     setBusy(true);
-    setUploading(true);
     setError(undefined);
     try {
-      const r = await upload<{ url: string }>(`${ws}/uploads/images`, await shrinkImage(f), 60_000);
-      setImageUrl(r.url);
+      for (let i = 0; i < list.length; i++) {
+        setUploading({ done: i, of: list.length });
+        const r = await upload<{ url: string }>(`${ws}/uploads/images`, await shrinkImage(list[i]!), 60_000);
+        // A photo picked while one colour is chosen is tagged with it.
+        setImages((cur) => [...cur, { url: r.url, color: photoColor }]);
+      }
+      if (files.length > room) setError(`Only ${room} more photo${room === 1 ? '' : 's'} fit; a product can have at most ${MAX_PHOTOS}.`);
     } catch (e) {
       setError((e as ApiError).status === 503 ? 'Photo uploads are not switched on yet. Paste a link to the photo instead.' : (e as Error).message);
     } finally {
       setBusy(false);
-      setUploading(false);
+      setUploading(undefined);
       if (file.current) file.current.value = '';
     }
   }
+
+  function addLink() {
+    const url = photoLink.trim();
+    if (!url) return;
+    if (!/^https?:\/\/\S+$/.test(url)) return setError('Paste a full photo link starting with https://');
+    if (images.length >= MAX_PHOTOS) return setError(`A product can have at most ${MAX_PHOTOS} photos. Remove one first.`);
+    setImages((cur) => [...cur, { url, color: photoColor }]);
+    setPhotoLink('');
+    setError(undefined);
+  }
+
+  const photoColors = grid.colors;
+  // Photos tagged with a colour that was removed from the grid become photos of the whole product.
+  const shownImages = images.map((img) => (img.color && !photoColors.some((c) => c.toLowerCase() === img.color.toLowerCase()) ? { ...img, color: '' } : img));
 
   async function save(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(undefined);
-    const body = { title, code, description, price, imageUrl: imageUrl.trim() || null, status: draft ? 'draft' : 'active', variants: variantsOf(grid) };
+    const body = { title, code, description, price, images: shownImages, status: draft ? 'draft' : 'active', variants: variantsOf(grid) };
     try {
       const r = product
         ? await api<{ product: Product }>(`${ws}/products/${product.id}`, { method: 'PUT', body })
@@ -250,15 +283,63 @@ function Editor({ product, onClose, onSaved }: { product?: Product; onClose: () 
           ×
         </button>
       </div>
-      <div className="photo">
-        <div className="ph">{imageUrl ? <img src={imageUrl} alt="" /> : 'No photo'}</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 0 }}>
-          <button type="button" className="btn sm" onClick={() => file.current?.click()} disabled={busy}>
-            {uploading ? 'Uploading photo…' : imageUrl ? 'Change photo' : 'Upload photo'}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>
+          Photos <small className="muted">({shownImages.length} of {MAX_PHOTOS}; the first is the main photo)</small>
+        </span>
+        {shownImages.length > 0 && (
+          <div className="photos">
+            {shownImages.map((img, i) => (
+              <div key={img.url} className={`shot${i === 0 ? ' main' : ''}`}>
+                <div className="img">
+                  <img src={img.url} alt={img.color ? `${img.color} photo` : 'Product photo'} />
+                  {i === 0 && <span className="tag">Main</span>}
+                  <button type="button" className="rm" aria-label={`Remove photo ${i + 1}`} onClick={() => setImages(shownImages.filter((_, j) => j !== i))}>
+                    ×
+                  </button>
+                </div>
+                {photoColors.length > 0 && (
+                  <select aria-label={`Colour of photo ${i + 1}`} value={img.color} onChange={(e) => setImages(shownImages.map((x, j) => (j === i ? { ...x, color: e.target.value } : x)))}>
+                    <option value="">All colours</option>
+                    {photoColors.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {i > 0 && (
+                  <button type="button" className="btn link" onClick={() => setImages([img, ...shownImages.filter((_, j) => j !== i)])}>
+                    Make main
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+          {photoColors.length > 0 && (
+            <select className="input" aria-label="Colour for new photos" value={photoColor} onChange={(e) => setPhotoColor(e.target.value)} style={{ height: 34, fontSize: 13, flex: '0 1 150px' }}>
+              <option value="">New photos: all colours</option>
+              {photoColors.map((c) => (
+                <option key={c} value={c}>
+                  New photos: {c}
+                </option>
+              ))}
+            </select>
+          )}
+          <button type="button" className="btn sm" onClick={() => file.current?.click()} disabled={busy || shownImages.length >= MAX_PHOTOS}>
+            {uploading ? `Uploading ${uploading.done + 1} of ${uploading.of}…` : '+ Add photos'}
           </button>
-          <input ref={file} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => pickPhoto(e.target.files?.[0])} />
-          <input className="input" aria-label="Photo link" placeholder="or paste a photo link" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} style={{ height: 34, fontSize: 13 }} />
+          <input ref={file} type="file" multiple accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => pickPhotos([...(e.target.files ?? [])])} />
         </div>
+        <span style={{ display: 'flex', gap: 6 }}>
+          <input className="input" aria-label="Photo link" placeholder="or paste a photo link" value={photoLink} onChange={(e) => setPhotoLink(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addLink())} style={{ height: 34, fontSize: 13, flex: 1, minWidth: 0 }} />
+          <button type="button" className="btn sm" onClick={addLink} disabled={!photoLink.trim()}>
+            Add
+          </button>
+        </span>
+        {photoColors.length > 0 && <small className="muted">Give each colour its own photo, and the bot sends that photo when a customer asks to see the colour.</small>}
       </div>
       <div className="row">
         <label className="field" style={{ flex: '2 1 160px' }}>
