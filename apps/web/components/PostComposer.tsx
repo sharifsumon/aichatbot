@@ -46,12 +46,16 @@ export function PostComposer({ product, onClose, onPosted }: { product: Product;
   const [intro, setIntro] = useState('');
   const [details, setDetails] = useState(() => productDetailsText(product));
   const [photos, setPhotos] = useState<string[]>(() => product.images.slice(0, MAX_PHOTOS).map((i) => i.url));
+  /** 'button': one real button under the post (link post, website picture); 'links': all photos, links in the text. */
+  const [style, setStyle] = useState<'button' | 'links'>('button');
+  const [buttonType, setButtonType] = useState<'message' | 'order'>('message');
+  const [pageUrl, setPageUrl] = useState('');
   const [messageButton, setMessageButton] = useState(true);
   const [orderOn, setOrderOn] = useState(true);
   const [orderTo, setOrderTo] = useState<'messenger' | 'website'>('messenger');
   const [orderUrl, setOrderUrl] = useState('');
-  const [realButton, setRealButton] = useState(false);
-  const useRealButton = orderOn && orderTo === 'website' && realButton;
+  const useRealButton = style === 'button';
+  const isUrl = (u: string) => /^https?:\/\/\S+$/i.test(u.trim());
   const past = useLoad<{ posts: FacebookPost[] }>(`${ws}/products/${product.id}/facebook-posts`);
 
   const message = [intro.trim(), details.trim()].filter(Boolean).join('\n\n');
@@ -65,15 +69,17 @@ export function PostComposer({ product, onClose, onPosted }: { product: Product;
     if (!page) return 'Connect your Facebook page in Settings first.';
     if (!message) return 'Write something for the post.';
     if (message.length > MAX_TEXT) return `The post is ${message.length} characters; keep it under ${MAX_TEXT}.`;
-    if (orderOn && orderTo === 'website' && !/^https?:\/\/\S+$/i.test(orderUrl.trim())) return 'Paste the product page address on your website, starting with https://';
+    if (useRealButton && !isUrl(pageUrl)) return "Paste this product's page on your website, starting with https://. Facebook shows its picture above the button.";
+    if (!useRealButton && orderOn && orderTo === 'website' && !isUrl(orderUrl)) return 'Paste the product page address on your website, starting with https://';
     const r = await api<{ post: FacebookPost }>(`${ws}/products/${product.id}/facebook-posts`, {
       method: 'POST',
       body: {
         channelId: page.id,
         message,
         photoUrls: photos,
-        messageButton,
-        orderButton: !orderOn ? null : orderTo === 'messenger' ? { to: 'messenger' } : { to: 'website', url: orderUrl.trim(), realButton },
+        ...(useRealButton
+          ? { realButton: { type: buttonType, pageUrl: pageUrl.trim(), orderTo } }
+          : { messageButton, orderButton: !orderOn ? null : orderTo === 'messenger' ? { to: 'messenger' } : { to: 'website', url: orderUrl.trim() } }),
       },
     });
     onPosted(r.post);
@@ -113,37 +119,71 @@ export function PostComposer({ product, onClose, onPosted }: { product: Product;
       </label>
       <fieldset style={{ border: '1px solid var(--line)', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 8, margin: 0 }}>
         <legend style={{ fontSize: 13, fontWeight: 600, padding: '0 4px' }}>Buttons</legend>
-        <label className="check">
-          <input type="checkbox" checked={messageButton} onChange={(e) => setMessageButton(e.target.checked)} />
-          💬 Message us: opens Messenger, and the bot starts on this product
-        </label>
-        <label className="check">
-          <input type="checkbox" checked={orderOn} onChange={(e) => setOrderOn(e.target.checked)} />
-          🛒 Order now
-        </label>
-        {orderOn && (
-          <div role="radiogroup" aria-label="Order now goes to" style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingLeft: 26 }}>
+        <div role="radiogroup" aria-label="Button style" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <label className="check">
+            <input type="radio" name="style" checked={style === 'button'} onChange={() => setStyle('button')} />
+            A real button at the bottom of the post
+          </label>
+          <label className="check">
+            <input type="radio" name="style" checked={style === 'links'} onChange={() => setStyle('links')} />
+            Links in the text, keeping all the photos
+          </label>
+        </div>
+        {style === 'button' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingLeft: 26 }}>
+            <input className="input" type="url" aria-label="This product's page on your website" placeholder="https://banggii.com/product/…" value={pageUrl} onChange={(e) => setPageUrl(e.target.value)} style={{ height: 34, fontSize: 13 }} />
+            <small className="muted">Facebook allows one button per post, and only on a post that links to a web page. It shows this page&apos;s picture above the button, instead of the photos below.</small>
+            <div role="radiogroup" aria-label="Which button" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label className="check">
+                <input type="radio" name="button-type" checked={buttonType === 'message'} onChange={() => setButtonType('message')} />
+                Send Message: opens Messenger with your bot
+              </label>
+              <label className="check">
+                <input type="radio" name="button-type" checked={buttonType === 'order'} onChange={() => setButtonType('order')} />
+                Order Now
+              </label>
+              {buttonType === 'order' && (
+                <div role="radiogroup" aria-label="Order Now goes to" style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingLeft: 26 }}>
+                  <label className="check">
+                    <input type="radio" name="order-to" checked={orderTo === 'messenger'} onChange={() => setOrderTo('messenger')} />
+                    To Messenger: the bot takes the order
+                  </label>
+                  <label className="check">
+                    <input type="radio" name="order-to" checked={orderTo === 'website'} onChange={() => setOrderTo('website')} />
+                    To the page on my website
+                  </label>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingLeft: 26 }}>
             <label className="check">
-              <input type="radio" name="order-to" checked={orderTo === 'messenger'} onChange={() => setOrderTo('messenger')} />
-              In Messenger: the bot takes the order (colour, size, address, payment)
+              <input type="checkbox" checked={messageButton} onChange={(e) => setMessageButton(e.target.checked)} />
+              💬 Message us: opens Messenger, and the bot starts on this product
             </label>
             <label className="check">
-              <input type="radio" name="order-to" checked={orderTo === 'website'} onChange={() => setOrderTo('website')} />
-              On my website
+              <input type="checkbox" checked={orderOn} onChange={(e) => setOrderOn(e.target.checked)} />
+              🛒 Order now
             </label>
-            {orderTo === 'website' && (
-              <>
-                <input className="input" type="url" aria-label="Product page on your website" placeholder="https://banggii.com/product/…" value={orderUrl} onChange={(e) => setOrderUrl(e.target.value)} style={{ height: 34, fontSize: 13 }} />
-                <label className="check" style={{ fontSize: 13 }}>
-                  <input type="checkbox" checked={realButton} onChange={(e) => setRealButton(e.target.checked)} />
-                  Show Facebook&apos;s own Order Now button
+            {orderOn && (
+              <div role="radiogroup" aria-label="Order now goes to" style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingLeft: 26 }}>
+                <label className="check">
+                  <input type="radio" name="order-to-link" checked={orderTo === 'messenger'} onChange={() => setOrderTo('messenger')} />
+                  In Messenger: the bot takes the order (colour, size, address, payment)
                 </label>
-                {realButton && <small className="muted">Facebook then shows your website&apos;s picture for this page instead of the photos below.</small>}
-              </>
+                <label className="check">
+                  <input type="radio" name="order-to-link" checked={orderTo === 'website'} onChange={() => setOrderTo('website')} />
+                  On my website
+                </label>
+                {orderTo === 'website' && (
+                  <input className="input" type="url" aria-label="Product page on your website" placeholder="https://banggii.com/product/…" value={orderUrl} onChange={(e) => setOrderUrl(e.target.value)} style={{ height: 34, fontSize: 13 }} />
+                )}
+              </div>
             )}
+            <small className="muted">The links are added at the end of the post.</small>
           </div>
         )}
-        <small className="muted">The links are added at the end of the post.</small>
       </fieldset>
       {useRealButton ? null : product.images.length > 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

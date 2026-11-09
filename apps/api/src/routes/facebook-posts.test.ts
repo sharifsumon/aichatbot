@@ -163,11 +163,22 @@ test('adds Message us and Order now links, or posts a real Order Now button', { 
   assert.equal(site.statusCode, 201);
   assert.equal(published[1]!.message, 'New in\n\n🛒 Order now: https://banggii.com/p/pj-01');
 
-  const real = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', photoUrls, orderButton: { to: 'website', url: 'https://banggii.com/p/pj-01', realButton: true } }, ...auth });
-  assert.equal(real.statusCode, 201);
+  const real = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', photoUrls, messageButton: true, realButton: { type: 'order', pageUrl: 'https://banggii.com/p/pj-01' } }, ...auth });
+  assert.equal(real.statusCode, 201, real.body);
   assert.equal(published[2]!.message, 'New in');
   assert.deepEqual(published[2]!.photoUrls, []);
-  assert.deepEqual(published[2]!.button, { type: 'ORDER_NOW', link: 'https://banggii.com/p/pj-01' });
+  assert.deepEqual(published[2]!.button, { type: 'ORDER_NOW', link: 'https://banggii.com/p/pj-01', target: 'https://banggii.com/p/pj-01' });
+
+  const toChat = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', realButton: { type: 'order', pageUrl: 'https://banggii.com/p/pj-01', orderTo: 'messenger' } }, ...auth });
+  assert.equal(toChat.statusCode, 201);
+  assert.deepEqual(published[3]!.button, { type: 'ORDER_NOW', link: 'https://banggii.com/p/pj-01', target: `https://m.me/${page.externalId}?ref=order_${product.id}` });
+
+  const send = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', realButton: { type: 'message', pageUrl: 'https://banggii.com/p/pj-01' } }, ...auth });
+  assert.equal(send.statusCode, 201);
+  assert.deepEqual(published[4]!.button, { type: 'MESSAGE_PAGE', link: 'https://banggii.com/p/pj-01' });
+
+  const noPage = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', realButton: { type: 'message', pageUrl: 'nope' } }, ...auth });
+  assert.equal(noPage.statusCode, 400);
 
   const bad = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', orderButton: { to: 'website', url: 'banggii' } }, ...auth });
   assert.equal(bad.statusCode, 400);

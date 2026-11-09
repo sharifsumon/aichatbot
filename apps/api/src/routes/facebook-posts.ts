@@ -31,9 +31,22 @@ const postBody = z.object({
       z.object({
         to: z.literal('website'),
         url: z.string().trim().max(2000).url('Paste the full product page address, starting with https://').refine((u) => /^https?:\/\//i.test(u), 'must be a web link'),
-        realButton: z.boolean().default(false),
       }),
     ])
+    .nullish(),
+  /**
+   * One real button at the bottom of the post, in place of the text links.
+   * Facebook only puts buttons on link posts, which show the linked page's
+   * picture, so the product's page on the shop's website is required and
+   * the photos are not posted.
+   */
+  realButton: z
+    .object({
+      type: z.enum(['message', 'order']),
+      pageUrl: z.string().trim().max(2000).url('Paste the product page address, starting with https://').refine((u) => /^https?:\/\//i.test(u), 'must be a web link'),
+      /** Order Now: Messenger (the bot takes the order) or the website page. */
+      orderTo: z.enum(['messenger', 'website']).default('website'),
+    })
     .nullish(),
 });
 
@@ -88,12 +101,17 @@ export const facebookPostRoutes: FastifyPluginAsync<FacebookPostDeps> = async (a
       return reply.code(409).send({ error: `${page.name} needs to be reconnected in Settings before you can post.` });
     }
 
-    const order = body.orderButton;
-    const realButton = order?.to === 'website' && order.realButton ? { type: 'ORDER_NOW' as const, link: order.url } : undefined;
+    const real = body.realButton;
+    const realButton = real
+      ? real.type === 'message'
+        ? { type: 'MESSAGE_PAGE' as const, link: real.pageUrl }
+        : { type: 'ORDER_NOW' as const, link: real.pageUrl, target: real.orderTo === 'messenger' ? messengerLink(page.externalId, 'order', productId) : real.pageUrl }
+      : undefined;
+    // With a real button the text links are left out; the button does their job.
+    const order = realButton ? undefined : body.orderButton;
     const links = [
-      body.messageButton ? `💬 Message us: ${messengerLink(page.externalId, 'product', productId)}` : '',
-      // A real button already says Order Now; the link in the text would repeat it.
-      order && !realButton ? `🛒 Order now: ${order.to === 'website' ? order.url : messengerLink(page.externalId, 'order', productId)}` : '',
+      body.messageButton && !realButton ? `💬 Message us: ${messengerLink(page.externalId, 'product', productId)}` : '',
+      order ? `🛒 Order now: ${order.to === 'website' ? order.url : messengerLink(page.externalId, 'order', productId)}` : '',
     ].filter(Boolean);
     const message = links.length ? `${body.message}\n\n${links.join('\n')}` : body.message;
     if (message.length > MAX_POST_TEXT) return reply.code(400).send({ error: `A post can be at most ${MAX_POST_TEXT} characters` });
@@ -119,7 +137,7 @@ export const facebookPostRoutes: FastifyPluginAsync<FacebookPostDeps> = async (a
         });
       }
       if (realButton) {
-        return reply.code(502).send({ error: `Facebook refused the Order Now button: ${err.message}. Try again with the order link in the text instead.` });
+        return reply.code(502).send({ error: `Facebook refused the ${realButton.type === 'MESSAGE_PAGE' ? 'Send Message' : 'Order Now'} button: ${err.message}. Try again with links in the text instead.` });
       }
       return reply.code(502).send({ error: `Facebook refused the post: ${err.message}` });
     }
