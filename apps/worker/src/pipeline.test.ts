@@ -308,3 +308,26 @@ test('a page whose token was revoked is marked for reconnecting, once', { skip }
   const notes = await db.select().from(activities).where(and(eq(activities.workspaceId, ws.id), eq(activities.type, 'channel.token_expired')));
   assert.equal(notes.length, 1);
 });
+
+test('a post\'s Order now link opens the chat on that product, and the bot answers it', { skip }, async () => {
+  const page = `page-${randomBytes(4).toString('hex')}`;
+  const ws = await makeShop(page);
+  const [product] = await db.select().from(products).where(eq(products.workspaceId, ws.id));
+  const job: InboundJob = { ...inbound(page, `referral-${page}`, ''), referral: { ref: `order_${product!.id}` } };
+
+  assert.equal(await handleInbound(deps(), job), 'saved');
+  const [saved] = await db.select().from(messages).where(eq(messages.workspaceId, ws.id));
+  assert.equal(saved!.text, 'I want to order Cotton Shirt (code SH-01).');
+  assert.deepEqual(saved!.meta.referral, { ref: `order_${product!.id}`, productId: product!.id, intent: 'order' });
+
+  assert.equal(await handleReply(deps(), queued[0]!, { finalAttempt: false }), 'sent');
+  assert.match(prompts[0]!.messages[0]!.content, /came from your post about Cotton Shirt \[code SH-01\]/);
+
+  // A ref for another shop's product, or junk, is just a hello.
+  const other = await makeShop(`${page}-b`);
+  const [foreign] = await db.select().from(products).where(eq(products.workspaceId, other.id));
+  await handleInbound(deps(), { ...inbound(page, `referral-${page}-2`, ''), referral: { ref: `product_${foreign!.id}` } });
+  const rows = await db.select().from(messages).where(and(eq(messages.workspaceId, ws.id), eq(messages.externalId, `referral-${page}-2`)));
+  assert.equal(rows[0]!.text, 'Hi');
+  assert.equal(rows[0]!.meta.referral?.productId, undefined);
+});

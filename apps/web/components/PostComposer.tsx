@@ -46,6 +46,12 @@ export function PostComposer({ product, onClose, onPosted }: { product: Product;
   const [intro, setIntro] = useState('');
   const [details, setDetails] = useState(() => productDetailsText(product));
   const [photos, setPhotos] = useState<string[]>(() => product.images.slice(0, MAX_PHOTOS).map((i) => i.url));
+  const [messageButton, setMessageButton] = useState(true);
+  const [orderOn, setOrderOn] = useState(true);
+  const [orderTo, setOrderTo] = useState<'messenger' | 'website'>('messenger');
+  const [orderUrl, setOrderUrl] = useState('');
+  const [realButton, setRealButton] = useState(false);
+  const useRealButton = orderOn && orderTo === 'website' && realButton;
   const past = useLoad<{ posts: FacebookPost[] }>(`${ws}/products/${product.id}/facebook-posts`);
 
   const message = [intro.trim(), details.trim()].filter(Boolean).join('\n\n');
@@ -59,9 +65,16 @@ export function PostComposer({ product, onClose, onPosted }: { product: Product;
     if (!page) return 'Connect your Facebook page in Settings first.';
     if (!message) return 'Write something for the post.';
     if (message.length > MAX_TEXT) return `The post is ${message.length} characters; keep it under ${MAX_TEXT}.`;
+    if (orderOn && orderTo === 'website' && !/^https?:\/\/\S+$/i.test(orderUrl.trim())) return 'Paste the product page address on your website, starting with https://';
     const r = await api<{ post: FacebookPost }>(`${ws}/products/${product.id}/facebook-posts`, {
       method: 'POST',
-      body: { channelId: page.id, message, photoUrls: photos },
+      body: {
+        channelId: page.id,
+        message,
+        photoUrls: photos,
+        messageButton,
+        orderButton: !orderOn ? null : orderTo === 'messenger' ? { to: 'messenger' } : { to: 'website', url: orderUrl.trim(), realButton },
+      },
     });
     onPosted(r.post);
     onClose();
@@ -98,7 +111,41 @@ export function PostComposer({ product, onClose, onPosted }: { product: Product;
           </button>
         </small>
       </label>
-      {product.images.length > 0 ? (
+      <fieldset style={{ border: '1px solid var(--line)', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 8, margin: 0 }}>
+        <legend style={{ fontSize: 13, fontWeight: 600, padding: '0 4px' }}>Buttons</legend>
+        <label className="check">
+          <input type="checkbox" checked={messageButton} onChange={(e) => setMessageButton(e.target.checked)} />
+          💬 Message us: opens Messenger, and the bot starts on this product
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={orderOn} onChange={(e) => setOrderOn(e.target.checked)} />
+          🛒 Order now
+        </label>
+        {orderOn && (
+          <div role="radiogroup" aria-label="Order now goes to" style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingLeft: 26 }}>
+            <label className="check">
+              <input type="radio" name="order-to" checked={orderTo === 'messenger'} onChange={() => setOrderTo('messenger')} />
+              In Messenger: the bot takes the order (colour, size, address, payment)
+            </label>
+            <label className="check">
+              <input type="radio" name="order-to" checked={orderTo === 'website'} onChange={() => setOrderTo('website')} />
+              On my website
+            </label>
+            {orderTo === 'website' && (
+              <>
+                <input className="input" type="url" aria-label="Product page on your website" placeholder="https://banggii.com/product/…" value={orderUrl} onChange={(e) => setOrderUrl(e.target.value)} style={{ height: 34, fontSize: 13 }} />
+                <label className="check" style={{ fontSize: 13 }}>
+                  <input type="checkbox" checked={realButton} onChange={(e) => setRealButton(e.target.checked)} />
+                  Show Facebook&apos;s own Order Now button
+                </label>
+                {realButton && <small className="muted">Facebook then shows your website&apos;s picture for this page instead of the photos below.</small>}
+              </>
+            )}
+          </div>
+        )}
+        <small className="muted">The links are added at the end of the post.</small>
+      </fieldset>
+      {useRealButton ? null : product.images.length > 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <span style={{ fontSize: 13, fontWeight: 600 }}>
             Photos <small className="muted">({photos.length} of {product.images.length} chosen)</small>

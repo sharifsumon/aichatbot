@@ -27,6 +27,11 @@ export interface InboundJob {
   attachments: { type: string; url?: string }[];
   /** For comments: the post the comment is on. */
   postId?: string;
+  /**
+   * Set when the customer opened Messenger from an m.me link (a post's
+   * "Message us" or "Order now"), e.g. "order_<productId>". Text may be empty.
+   */
+  referral?: { ref: string };
   timestamp: number;
 }
 

@@ -97,7 +97,27 @@ export class GraphClient {
    * several photos show as one album-style post rather than separate posts.
    * Needs pages_manage_posts. Facebook fetches each photo from its URL.
    */
-  async publishPost(pageToken: string, pageId: string, post: { message: string; photoUrls: string[] }): Promise<string> {
+  async publishPost(
+    pageToken: string,
+    pageId: string,
+    post: {
+      message: string;
+      photoUrls: string[];
+      /**
+       * A link post with a real button instead of photos. Facebook shows the
+       * link's own preview (its og:image), so this is for the shop's website.
+       */
+      button?: { type: 'ORDER_NOW' | 'SHOP_NOW'; link: string };
+    },
+  ): Promise<string> {
+    if (post.button) {
+      const res = await this.post<{ id: string }>(`/${pageId}/feed`, pageToken, {
+        message: post.message,
+        link: post.button.link,
+        call_to_action: { type: post.button.type, value: { link: post.button.link } },
+      });
+      return res.id;
+    }
     const media: { media_fbid: string }[] = [];
     for (const url of post.photoUrls) {
       // Facebook downloads the photo while we wait, which can take a while.

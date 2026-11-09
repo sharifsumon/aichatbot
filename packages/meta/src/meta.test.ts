@@ -45,6 +45,31 @@ test('parses messages and new comments, skipping echoes and the page itself', ()
   assert.equal(jobs[1]!.timestamp, 1761850000000);
 });
 
+test('m.me links: the ref arrives with Get Started for a new chat, or as a referral', () => {
+  const jobs = parsePageWebhook({
+    object: 'page',
+    entry: [
+      {
+        id: 'PAGE',
+        time: 1,
+        messaging: [
+          { sender: { id: 'NEW' }, recipient: { id: 'PAGE' }, timestamp: 10, postback: { mid: 'pb1', title: 'Get Started', payload: 'GET_STARTED', referral: { ref: 'order_abc', source: 'SHORTLINK', type: 'OPEN_THREAD' } } },
+          { sender: { id: 'OLD' }, recipient: { id: 'PAGE' }, timestamp: 11, referral: { ref: 'product_abc', source: 'SHORTLINK', type: 'OPEN_THREAD' } },
+          { sender: { id: 'PLAIN' }, recipient: { id: 'PAGE' }, timestamp: 12, postback: { title: 'Get Started', payload: 'GET_STARTED' } },
+        ],
+      },
+    ],
+  });
+  assert.deepEqual(
+    jobs.map((j) => [j.senderExternalId, j.externalId, j.text, j.referral?.ref]),
+    [
+      ['NEW', 'pb1', '', 'order_abc'],
+      ['OLD', 'referral-OLD-11', '', 'product_abc'],
+      ['PLAIN', 'postback-PLAIN-12', 'Get Started', undefined],
+    ],
+  );
+});
+
 test('ignores non-page payloads', () => {
   assert.deepEqual(parsePageWebhook({ object: 'instagram', entry: [] }), []);
 });

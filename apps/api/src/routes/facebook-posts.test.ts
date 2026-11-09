@@ -22,7 +22,7 @@ after(async () => {
   if (!skip) await close();
 });
 
-type Published = { token: string; pageId: string; message: string; photoUrls: string[] };
+type Published = { token: string; pageId: string; message: string; photoUrls: string[]; button?: { type: string; link: string } };
 
 function server(fail?: GraphApiError) {
   const published: Published[] = [];
@@ -37,7 +37,7 @@ function server(fail?: GraphApiError) {
       replyToComment: async () => 'cid',
       publishPost: async (token, pageId, post) => {
         if (fail) throw fail;
-        published.push({ token, pageId, ...post });
+        published.push({ token, pageId, message: post.message, photoUrls: post.photoUrls, ...(post.button && { button: post.button }) });
         return `${pageId}_${published.length}`;
       },
     },
@@ -143,4 +143,32 @@ test('explains a missing posting permission, and flags a revoked page token', { 
   assert.equal(r2.statusCode, 409);
   const [page] = await db.select().from(channels).where(eq(channels.id, b.page.id));
   assert.equal(page!.status, 'token_expired');
+});
+
+test('adds Message us and Order now links, or posts a real Order Now button', { skip }, async () => {
+  const { app, published } = server();
+  const { ws, page, product, auth } = await shop();
+  const path = `/api/workspaces/${ws.id}/products/${product.id}/facebook-posts`;
+  const photoUrls = ['https://files.test/a.jpg'];
+
+  const chat = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', photoUrls, messageButton: true, orderButton: { to: 'messenger' } }, ...auth });
+  assert.equal(chat.statusCode, 201, chat.body);
+  assert.equal(
+    published[0]!.message,
+    `New in\n\n💬 Message us: https://m.me/${page.externalId}?ref=product_${product.id}\n🛒 Order now: https://m.me/${page.externalId}?ref=order_${product.id}`,
+  );
+  assert.deepEqual(published[0]!.photoUrls, photoUrls);
+
+  const site = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', photoUrls, orderButton: { to: 'website', url: 'https://banggii.com/p/pj-01' } }, ...auth });
+  assert.equal(site.statusCode, 201);
+  assert.equal(published[1]!.message, 'New in\n\n🛒 Order now: https://banggii.com/p/pj-01');
+
+  const real = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', photoUrls, orderButton: { to: 'website', url: 'https://banggii.com/p/pj-01', realButton: true } }, ...auth });
+  assert.equal(real.statusCode, 201);
+  assert.equal(published[2]!.message, 'New in');
+  assert.deepEqual(published[2]!.photoUrls, []);
+  assert.deepEqual(published[2]!.button, { type: 'ORDER_NOW', link: 'https://banggii.com/p/pj-01' });
+
+  const bad = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', orderButton: { to: 'website', url: 'banggii' } }, ...auth });
+  assert.equal(bad.statusCode, 400);
 });

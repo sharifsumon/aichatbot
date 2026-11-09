@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm';
-import { channels, conversations, customerIdentities, customers, messages, type Db } from '@agently/db';
+import { channels, conversations, customerIdentities, customers, messages, products, type Db, type MessageMeta } from '@agently/db';
 import type { InboundJob } from '@agently/shared';
 import type { WorkerDeps } from './deps.ts';
 
@@ -21,6 +21,13 @@ export async function handleInbound(deps: WorkerDeps, job: InboundJob): Promise<
   }
 
   const at = new Date(job.timestamp);
+  let text = job.text;
+  let meta: MessageMeta = job.postId ? { postId: job.postId, commentId: job.externalId } : {};
+  if (job.referral) {
+    const opened = await fromReferral(db, channel.workspaceId, job.referral.ref);
+    meta = { referral: { ref: job.referral.ref, ...(opened && { productId: opened.productId, intent: opened.intent }) } };
+    text = opened?.text ?? (text || 'Hi');
+  }
   const saved = await db.transaction(async (tx) => {
     const customerId = await findOrCreateCustomer(tx, channel, job);
     const [conversation] = await tx
@@ -47,11 +54,11 @@ export async function handleInbound(deps: WorkerDeps, job: InboundJob): Promise<
         direction: 'inbound',
         kind: job.kind,
         sender: 'customer',
-        text: job.text,
+        text,
         attachments: job.attachments,
         externalId: job.externalId,
         delivery: 'received',
-        meta: job.postId ? { postId: job.postId, commentId: job.externalId } : {},
+        meta,
         createdAt: at,
       })
       .onConflictDoNothing({ target: [messages.channelId, messages.externalId] })
@@ -96,4 +103,26 @@ async function findOrCreateCustomer(
   await tx.delete(customers).where(eq(customers.id, customer!.id));
   const winner = await tx.query.customerIdentities.findFirst({ where: identityWhere });
   return winner!.customerId;
+}
+
+/**
+ * Post links open Messenger with ref=product_<id> or ref=order_<id> (see the
+ * API's messengerLink). What the customer meant by opening one, written as
+ * their first message, so the inbox shows it and the bot answers it.
+ */
+async function fromReferral(db: Db, workspaceId: string, ref: string) {
+  const m = /^(product|order)_([0-9a-f-]{36})$/i.exec(ref);
+  if (!m) return undefined;
+  const intent = m[1]!.toLowerCase() as 'product' | 'order';
+  const product = await db.query.products.findFirst({
+    columns: { id: true, title: true, code: true },
+    where: and(eq(products.id, m[2]!.toLowerCase()), eq(products.workspaceId, workspaceId)),
+  });
+  if (!product) return undefined;
+  const name = `${product.title} (code ${product.code})`;
+  return {
+    productId: product.id,
+    intent,
+    text: intent === 'order' ? `I want to order ${name}.` : `I'm interested in ${name}.`,
+  };
 }

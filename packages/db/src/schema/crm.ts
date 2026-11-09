@@ -80,6 +80,11 @@ export interface MessageMeta {
   error?: string;
   /** On replies from Agently support: the platform user who sent it. */
   supportUserId?: string;
+  /**
+   * The customer opened Messenger from a post's "Message us" or "Order now"
+   * link. The message text was written by Agently to say so.
+   */
+  referral?: { ref: string; productId?: string; intent?: 'product' | 'order' };
 }
 
 export const messages = pgTable(
