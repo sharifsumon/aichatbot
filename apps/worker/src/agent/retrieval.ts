@@ -1,5 +1,5 @@
-import { and, cosineDistance, desc, eq, ilike, or } from 'drizzle-orm';
-import { knowledgeChunks, products, type Db } from '@agently/db';
+import { and, cosineDistance, desc, eq, sql, type SQL } from 'drizzle-orm';
+import { knowledgeChunks, productVariants, products, type Db } from '@agently/db';
 import type { AIProvider } from '@agently/ai';
 
 export interface KnowledgeHit {
@@ -43,27 +43,36 @@ export async function searchKnowledge(
 }
 
 /**
- * Exact-ish catalog search on title and code. When nothing matches (the
- * customer wrote in Bangla, or just said "this one"), falls back to the
+ * Catalog search over title, code, colour, size and description, best match
+ * first: a customer may ask "XL black ache?" without naming the product.
+ * When nothing matches (Bangla words, or just "this one"), falls back to the
  * newest products so the model can still ask which one they mean.
  */
 export async function searchProducts(db: Db, workspaceId: string, query: string, limit = 8): Promise<ProductFact[]> {
-  const terms = (query.match(/[\p{L}\p{N}-]{2,}/gu) ?? []).slice(0, 12);
+  const terms = [...new Set((query.toLowerCase().match(/[\p{L}\p{N}-]{2,}/gu) ?? []))].slice(0, 12);
   const active = and(eq(products.workspaceId, workspaceId), eq(products.status, 'active'));
   const like = (t: string) => `%${t.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
-  const find = (where: ReturnType<typeof and>) =>
-    db.query.products.findMany({
-      where,
-      with: { variants: true },
-      orderBy: desc(products.updatedAt),
-      limit,
-    });
+  const find = (where: SQL | undefined, order: SQL[]) =>
+    db.query.products.findMany({ where, with: { variants: true }, orderBy: order, limit });
 
-  let rows = terms.length
-    ? await find(and(active, or(...terms.flatMap((t) => [ilike(products.title, like(t)), ilike(products.code, like(t))]))))
-    : [];
-  if (rows.length === 0) rows = await find(active);
+  let rows: Awaited<ReturnType<typeof find>> = [];
+  if (terms.length) {
+    // Name and code count most, then a colour or size the product comes in, then its description.
+    const score = sql.join(
+      terms.map(
+        (t) => sql`(
+          (case when ${products.title} ilike ${like(t)} then 3 else 0 end) +
+          (case when ${products.code} ilike ${like(t)} then 3 else 0 end) +
+          (case when exists (select 1 from ${productVariants} v where v.product_id = ${products.id} and (v.color ilike ${like(t)} or lower(v.size) = ${t})) then 2 else 0 end) +
+          (case when ${products.description} ilike ${like(t)} then 1 else 0 end)
+        )`,
+      ),
+      sql` + `,
+    );
+    rows = await find(and(active, sql`(${score}) > 0`), [desc(sql`(${score})`), desc(products.updatedAt)]);
+  }
+  if (rows.length === 0) rows = await find(active, [desc(products.updatedAt)]);
 
   return rows.map((p) => ({
     id: p.id,
