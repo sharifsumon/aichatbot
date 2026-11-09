@@ -199,6 +199,7 @@ test('Order Now to the website or Messenger, Send Message, and the share page wi
   assert.equal(crawler.statusCode, 200);
   assert.match(crawler.body, /<meta property="og:image" content="https:\/\/files.test\/b.jpg">/);
   assert.match(crawler.body, /og:title" content="Cotton Panjabi · ৳1,450"/);
+  assert.doesNotMatch(crawler.body, /http-equiv="refresh"/);
   const person = await app.inject({ url: '/share/products/' + product.id, headers: { 'user-agent': 'Mozilla/5.0' } });
   assert.equal(person.statusCode, 302);
   assert.equal(person.headers.location, 'https://banggii.com/p/pj-01');

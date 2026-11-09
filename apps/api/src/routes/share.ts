@@ -31,6 +31,8 @@ export const shareRoutes: FastifyPluginAsync<ShareDeps> = async (app, { db, urls
     const target = product.websiteUrl ?? (page ? shareMessengerLink(page.externalId, product.id) : null);
 
     if (target && !CRAWLER.test(req.headers['user-agent'] ?? '')) return reply.code(302).header('location', target).send();
+    // No meta refresh here: Facebook's crawler follows it and would show the
+    // target's preview (e.g. the Messenger greeting card) instead of this product.
 
     const index = Number.parseInt(req.query.photo ?? '0', 10);
     const image = product.images[Number.isInteger(index) && index >= 0 ? index : 0]?.url ?? product.imageUrl;
@@ -47,7 +49,6 @@ export const shareRoutes: FastifyPluginAsync<ShareDeps> = async (app, { db, urls
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 ${meta.map(([k, v]) => `<meta property="${k}" content="${esc(v!)}">`).join('\n')}
-${target ? `<meta http-equiv="refresh" content="0;url=${esc(target)}">` : ''}
 </head><body style="font-family:system-ui,sans-serif;max-width:480px;margin:40px auto;padding:0 16px">
 ${image ? `<img src="${esc(image)}" alt="" style="width:100%;border-radius:12px">` : ''}
 <h1 style="font-size:20px">${esc(title)}</h1><p>${esc(description)}</p>
