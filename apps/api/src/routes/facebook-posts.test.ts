@@ -22,7 +22,7 @@ after(async () => {
   if (!skip) await close();
 });
 
-type Published = { token: string; pageId: string; message: string; photoUrls: string[]; button?: { type: string; link: string } };
+type Published = { token: string; pageId: string; message: string; button: { type: string; link: string; target?: string } };
 
 function server(fail?: GraphApiError) {
   const published: Published[] = [];
@@ -37,7 +37,7 @@ function server(fail?: GraphApiError) {
       replyToComment: async () => 'cid',
       publishPost: async (token, pageId, post) => {
         if (fail) throw fail;
-        published.push({ token, pageId, message: post.message, photoUrls: post.photoUrls, ...(post.button && { button: post.button }) });
+        published.push({ token, pageId, message: post.message, button: post.button });
         return `${pageId}_${published.length}`;
       },
     },
@@ -79,7 +79,7 @@ async function shop(role: 'owner' | 'agent' = 'owner') {
   return { ws: ws!, page: page!, product: product!, auth: { cookies: { agently_session: token }, headers: { origin: WEB } } };
 }
 
-test('posts a product with chosen photos and custom text, and links the post to the product', { skip }, async () => {
+test('posts a product with its text and an Order Now button, and links the post to the product', { skip }, async () => {
   const { app, published } = server();
   const { ws, page, product, auth } = await shop();
   const path = `/api/workspaces/${ws.id}/products/${product.id}/facebook-posts`;
@@ -87,7 +87,7 @@ test('posts a product with chosen photos and custom text, and links the post to 
   const res = await app.inject({
     method: 'POST',
     url: path,
-    payload: { message: 'Eid collection is here!\n\nCotton Panjabi ৳1,450', photoUrls: ['https://files.test/b.jpg', 'https://files.test/a.jpg'] },
+    payload: { message: 'Eid collection is here!\n\nCotton Panjabi ৳1,450', button: { type: 'order', orderTo: 'messenger' } },
     ...auth,
   });
   assert.equal(res.statusCode, 201, res.body);
@@ -95,7 +95,12 @@ test('posts a product with chosen photos and custom text, and links the post to 
   assert.equal(post.postId, `${page.externalId}_1`);
   assert.equal(post.url, `https://www.facebook.com/${page.externalId}_1`);
   assert.deepEqual(published, [
-    { token: 'page-token', pageId: page.externalId, message: 'Eid collection is here!\n\nCotton Panjabi ৳1,450', photoUrls: ['https://files.test/b.jpg', 'https://files.test/a.jpg'] },
+    {
+      token: 'page-token',
+      pageId: page.externalId,
+      message: 'Eid collection is here!\n\nCotton Panjabi ৳1,450',
+      button: { type: 'ORDER_NOW', link: `https://api.agently.test/share/products/${product.id}`, target: `https://m.me/${page.externalId}?ref=order_${product.id}` },
+    },
   ]);
 
   const [row] = await db.select().from(productPosts).where(eq(productPosts.productId, product.id));
@@ -113,16 +118,16 @@ test('refuses photos from elsewhere, empty text, and staff without manager right
   const owner = await shop();
   const path = `/api/workspaces/${owner.ws.id}/products/${owner.product.id}/facebook-posts`;
 
-  const foreign = await app.inject({ method: 'POST', url: path, payload: { message: 'Hi', photoUrls: ['https://evil.test/x.jpg'] }, ...owner.auth });
+  const foreign = await app.inject({ method: 'POST', url: path, payload: { message: 'Hi', photoUrls: ['https://evil.test/x.jpg'], button: { type: 'message' } }, ...owner.auth });
   assert.equal(foreign.statusCode, 400);
-  const empty = await app.inject({ method: 'POST', url: path, payload: { message: '   ' }, ...owner.auth });
+  const empty = await app.inject({ method: 'POST', url: path, payload: { message: '   ', button: { type: 'message' } }, ...owner.auth });
   assert.equal(empty.statusCode, 400);
 
   const staff = await shop('agent');
   const denied = await app.inject({
     method: 'POST',
     url: `/api/workspaces/${staff.ws.id}/products/${staff.product.id}/facebook-posts`,
-    payload: { message: 'Hi' },
+    payload: { message: 'Hi', button: { type: 'message' } },
     ...staff.auth,
   });
   assert.equal(denied.statusCode, 403);
@@ -132,66 +137,58 @@ test('refuses photos from elsewhere, empty text, and staff without manager right
 test('explains a missing posting permission, and flags a revoked page token', { skip }, async () => {
   const noPerm = server(new GraphApiError('(#200) The user hasn\'t authorized the application to perform this action', 403, 200));
   const a = await shop();
-  const res = await noPerm.app.inject({ method: 'POST', url: `/api/workspaces/${a.ws.id}/products/${a.product.id}/facebook-posts`, payload: { message: 'Hi' }, ...a.auth });
+  const res = await noPerm.app.inject({ method: 'POST', url: `/api/workspaces/${a.ws.id}/products/${a.product.id}/facebook-posts`, payload: { message: 'Hi', button: { type: 'message' } }, ...a.auth });
   assert.equal(res.statusCode, 403);
   assert.match(res.json().error, /permission to post/);
   assert.equal((await db.select().from(productPosts).where(eq(productPosts.productId, a.product.id))).length, 0);
 
   const revoked = server(new GraphApiError('Session expired', 400, 190));
   const b = await shop();
-  const r2 = await revoked.app.inject({ method: 'POST', url: `/api/workspaces/${b.ws.id}/products/${b.product.id}/facebook-posts`, payload: { message: 'Hi' }, ...b.auth });
+  const r2 = await revoked.app.inject({ method: 'POST', url: `/api/workspaces/${b.ws.id}/products/${b.product.id}/facebook-posts`, payload: { message: 'Hi', button: { type: 'message' } }, ...b.auth });
   assert.equal(r2.statusCode, 409);
   const [page] = await db.select().from(channels).where(eq(channels.id, b.page.id));
   assert.equal(page!.status, 'token_expired');
 });
 
-test('adds Message us and Order now links, or posts a real Order Now button', { skip }, async () => {
+test('Order Now to the website or Messenger, Send Message, and the share page with the catalog photo', { skip }, async () => {
   const { app, published } = server();
   const { ws, page, product, auth } = await shop();
   const path = `/api/workspaces/${ws.id}/products/${product.id}/facebook-posts`;
-  const photoUrls = ['https://files.test/a.jpg'];
 
-  const chat = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', photoUrls, messageButton: true, orderButton: { to: 'messenger' } }, ...auth });
-  assert.equal(chat.statusCode, 201, chat.body);
-  assert.equal(
-    published[0]!.message,
-    `New in\n\n💬 Message us: https://m.me/${page.externalId}?ref=product_${product.id}\n🛒 Order now: https://m.me/${page.externalId}?ref=order_${product.id}`,
-  );
-  assert.deepEqual(published[0]!.photoUrls, photoUrls);
-
-  const site = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', photoUrls, orderButton: { to: 'website', url: 'https://banggii.com/p/pj-01' } }, ...auth });
-  assert.equal(site.statusCode, 201);
-  assert.equal(published[1]!.message, 'New in\n\n🛒 Order now: https://banggii.com/p/pj-01');
+  const noButton = await app.inject({ method: 'POST', url: path, payload: { message: 'New in' }, ...auth });
+  assert.equal(noButton.statusCode, 400);
+  const noSite = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', button: { type: 'order' } }, ...auth });
+  assert.equal(noSite.statusCode, 400);
+  published.length = 0;
 
   const share = (photo = 0) => `https://api.agently.test/share/products/${product.id}${photo ? `?photo=${photo}` : ''}`;
   const real = await app.inject({
     method: 'POST',
     url: path,
-    payload: { message: 'New in', photoUrls: ['https://files.test/b.jpg'], messageButton: true, realButton: { type: 'order', websiteUrl: 'https://banggii.com/p/pj-01' } },
+    payload: { message: 'New in', photoUrls: ['https://files.test/b.jpg'], button: { type: 'order', websiteUrl: 'https://banggii.com/p/pj-01' } },
     ...auth,
   });
   assert.equal(real.statusCode, 201, real.body);
-  assert.equal(published[2]!.message, 'New in');
-  assert.deepEqual(published[2]!.photoUrls, []);
+  assert.equal(published[0]!.message, 'New in');
   // The post links to the share page with the chosen catalog photo; the button opens the website.
-  assert.deepEqual(published[2]!.button, { type: 'ORDER_NOW', link: share(1), target: 'https://banggii.com/p/pj-01' });
+  assert.deepEqual(published[0]!.button, { type: 'ORDER_NOW', link: share(1), target: 'https://banggii.com/p/pj-01' });
   const [saved] = await db.select().from(products).where(eq(products.id, product.id));
   assert.equal(saved!.websiteUrl, 'https://banggii.com/p/pj-01');
 
   // The website is remembered for the next post.
-  const again = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', realButton: { type: 'order' } }, ...auth });
+  const again = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', button: { type: 'order' } }, ...auth });
   assert.equal(again.statusCode, 201, again.body);
-  assert.deepEqual(published[3]!.button, { type: 'ORDER_NOW', link: share(), target: 'https://banggii.com/p/pj-01' });
+  assert.deepEqual(published[1]!.button, { type: 'ORDER_NOW', link: share(), target: 'https://banggii.com/p/pj-01' });
 
-  const toChat = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', realButton: { type: 'order', orderTo: 'messenger' } }, ...auth });
+  const toChat = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', button: { type: 'order', orderTo: 'messenger' } }, ...auth });
   assert.equal(toChat.statusCode, 201);
-  assert.deepEqual(published[4]!.button, { type: 'ORDER_NOW', link: share(), target: `https://m.me/${page.externalId}?ref=order_${product.id}` });
+  assert.deepEqual(published[2]!.button, { type: 'ORDER_NOW', link: share(), target: `https://m.me/${page.externalId}?ref=order_${product.id}` });
 
-  const send = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', realButton: { type: 'message' } }, ...auth });
+  const send = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', button: { type: 'message' } }, ...auth });
   assert.equal(send.statusCode, 201);
-  assert.deepEqual(published[5]!.button, { type: 'MESSAGE_PAGE', link: share() });
+  assert.deepEqual(published[3]!.button, { type: 'MESSAGE_PAGE', link: share() });
 
-  const noPage = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', realButton: { type: 'order', websiteUrl: 'nope' } }, ...auth });
+  const noPage = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', button: { type: 'order', websiteUrl: 'nope' } }, ...auth });
   assert.equal(noPage.statusCode, 400);
 
   // The share page: Facebook sees the catalog photo, name and price; people go to the website.
