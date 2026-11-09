@@ -11,6 +11,7 @@ import type { AIProvider, ChatRequest } from '@agently/ai';
 import { AIProviderError } from '@agently/ai';
 import {
   EMBEDDING_DIMENSIONS,
+  activities,
   agents,
   channels,
   conversations,
@@ -28,6 +29,8 @@ import { encryptSecret, type InboundJob, type ReplyJob } from '@agently/shared';
 import type { WorkerDeps } from './deps.ts';
 import { handleInbound } from './inbound.ts';
 import { handleReply } from './reply.ts';
+import { checkPageTokens } from './page-health.ts';
+import { GraphApiError } from '@agently/meta';
 
 const url = process.env.DATABASE_URL;
 const skip = url ? false : 'DATABASE_URL not set';
@@ -61,6 +64,7 @@ function deps(): WorkerDeps {
         sentImages.push({ psid, url });
         return `img-out-${randomBytes(6).toString('hex')}`;
       },
+      checkPageToken: async () => {},
       replyToComment: async () => 'c-out',
       privateReply: async () => 'p-out',
     },
@@ -278,4 +282,29 @@ test('sends the photo of the colour the customer asked for, after the text', { s
   assert.equal(photos.length, 3);
   assert.deepEqual(photos.map((m) => m.attachments[0]!.url).sort(), [blue, main, main].sort());
   assert.ok(photos.every((m) => m.delivery === 'sent' && m.text === ''));
+});
+
+test('a page whose token was revoked is marked for reconnecting, once', { skip }, async () => {
+  const page = `page-${randomBytes(4).toString('hex')}`;
+  const ws = await makeShop(page);
+  const d = deps();
+  const healthy = await checkPageTokens({ ...d, graph: { ...d.graph, checkPageToken: async () => {} } });
+  assert.ok(healthy.checked >= 1);
+  const [before] = await db.select().from(channels).where(eq(channels.workspaceId, ws.id));
+  assert.equal(before!.status, 'connected');
+
+  // An outage says nothing about the token.
+  const outage = { ...d.graph, checkPageToken: async () => { throw new GraphApiError('Service unavailable', 503); } };
+  await checkPageTokens({ ...d, graph: outage });
+  assert.equal((await db.select().from(channels).where(eq(channels.workspaceId, ws.id)))[0]!.status, 'connected');
+
+  const revoked = { ...d.graph, checkPageToken: async () => { throw new GraphApiError('Error validating access token: The user has not authorized application', 400, 190); } };
+  await checkPageTokens({ ...d, graph: revoked });
+  await checkPageTokens({ ...d, graph: revoked });
+  const [after] = await db.select().from(channels).where(eq(channels.workspaceId, ws.id));
+  assert.equal(after!.status, 'token_expired');
+  assert.match(after!.lastError!, /not authorized/);
+  // Checked pages are only connected ones, so the feed gets one entry, not one per run.
+  const notes = await db.select().from(activities).where(and(eq(activities.workspaceId, ws.id), eq(activities.type, 'channel.token_expired')));
+  assert.equal(notes.length, 1);
 });

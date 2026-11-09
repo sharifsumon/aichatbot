@@ -61,6 +61,16 @@ export class GraphClient {
     return res.message_id;
   }
 
+  /** Throws a GraphApiError when the page token no longer works (tokenInvalid for a revoked one). */
+  async checkPageToken(pageToken: string): Promise<void> {
+    const res = await this.fetchImpl(`${this.base}/me?fields=id`, {
+      headers: { authorization: `Bearer ${pageToken}` },
+      signal: AbortSignal.timeout(15_000),
+    });
+    const json = (await res.json().catch(() => ({}))) as { error?: { message: string; code?: number } };
+    if (!res.ok || json.error) throw new GraphApiError(json.error?.message ?? `Graph API returned ${res.status}`, res.status, json.error?.code);
+  }
+
   /** Public reply under a comment. */
   async replyToComment(pageToken: string, commentId: string, text: string): Promise<string> {
     const res = await this.post<{ id: string }>(`/${commentId}/comments`, pageToken, { message: text });

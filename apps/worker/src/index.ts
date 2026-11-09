@@ -3,6 +3,7 @@ import { Redis } from 'ioredis';
 import { pino } from 'pino';
 import { OpenAICompatibleProvider } from '@agently/ai';
 import { grantMonthlyCredits } from '@agently/billing';
+import { checkPageTokens } from './page-health.ts';
 import { createDb } from '@agently/db';
 import { GraphClient } from '@agently/meta';
 import { QUEUES, jobIdFor, loadEnv, type InboundJob, type KnowledgeJob, type ReplyJob } from '@agently/shared';
@@ -96,12 +97,18 @@ const workers = [
     { connection, concurrency: 3 },
   ),
   // One at a time, so a month's credits are never granted twice.
-  new Worker(QUEUES.billing, async () => ({ granted: await grantMonthlyCredits(db) }), { connection, concurrency: 1 }),
+  new Worker(
+    QUEUES.billing,
+    async (job) => (job.name === 'page-health' ? checkPageTokens(deps) : { granted: await grantMonthlyCredits(db) }),
+    { connection, concurrency: 1 },
+  ),
 ];
 
 await knowledgeQueue.upsertJobScheduler('resync-sheets', { every: 3600 * 1000 }, { name: 'resync-sheets' });
 // Hourly, so a new month's credits arrive within the hour and a missed run catches up.
 await billingQueue.upsertJobScheduler('monthly-credits', { every: 3600 * 1000 }, { name: 'monthly-credits' });
+// Every 30 minutes: a page whose token was revoked gets no messages, so the owner should hear about it soon.
+await billingQueue.upsertJobScheduler('page-health', { every: 30 * 60 * 1000 }, { name: 'page-health' });
 
 for (const w of workers) {
   w.on('completed', (job, result) => log.info({ queue: w.name, jobId: job.id, result }, 'Job done'));

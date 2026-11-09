@@ -50,6 +50,9 @@ export class FacebookApp {
       state,
       response_type: 'code',
       scope: FACEBOOK_SCOPES.join(','),
+      // Ask again for any permission declined or removed before; without this,
+      // Facebook skips them silently and the page stops sending messages.
+      auth_type: 'rerequest',
     });
     return `https://www.facebook.com/${this.options.version}/dialog/oauth?${params}`;
   }
