@@ -140,3 +140,20 @@ test('a permission error is recognised as one', () => {
   assert.ok(new GraphApiError('(#200) no', 403, 200).permissionMissing);
   assert.ok(!new GraphApiError('expired', 400, 190).permissionMissing);
 });
+
+test('publishPost with a real button posts a link with call_to_action and no photos', async () => {
+  const bodies: Record<string, unknown>[] = [];
+  const graph = new GraphClient({
+    version: 'v23.0',
+    fetch: (async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+      return new Response(JSON.stringify({ id: 'page1_post1' }), { status: 200 });
+    }) as typeof fetch,
+  });
+  await graph.publishPost('tok', 'page1', { message: 'Hi', photoUrls: ['https://f.test/a.jpg'], button: { type: 'MESSAGE_PAGE', link: 'https://shop.test/p' } });
+  await graph.publishPost('tok', 'page1', { message: 'Hi', photoUrls: [], button: { type: 'ORDER_NOW', link: 'https://shop.test/p', target: 'https://m.me/page1?ref=order_x' } });
+  assert.deepEqual(bodies, [
+    { message: 'Hi', link: 'https://shop.test/p', call_to_action: { type: 'MESSAGE_PAGE', value: { app_destination: 'MESSENGER' } } },
+    { message: 'Hi', link: 'https://shop.test/p', call_to_action: { type: 'ORDER_NOW', value: { link: 'https://m.me/page1?ref=order_x' } } },
+  ]);
+});

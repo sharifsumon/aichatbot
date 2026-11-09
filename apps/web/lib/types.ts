@@ -148,6 +148,8 @@ export interface Product {
   imageUrl: string | null;
   /** In order; the first is the main photo. `color` is '' for the whole product. */
   images: ProductImage[];
+  /** The product's page on the shop's own website, for Order Now on posts. */
+  websiteUrl: string | null;
   status: 'active' | 'draft' | 'archived';
   variants: Variant[];
   colors: string[];

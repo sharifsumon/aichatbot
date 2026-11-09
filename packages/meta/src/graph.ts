@@ -104,17 +104,22 @@ export class GraphClient {
       message: string;
       photoUrls: string[];
       /**
-       * A link post with a real button instead of photos. Facebook shows the
-       * link's own preview (its og:image), so this is for the shop's website.
+       * A link post with one real button at the bottom instead of photos.
+       * Facebook shows `link`'s own preview (its og:image), so `link` is the
+       * product's page on the shop's website. MESSAGE_PAGE opens Messenger;
+       * ORDER_NOW opens `target` (default: `link`).
        */
-      button?: { type: 'ORDER_NOW' | 'SHOP_NOW'; link: string };
+      button?: { type: 'ORDER_NOW' | 'MESSAGE_PAGE'; link: string; target?: string };
     },
   ): Promise<string> {
     if (post.button) {
       const res = await this.post<{ id: string }>(`/${pageId}/feed`, pageToken, {
         message: post.message,
         link: post.button.link,
-        call_to_action: { type: post.button.type, value: { link: post.button.link } },
+        call_to_action:
+          post.button.type === 'MESSAGE_PAGE'
+            ? { type: 'MESSAGE_PAGE', value: { app_destination: 'MESSENGER' } }
+            : { type: post.button.type, value: { link: post.button.target ?? post.button.link } },
       });
       return res.id;
     }

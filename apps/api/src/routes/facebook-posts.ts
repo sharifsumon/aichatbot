@@ -6,6 +6,7 @@ import { GraphApiError, type GraphClient } from '@agently/meta';
 import { decryptSecret } from '@agently/shared';
 import { ALL_ROLES, MANAGERS, isUuid, requireRole } from './guard.ts';
 import { parseBody } from './validate.ts';
+import { shareUrl } from './share.ts';
 
 /** Facebook allows longer posts, but a product post this long is a mistake. */
 export const MAX_POST_TEXT = 5000;
@@ -31,14 +32,29 @@ const postBody = z.object({
       z.object({
         to: z.literal('website'),
         url: z.string().trim().max(2000).url('Paste the full product page address, starting with https://').refine((u) => /^https?:\/\//i.test(u), 'must be a web link'),
-        realButton: z.boolean().default(false),
       }),
     ])
+    .nullish(),
+  /**
+   * One real button at the bottom of the post, in place of the text links.
+   * Facebook only puts buttons on link posts, which show the linked page's
+   * picture, so the post links to Agently's share page for the product: it
+   * shows the first chosen catalog photo and sends visitors on to the website.
+   */
+  realButton: z
+    .object({
+      type: z.enum(['message', 'order']),
+      /** Order Now: the product's page on the shop's website (saved on the product), or Messenger. */
+      orderTo: z.enum(['messenger', 'website']).default('website'),
+      websiteUrl: z.string().trim().max(2000).url('Paste the product page address, starting with https://').refine((u) => /^https?:\/\//i.test(u), 'must be a web link').nullish(),
+    })
     .nullish(),
 });
 
 export interface FacebookPostDeps {
   db: Db;
+  /** The API's public address, where the share pages live. */
+  urls: { api: string };
   graph: Pick<GraphClient, 'publishPost'>;
   encryptionKey: string;
 }
@@ -88,12 +104,28 @@ export const facebookPostRoutes: FastifyPluginAsync<FacebookPostDeps> = async (a
       return reply.code(409).send({ error: `${page.name} needs to be reconnected in Settings before you can post.` });
     }
 
-    const order = body.orderButton;
-    const realButton = order?.to === 'website' && order.realButton ? { type: 'ORDER_NOW' as const, link: order.url } : undefined;
+    const real = body.realButton;
+    const websiteUrl = real?.websiteUrl ?? product.websiteUrl;
+    if (real?.type === 'order' && real.orderTo === 'website' && !websiteUrl) {
+      return reply.code(400).send({ error: "Paste this product's page on your website for the Order Now button" });
+    }
+    if (real?.websiteUrl && real.websiteUrl !== product.websiteUrl) {
+      // Remembered for the next post, and used by the share page.
+      await db.update(products).set({ websiteUrl: real.websiteUrl }).where(eq(products.id, product.id));
+    }
+    // The picture above the button: the first chosen photo.
+    const photoIndex = Math.max(0, product.images.findIndex((i) => i.url === photoUrls[0]));
+    const link = shareUrl(deps.urls.api, productId, photoIndex);
+    const realButton = real
+      ? real.type === 'message'
+        ? { type: 'MESSAGE_PAGE' as const, link }
+        : { type: 'ORDER_NOW' as const, link, target: real.orderTo === 'messenger' || !websiteUrl ? messengerLink(page.externalId, 'order', productId) : websiteUrl }
+      : undefined;
+    // With a real button the text links are left out; the button does their job.
+    const order = realButton ? undefined : body.orderButton;
     const links = [
-      body.messageButton ? `💬 Message us: ${messengerLink(page.externalId, 'product', productId)}` : '',
-      // A real button already says Order Now; the link in the text would repeat it.
-      order && !realButton ? `🛒 Order now: ${order.to === 'website' ? order.url : messengerLink(page.externalId, 'order', productId)}` : '',
+      body.messageButton && !realButton ? `💬 Message us: ${messengerLink(page.externalId, 'product', productId)}` : '',
+      order ? `🛒 Order now: ${order.to === 'website' ? order.url : messengerLink(page.externalId, 'order', productId)}` : '',
     ].filter(Boolean);
     const message = links.length ? `${body.message}\n\n${links.join('\n')}` : body.message;
     if (message.length > MAX_POST_TEXT) return reply.code(400).send({ error: `A post can be at most ${MAX_POST_TEXT} characters` });
@@ -119,7 +151,7 @@ export const facebookPostRoutes: FastifyPluginAsync<FacebookPostDeps> = async (a
         });
       }
       if (realButton) {
-        return reply.code(502).send({ error: `Facebook refused the Order Now button: ${err.message}. Try again with the order link in the text instead.` });
+        return reply.code(502).send({ error: `Facebook refused the ${realButton.type === 'MESSAGE_PAGE' ? 'Send Message' : 'Order Now'} button: ${err.message}. Try again with links in the text instead.` });
       }
       return reply.code(502).send({ error: `Facebook refused the post: ${err.message}` });
     }

@@ -50,6 +50,13 @@
       "when": 1794245151021,
       "tag": "0006_product_posts",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794249298619,
+      "tag": "0007_product_website_url",
+      "breakpoints": true
     }
   ]
 }
