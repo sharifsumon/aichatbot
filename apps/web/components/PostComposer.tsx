@@ -7,8 +7,9 @@ import { useApi, useLoad } from '@/lib/api';
 import { bdt, dateTime } from '@/lib/format';
 import type { FacebookPost, Product } from '@/lib/types';
 
-/** Same limit as the API. */
+/** Same limits as the API. */
 const MAX_TEXT = 5000;
+const MAX_PHOTOS = 10;
 
 /**
  * The product details for a post: name, price, colours and sizes in stock,
@@ -44,8 +45,11 @@ export function PostComposer({ product, onClose, onPosted }: { product: Product;
   const [channelId, setChannelId] = useState(() => pages.find((p) => p.status === 'connected')?.id ?? pages[0]?.id ?? '');
   const [intro, setIntro] = useState('');
   const [details, setDetails] = useState(() => productDetailsText(product));
-  /** The catalog photo Facebook shows above the button. */
+  /** Photos to post, in catalog order. With a button only the first shows, above it. */
+  const [photos, setPhotos] = useState<string[]>(() => product.images.slice(0, MAX_PHOTOS).map((i) => i.url));
+  /** The single photo shown above the button. */
   const [photo, setPhoto] = useState(() => product.images[0]?.url ?? '');
+  const [withButton, setWithButton] = useState(false);
   const [buttonType, setButtonType] = useState<'message' | 'order'>('order');
   const [orderTo, setOrderTo] = useState<'messenger' | 'website'>(product.websiteUrl ? 'website' : 'messenger');
   const [websiteUrl, setWebsiteUrl] = useState(product.websiteUrl ?? '');
@@ -55,18 +59,23 @@ export function PostComposer({ product, onClose, onPosted }: { product: Product;
   const message = [intro.trim(), details.trim()].filter(Boolean).join('\n\n');
   const page = pages.find((p) => p.id === channelId);
 
+  function toggle(url: string) {
+    setPhotos((cur) => (cur.includes(url) ? cur.filter((u) => u !== url) : cur.length >= MAX_PHOTOS ? cur : product.images.map((i) => i.url).filter((u) => u === url || cur.includes(u))));
+  }
+
   async function submit(): Promise<string | void> {
     if (!page) return 'Connect your Facebook page in Settings first.';
     if (!message) return 'Write something for the post.';
     if (message.length > MAX_TEXT) return `The post is ${message.length} characters; keep it under ${MAX_TEXT}.`;
-    if (buttonType === 'order' && orderTo === 'website' && !isUrl(websiteUrl)) return "Paste this product's page on your website, starting with https://";
+    if (withButton && buttonType === 'order' && orderTo === 'website' && !isUrl(websiteUrl)) return "Paste this product's page on your website, starting with https://";
     const r = await api<{ post: FacebookPost }>(`${ws}/products/${product.id}/facebook-posts`, {
       method: 'POST',
       body: {
         channelId: page.id,
         message,
-        photoUrls: photo ? [photo] : [],
-        realButton: { type: buttonType, orderTo, ...(isUrl(websiteUrl) ? { websiteUrl: websiteUrl.trim() } : {}) },
+        ...(withButton
+          ? { photoUrls: photo ? [photo] : [], button: { type: buttonType, orderTo, ...(isUrl(websiteUrl) ? { websiteUrl: websiteUrl.trim() } : {}) } }
+          : { photoUrls: photos }),
       },
     });
     onPosted(r.post);
@@ -105,8 +114,12 @@ export function PostComposer({ product, onClose, onPosted }: { product: Product;
         </small>
       </label>
       <fieldset style={{ border: '1px solid var(--line)', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 8, margin: 0 }}>
-        <legend style={{ fontSize: 13, fontWeight: 600, padding: '0 4px' }}>Button at the bottom of the post</legend>
-        <div role="radiogroup" aria-label="Which button" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <label className="check" style={{ fontWeight: 600 }}>
+          <input type="checkbox" checked={withButton} onChange={(e) => setWithButton(e.target.checked)} />
+          Add Button at the bottom of the post
+        </label>
+        {withButton && (
+        <div role="radiogroup" aria-label="Which button" style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingLeft: 26 }}>
           <label className="check">
             <input type="radio" name="button-type" checked={buttonType === 'order'} onChange={() => setButtonType('order')} />
             Order Now
@@ -130,23 +143,29 @@ export function PostComposer({ product, onClose, onPosted }: { product: Product;
             <input type="radio" name="button-type" checked={buttonType === 'message'} onChange={() => setButtonType('message')} />
             Send Message: opens Messenger with your bot
           </label>
+          <small className="muted">Facebook shows one photo with a button.</small>
         </div>
+        )}
       </fieldset>
       {product.images.length > 0 ? (
-        <div role="radiogroup" aria-label="Photo above the button" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div role={withButton ? 'radiogroup' : 'group'} aria-label={withButton ? 'Photo above the button' : 'Photos'} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <span style={{ fontSize: 13, fontWeight: 600 }}>
-            Photo above the button <small className="muted">(Facebook shows one photo with a button)</small>
+            {withButton ? 'Photo above the button' : <>Photos <small className="muted">({photos.length} of {product.images.length} chosen)</small></>}
           </span>
           <div className="photos">
             {product.images.map((img, i) => {
-              const on = photo === img.url;
+              const on = withButton ? photo === img.url : photos.includes(img.url);
               return (
                 <label key={img.url} className={`shot${on ? ' main' : ''}`} style={{ cursor: 'pointer' }}>
                   <div className="img">
                     <img src={img.url} alt={img.color ? `${img.color} photo` : `Photo ${i + 1}`} style={on ? undefined : { opacity: 0.4 }} />
                   </div>
                   <span className="check" style={{ fontSize: 12, padding: 6 }}>
-                    <input type="radio" name="post-photo" checked={on} onChange={() => setPhoto(img.url)} aria-label={`Use photo ${i + 1}`} />
+                    {withButton ? (
+                      <input type="radio" name="post-photo" checked={on} onChange={() => setPhoto(img.url)} aria-label={`Use photo ${i + 1}`} />
+                    ) : (
+                      <input type="checkbox" checked={on} onChange={() => toggle(img.url)} aria-label={`Include photo ${i + 1}`} />
+                    )}
                     {img.color || 'All colours'}
                   </span>
                 </label>
@@ -155,7 +174,7 @@ export function PostComposer({ product, onClose, onPosted }: { product: Product;
           </div>
         </div>
       ) : (
-        <Notice tone="info">This product has no photos yet. Add one in the product editor so the post shows it above the button.</Notice>
+        <Notice tone="info">This product has no photos yet. Add some in the product editor for a better post.</Notice>
       )}
       <small className="muted">
         {message.length} / {MAX_TEXT} characters. When customers comment on this post, the bot knows it is about {product.title}.

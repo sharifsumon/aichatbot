@@ -113,6 +113,26 @@ test('pages follows paging and sends appsecret_proof', async () => {
   assert.ok(urls.every((u) => u.includes(`appsecret_proof=${proof}`)));
 });
 
+test('publishPost without a button uploads photos unpublished, then posts them together', async () => {
+  const calls: { url: string; body: Record<string, unknown> }[] = [];
+  const graph = new GraphClient({
+    version: 'v23.0',
+    fetch: (async (url: string, init: RequestInit) => {
+      calls.push({ url, body: JSON.parse(String(init.body)) as Record<string, unknown> });
+      return new Response(JSON.stringify({ id: url.endsWith('/photos') ? `photo-${calls.length}` : 'page1_post9' }), { status: 200 });
+    }) as typeof fetch,
+  });
+  assert.equal(await graph.publishPost('tok', 'page1', { message: 'New in!', photoUrls: ['https://f.test/a.jpg', 'https://f.test/b.jpg'] }), 'page1_post9');
+  assert.deepEqual(
+    calls.map((c) => [c.url, c.body]),
+    [
+      ['https://graph.facebook.com/v23.0/page1/photos', { url: 'https://f.test/a.jpg', published: false }],
+      ['https://graph.facebook.com/v23.0/page1/photos', { url: 'https://f.test/b.jpg', published: false }],
+      ['https://graph.facebook.com/v23.0/page1/feed', { message: 'New in!', attached_media: [{ media_fbid: 'photo-1' }, { media_fbid: 'photo-2' }] }],
+    ],
+  );
+});
+
 test('a permission error is recognised as one', () => {
   assert.ok(new GraphApiError('(#200) no', 403, 200).permissionMissing);
   assert.ok(!new GraphApiError('expired', 400, 190).permissionMissing);

@@ -22,10 +22,11 @@ after(async () => {
   if (!skip) await close();
 });
 
-type Published = { token: string; pageId: string; message: string; button: { type: string; link: string; target?: string } };
+type Published = { token: string; pageId: string; message: string; button?: { type: string; link: string; target?: string }; photoUrls?: string[] };
 
 function server(fail?: GraphApiError) {
   const published: Published[] = [];
+  let posts = 0;
   const app = buildServer({
     db,
     redis: { ping: async () => 'PONG' },
@@ -37,8 +38,8 @@ function server(fail?: GraphApiError) {
       replyToComment: async () => 'cid',
       publishPost: async (token, pageId, post) => {
         if (fail) throw fail;
-        published.push({ token, pageId, message: post.message, button: post.button });
-        return `${pageId}_${published.length}`;
+        published.push({ token, pageId, message: post.message, ...(post.button ? { button: post.button } : { photoUrls: post.photoUrls }) });
+        return `${pageId}_${++posts}`;
       },
     },
     encryptionKey: key,
@@ -155,11 +156,13 @@ test('Order Now to the website or Messenger, Send Message, and the share page wi
   const { ws, page, product, auth } = await shop();
   const path = `/api/workspaces/${ws.id}/products/${product.id}/facebook-posts`;
 
-  const noButton = await app.inject({ method: 'POST', url: path, payload: { message: 'New in' }, ...auth });
-  assert.equal(noButton.statusCode, 400);
+  // No button: the chosen photos go up together as one post.
+  const plain = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', photoUrls: ['https://files.test/b.jpg', 'https://files.test/a.jpg'] }, ...auth });
+  assert.equal(plain.statusCode, 201, plain.body);
+  assert.deepEqual({ ...published[0] }, { token: 'page-token', pageId: page.externalId, message: 'New in', photoUrls: ['https://files.test/b.jpg', 'https://files.test/a.jpg'] });
   const noSite = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', button: { type: 'order' } }, ...auth });
   assert.equal(noSite.statusCode, 400);
-  published.length = 0;
+  published.splice(0);
 
   const share = (photo = 0) => `https://api.agently.test/share/products/${product.id}${photo ? `?photo=${photo}` : ''}`;
   const real = await app.inject({
@@ -200,6 +203,6 @@ test('Order Now to the website or Messenger, Send Message, and the share page wi
   assert.equal(person.statusCode, 302);
   assert.equal(person.headers.location, 'https://banggii.com/p/pj-01');
 
-  const bad = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', orderButton: { to: 'website', url: 'banggii' } }, ...auth });
+  const bad = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', button: { type: 'call' } }, ...auth });
   assert.equal(bad.statusCode, 400);
 });
