@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { useShop } from '@/components/Shell';
 import { Empty, Loading, Notice, Pill, SearchBox, TopBar } from '@/components/ui';
 import { ApiError, qs, useApi, useUpload } from '@/lib/api';
+import { shrinkImage } from '@/lib/image';
 import { bdt, num } from '@/lib/format';
 import type { Product } from '@/lib/types';
 
@@ -163,6 +164,7 @@ function Editor({ product, onClose, onSaved }: { product?: Product; onClose: () 
   const [newColor, setNewColor] = useState('');
   const [newSize, setNewSize] = useState('');
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string>();
 
   const total = variantsOf(grid).reduce((n, v) => n + v.stock, 0);
@@ -194,14 +196,16 @@ function Editor({ product, onClose, onSaved }: { product?: Product; onClose: () 
   async function pickPhoto(f: File | undefined) {
     if (!f) return;
     setBusy(true);
+    setUploading(true);
     setError(undefined);
     try {
-      const r = await upload<{ url: string }>(`${ws}/uploads/images`, f);
+      const r = await upload<{ url: string }>(`${ws}/uploads/images`, await shrinkImage(f), 60_000);
       setImageUrl(r.url);
     } catch (e) {
       setError((e as ApiError).status === 503 ? 'Photo uploads are not switched on yet. Paste a link to the photo instead.' : (e as Error).message);
     } finally {
       setBusy(false);
+      setUploading(false);
       if (file.current) file.current.value = '';
     }
   }
@@ -250,7 +254,7 @@ function Editor({ product, onClose, onSaved }: { product?: Product; onClose: () 
         <div className="ph">{imageUrl ? <img src={imageUrl} alt="" /> : 'No photo'}</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 0 }}>
           <button type="button" className="btn sm" onClick={() => file.current?.click()} disabled={busy}>
-            {imageUrl ? 'Change photo' : 'Upload photo'}
+            {uploading ? 'Uploading photo…' : imageUrl ? 'Change photo' : 'Upload photo'}
           </button>
           <input ref={file} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => pickPhoto(e.target.files?.[0])} />
           <input className="input" aria-label="Photo link" placeholder="or paste a photo link" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} style={{ height: 34, fontSize: 13 }} />
@@ -349,7 +353,7 @@ function Editor({ product, onClose, onSaved }: { product?: Product; onClose: () 
           Cancel
         </button>
         <button type="submit" className="btn primary" disabled={busy}>
-          {busy ? 'Saving…' : 'Save product'}
+          {busy && !uploading ? 'Saving…' : 'Save product'}
         </button>
       </div>
       <p className="sub" style={{ margin: 0 }}>

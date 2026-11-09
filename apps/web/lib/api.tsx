@@ -91,13 +91,14 @@ export function qs(params: Record<string, string | number | boolean | null | und
 export function useUpload() {
   const base = useContext(ApiBase);
   return useCallback(
-    async <T,>(path: string, file: File): Promise<T> => {
+    async <T,>(path: string, file: File, timeoutMs = 120_000): Promise<T> => {
       const form = new FormData();
       form.append('file', file);
       let res: Response;
       try {
-        res = await fetch(`${base}/api${path}`, { method: 'POST', credentials: 'include', body: form });
-      } catch {
+        res = await fetch(`${base}/api${path}`, { method: 'POST', credentials: 'include', body: form, signal: AbortSignal.timeout(timeoutMs) });
+      } catch (e) {
+        if ((e as Error).name === 'TimeoutError') throw new ApiError(0, 'The upload took too long. Check your connection and try again.');
         throw new ApiError(0, 'Could not reach Agently. Check your connection and try again.');
       }
       const data = (await res.json().catch(() => ({}))) as { error?: string };
