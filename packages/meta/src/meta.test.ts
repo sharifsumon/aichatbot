@@ -113,35 +113,12 @@ test('pages follows paging and sends appsecret_proof', async () => {
   assert.ok(urls.every((u) => u.includes(`appsecret_proof=${proof}`)));
 });
 
-test('publishPost uploads photos unpublished, then posts them together with the text', async () => {
-  const calls: { url: string; body: Record<string, unknown> }[] = [];
-  const graph = new GraphClient({
-    version: 'v23.0',
-    fetch: (async (url: string, init: RequestInit) => {
-      const body = JSON.parse(String(init.body)) as Record<string, unknown>;
-      calls.push({ url, body });
-      const id = url.endsWith('/photos') ? `photo-${calls.length}` : 'page1_post9';
-      return new Response(JSON.stringify({ id }), { status: 200 });
-    }) as typeof fetch,
-  });
-  const id = await graph.publishPost('tok', 'page1', { message: 'New in!', photoUrls: ['https://f.test/a.jpg', 'https://f.test/b.jpg'] });
-  assert.equal(id, 'page1_post9');
-  assert.deepEqual(
-    calls.map((c) => [c.url, c.body]),
-    [
-      ['https://graph.facebook.com/v23.0/page1/photos', { url: 'https://f.test/a.jpg', published: false }],
-      ['https://graph.facebook.com/v23.0/page1/photos', { url: 'https://f.test/b.jpg', published: false }],
-      ['https://graph.facebook.com/v23.0/page1/feed', { message: 'New in!', attached_media: [{ media_fbid: 'photo-1' }, { media_fbid: 'photo-2' }] }],
-    ],
-  );
-});
-
 test('a permission error is recognised as one', () => {
   assert.ok(new GraphApiError('(#200) no', 403, 200).permissionMissing);
   assert.ok(!new GraphApiError('expired', 400, 190).permissionMissing);
 });
 
-test('publishPost with a real button posts a link with call_to_action and no photos', async () => {
+test('publishPost posts a link with a call_to_action button', async () => {
   const bodies: Record<string, unknown>[] = [];
   const graph = new GraphClient({
     version: 'v23.0',
@@ -150,8 +127,8 @@ test('publishPost with a real button posts a link with call_to_action and no pho
       return new Response(JSON.stringify({ id: 'page1_post1' }), { status: 200 });
     }) as typeof fetch,
   });
-  await graph.publishPost('tok', 'page1', { message: 'Hi', photoUrls: ['https://f.test/a.jpg'], button: { type: 'MESSAGE_PAGE', link: 'https://shop.test/p' } });
-  await graph.publishPost('tok', 'page1', { message: 'Hi', photoUrls: [], button: { type: 'ORDER_NOW', link: 'https://shop.test/p', target: 'https://m.me/page1?ref=order_x' } });
+  await graph.publishPost('tok', 'page1', { message: 'Hi', button: { type: 'MESSAGE_PAGE', link: 'https://shop.test/p' } });
+  await graph.publishPost('tok', 'page1', { message: 'Hi', button: { type: 'ORDER_NOW', link: 'https://shop.test/p', target: 'https://m.me/page1?ref=order_x' } });
   assert.deepEqual(bodies, [
     { message: 'Hi', link: 'https://shop.test/p', call_to_action: { type: 'MESSAGE_PAGE', value: { app_destination: 'MESSENGER' } } },
     { message: 'Hi', link: 'https://shop.test/p', call_to_action: { type: 'ORDER_NOW', value: { link: 'https://m.me/page1?ref=order_x' } } },

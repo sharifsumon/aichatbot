@@ -10,45 +10,25 @@ import { shareUrl } from './share.ts';
 
 /** Facebook allows longer posts, but a product post this long is a mistake. */
 export const MAX_POST_TEXT = 5000;
-/** Facebook attaches at most 10 photos to one post through attached_media. */
-export const MAX_POST_PHOTOS = 10;
 
 const postBody = z.object({
   /** The page to post on; may be left out when the shop has one connected page. */
   channelId: z.string().uuid().optional(),
   message: z.string().trim().min(1, 'Write something for the post').max(MAX_POST_TEXT, `A post can be at most ${MAX_POST_TEXT} characters`),
-  /** Chosen from the product's own photos, in the order they should appear. */
-  photoUrls: z.array(z.string()).max(MAX_POST_PHOTOS, `A post can have at most ${MAX_POST_PHOTOS} photos`).default([]),
-  /** "Message us": a link that opens Messenger with the bot already on this product. */
-  messageButton: z.boolean().default(false),
+  /** The catalog photo shown above the button: one of the product's own photos (default: the main one). */
+  photoUrls: z.array(z.string()).max(1, 'Choose one photo').default([]),
   /**
-   * "Order now": in Messenger, where the bot takes the order, or on the
-   * shop's website. `realButton` posts Facebook's own Order Now button, which
-   * shows the website's preview in place of the photos.
+   * The real button at the bottom of the post. Facebook only puts a button
+   * on a post that links to a web page and shows that page's picture, so the
+   * post links to Agently's share page for the product: Facebook reads the
+   * chosen catalog photo there, and visitors are sent on to the website.
    */
-  orderButton: z
-    .discriminatedUnion('to', [
-      z.object({ to: z.literal('messenger') }),
-      z.object({
-        to: z.literal('website'),
-        url: z.string().trim().max(2000).url('Paste the full product page address, starting with https://').refine((u) => /^https?:\/\//i.test(u), 'must be a web link'),
-      }),
-    ])
-    .nullish(),
-  /**
-   * One real button at the bottom of the post, in place of the text links.
-   * Facebook only puts buttons on link posts, which show the linked page's
-   * picture, so the post links to Agently's share page for the product: it
-   * shows the first chosen catalog photo and sends visitors on to the website.
-   */
-  realButton: z
-    .object({
-      type: z.enum(['message', 'order']),
-      /** Order Now: the product's page on the shop's website (saved on the product), or Messenger. */
-      orderTo: z.enum(['messenger', 'website']).default('website'),
-      websiteUrl: z.string().trim().max(2000).url('Paste the product page address, starting with https://').refine((u) => /^https?:\/\//i.test(u), 'must be a web link').nullish(),
-    })
-    .nullish(),
+  button: z.object({
+    type: z.enum(['message', 'order']),
+    /** Order Now: the product's page on the shop's website (saved on the product), or Messenger. */
+    orderTo: z.enum(['messenger', 'website']).default('website'),
+    websiteUrl: z.string().trim().max(2000).url('Paste the product page address, starting with https://').refine((u) => /^https?:\/\//i.test(u), 'must be a web link').nullish(),
+  }),
 });
 
 export interface FacebookPostDeps {
@@ -104,38 +84,28 @@ export const facebookPostRoutes: FastifyPluginAsync<FacebookPostDeps> = async (a
       return reply.code(409).send({ error: `${page.name} needs to be reconnected in Settings before you can post.` });
     }
 
-    const real = body.realButton;
-    const websiteUrl = real?.websiteUrl ?? product.websiteUrl;
-    if (real?.type === 'order' && real.orderTo === 'website' && !websiteUrl) {
+    const real = body.button;
+    const websiteUrl = real.websiteUrl ?? product.websiteUrl;
+    if (real.type === 'order' && real.orderTo === 'website' && !websiteUrl) {
       return reply.code(400).send({ error: "Paste this product's page on your website for the Order Now button" });
     }
-    if (real?.websiteUrl && real.websiteUrl !== product.websiteUrl) {
+    if (real.websiteUrl && real.websiteUrl !== product.websiteUrl) {
       // Remembered for the next post, and used by the share page.
       await db.update(products).set({ websiteUrl: real.websiteUrl }).where(eq(products.id, product.id));
     }
-    // The picture above the button: the first chosen photo.
     const photoIndex = Math.max(0, product.images.findIndex((i) => i.url === photoUrls[0]));
     const link = shareUrl(deps.urls.api, productId, photoIndex);
-    const realButton = real
-      ? real.type === 'message'
+    const button =
+      real.type === 'message'
         ? { type: 'MESSAGE_PAGE' as const, link }
-        : { type: 'ORDER_NOW' as const, link, target: real.orderTo === 'messenger' || !websiteUrl ? messengerLink(page.externalId, 'order', productId) : websiteUrl }
-      : undefined;
-    // With a real button the text links are left out; the button does their job.
-    const order = realButton ? undefined : body.orderButton;
-    const links = [
-      body.messageButton && !realButton ? `💬 Message us: ${messengerLink(page.externalId, 'product', productId)}` : '',
-      order ? `🛒 Order now: ${order.to === 'website' ? order.url : messengerLink(page.externalId, 'order', productId)}` : '',
-    ].filter(Boolean);
-    const message = links.length ? `${body.message}\n\n${links.join('\n')}` : body.message;
-    if (message.length > MAX_POST_TEXT) return reply.code(400).send({ error: `A post can be at most ${MAX_POST_TEXT} characters` });
+        : { type: 'ORDER_NOW' as const, link, target: real.orderTo === 'messenger' || !websiteUrl ? messengerLink(page.externalId, 'order', productId) : websiteUrl };
+    const { message } = body;
 
     let postId: string;
     try {
       postId = await deps.graph.publishPost(decryptSecret(page.accessTokenEncrypted, deps.encryptionKey), page.externalId, {
         message,
-        photoUrls: realButton ? [] : photoUrls,
-        button: realButton,
+        button,
       });
     } catch (err) {
       if (!(err instanceof GraphApiError)) throw err;
@@ -150,15 +120,12 @@ export const facebookPostRoutes: FastifyPluginAsync<FacebookPostDeps> = async (a
           reconnect: true,
         });
       }
-      if (realButton) {
-        return reply.code(502).send({ error: `Facebook refused the ${realButton.type === 'MESSAGE_PAGE' ? 'Send Message' : 'Order Now'} button: ${err.message}. Try again with links in the text instead.` });
-      }
-      return reply.code(502).send({ error: `Facebook refused the post: ${err.message}` });
+      return reply.code(502).send({ error: `Facebook refused the post with the ${button.type === 'MESSAGE_PAGE' ? 'Send Message' : 'Order Now'} button: ${err.message}` });
     }
 
     const [row] = await db
       .insert(productPosts)
-      .values({ workspaceId, productId, channelId: page.id, postId, message, photoUrls: realButton ? [] : photoUrls, createdByUserId: req.user.id })
+      .values({ workspaceId, productId, channelId: page.id, postId, message, photoUrls, createdByUserId: req.user.id })
       .returning();
     await db.insert(activities).values({
       workspaceId,
