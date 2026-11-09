@@ -5,7 +5,7 @@
 import { after, before, beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { pino } from 'pino';
 import type { AIProvider, ChatRequest } from '@agently/ai';
 import { AIProviderError } from '@agently/ai';
@@ -36,6 +36,7 @@ const key = randomBytes(32).toString('base64');
 let db: Db;
 let close: () => Promise<void>;
 let sent: { psid: string; text: string }[];
+let sentImages: { psid: string; url: string }[];
 let prompts: ChatRequest[];
 let queued: ReplyJob[];
 let aiImpl: AIProvider['chat'];
@@ -55,6 +56,10 @@ function deps(): WorkerDeps {
       sendText: async (_token, psid, text) => {
         sent.push({ psid, text });
         return [`mid-out-${sent.length}`];
+      },
+      sendImage: async (_token, psid, url) => {
+        sentImages.push({ psid, url });
+        return `img-out-${randomBytes(6).toString('hex')}`;
       },
       replyToComment: async () => 'c-out',
       privateReply: async () => 'p-out',
@@ -103,6 +108,7 @@ after(async () => {
 });
 beforeEach(() => {
   sent = [];
+  sentImages = [];
   prompts = [];
   queued = [];
   aiImpl = async (req) => {
@@ -228,4 +234,48 @@ test('takes a bKash order through chat with tools', { skip }, async () => {
   // While the order was open, the prompt told the model what to ask next.
   const midway = prompts.find((p) => (p.messages[0]!.content as string).includes('Order in progress: #1001'));
   assert.ok(midway);
+});
+
+test('sends the photo of the colour the customer asked for, after the text', { skip }, async () => {
+  const page = `page-${randomBytes(4).toString('hex')}`;
+  const ws = await makeShop(page);
+  const main = 'https://socialbot.test/media/main.jpg';
+  const blue = 'https://socialbot.test/media/blue.jpg';
+  await db.update(products).set({ imageUrl: main, images: [{ url: main, color: '' }, { url: blue, color: 'Blue' }] }).where(eq(products.workspaceId, ws.id));
+
+  const calls: Record<string, Record<string, unknown>> = {
+    'blue ta dekhan': { code: 'sh-01', color: 'blue' },
+    'chobi den': { code: 'SH-01' },
+    'red ta?': { code: 'SH-01', color: 'Red' },
+  };
+  const toolResults: string[] = [];
+  aiImpl = async (req) => {
+    prompts.push(req);
+    const last = req.messages.at(-1)!;
+    if (last.role === 'tool') {
+      toolResults.push(last.content);
+      return { text: 'Ei je', toolCalls: [], usage: { inputTokens: 10, outputTokens: 5 }, model: 'fake' };
+    }
+    const args = calls[last.content];
+    return { text: '', toolCalls: args ? [{ id: 'c1', name: 'send_product_photos', arguments: args }] : [], usage: { inputTokens: 10, outputTokens: 5 }, model: 'fake' };
+  };
+
+  const expected = [[blue], [main], [main]];
+  for (const [i, text] of Object.keys(calls).entries()) {
+    sentImages = [];
+    await handleInbound(deps(), inbound(page, `${page}-${i}`, text, Date.now()));
+    assert.equal(await handleReply(deps(), queued.at(-1)!, { finalAttempt: false }), 'sent');
+    assert.deepEqual(sentImages.map((s) => s.url), expected[i], text);
+  }
+  // No photo of Red: the main photo goes, and the model is told to say so.
+  assert.match(toolResults[2]!, /no photo of that colour/);
+  // The prompt lists which colours have photos.
+  assert.match(prompts[0]!.messages[0]!.content as string, /Photos: main, and for Blue/);
+
+  // Photos are saved in the conversation after the text, as image attachments.
+  const out = await db.select().from(messages).where(and(eq(messages.workspaceId, ws.id), eq(messages.direction, 'outbound')));
+  const photos = out.filter((m) => m.attachments.length);
+  assert.equal(photos.length, 3);
+  assert.deepEqual(photos.map((m) => m.attachments[0]!.url).sort(), [blue, main, main].sort());
+  assert.ok(photos.every((m) => m.delivery === 'sent' && m.text === ''));
 });

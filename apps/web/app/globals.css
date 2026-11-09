@@ -189,6 +189,8 @@ tr.attention td { background: #fffbfa; }
 /* Chat */
 .thread { display: flex; flex-direction: column; gap: 12px; padding: 24px; }
 .msg { max-width: 72%; padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg-img { display: block; margin: 2px 0; }
+.msg-img img { display: block; max-width: min(240px, 100%); max-height: 240px; border-radius: 10px; object-fit: cover; }
 .msg.in { align-self: flex-start; background: #fff; border: 1px solid var(--line); }
 .msg.ai { align-self: flex-end; background: var(--brand); color: #fff; }
 .msg.staff { align-self: flex-end; background: #1e293b; color: #fff; }
@@ -267,6 +269,17 @@ tr.attention td { background: #fffbfa; }
 .photo { display: flex; gap: 12px; align-items: center; }
 .photo .ph { width: 88px; height: 88px; border-radius: 12px; background: var(--line-soft); overflow: hidden; display: flex; align-items: center; justify-content: center; color: var(--subtle); font-size: 11px; flex: 0 0 88px; }
 .photo .ph img { width: 100%; height: 100%; object-fit: cover; }
+.photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.shot { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; background: var(--surface); }
+.shot.main { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand); }
+.shot .img { aspect-ratio: 1; background: var(--line-soft); position: relative; }
+.shot .img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.shot .tag { position: absolute; left: 6px; top: 6px; font-size: 10px; font-weight: 700; background: rgba(0,0,0,.65); color: #fff; padding: 2px 6px; border-radius: 6px; }
+.shot .rm { position: absolute; right: 4px; top: 4px; width: 24px; height: 24px; border-radius: 50%; border: 0; background: rgba(0,0,0,.6); color: #fff; cursor: pointer; font-size: 14px; line-height: 1; }
+.shot select { border: 0; border-top: 1px solid var(--line); font-size: 12px; padding: 6px; background: var(--surface); color: inherit; width: 100%; }
+.shot .btn.link { font-size: 12px; padding: 4px 6px; justify-content: center; }
+.product .ph { position: relative; }
+.product .ph .count { position: absolute; right: 8px; bottom: 8px; font-size: 11px; font-weight: 700; background: rgba(0,0,0,.6); color: #fff; padding: 2px 7px; border-radius: 999px; }
 .grid { width: auto; min-width: 100%; }
 .grid th, .grid td { padding: 6px; border-bottom: 1px solid var(--line-soft); font-size: 13px; background: none; }
 .grid th { color: var(--muted); }

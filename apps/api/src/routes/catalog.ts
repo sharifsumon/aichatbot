@@ -19,12 +19,22 @@ const variant = z.object({
   price: money.nullish(),
 });
 
+const webLink = z.string().trim().url().refine((u) => u.startsWith('https://') || u.startsWith('http://'), 'must be a web link');
+
+export const MAX_PHOTOS = 10;
+
 const productBody = z.object({
   title: z.string().trim().min(1).max(200),
   code: z.string().trim().min(1).max(60),
   description: z.string().trim().max(5000).default(''),
   price: money,
-  imageUrl: z.string().url().refine((u) => u.startsWith('https://') || u.startsWith('http://'), 'must be a web link').nullish(),
+  /** Older clients send one photo; newer ones send `images`, and imageUrl follows images[0]. */
+  imageUrl: webLink.nullish(),
+  /** Photos in order, the first is the main one; `color` is one of the grid's colours or '' for the whole product. */
+  images: z
+    .array(z.object({ url: webLink, color: z.string().trim().max(40).default('') }))
+    .max(MAX_PHOTOS, `a product can have at most ${MAX_PHOTOS} photos`)
+    .optional(),
   status: z.enum(['active', 'draft', 'archived']).default('active'),
   /** The colour × size grid. A product with no options has one cell with both empty. */
   variants: z
@@ -35,6 +45,25 @@ const productBody = z.object({
 });
 
 type Params = { workspaceId: string; productId: string };
+type ProductBody = z.infer<typeof productBody>;
+
+/**
+ * The fields to save: photos with each colour spelled as in the grid, and
+ * imageUrl kept equal to the main photo. Returns an error for a photo whose
+ * colour is not in the grid.
+ */
+function productFields(body: ProductBody): { fields: Omit<ProductBody, 'variants'> & { images: { url: string; color: string }[]; imageUrl: string | null } } | { error: string } {
+  const { variants, ...rest } = body;
+  const colors = new Map(variants.map((v) => [v.color.toLowerCase(), v.color]));
+  const raw = body.images ?? (body.imageUrl ? [{ url: body.imageUrl, color: '' }] : []);
+  const images = [];
+  for (const img of raw) {
+    const color = img.color ? colors.get(img.color.toLowerCase()) : '';
+    if (color === undefined) return { error: `The photo for ${img.color} needs that colour in the stock grid` };
+    images.push({ url: img.url, color });
+  }
+  return { fields: { ...rest, images, imageUrl: images[0]?.url ?? null } };
+}
 
 export interface CatalogDeps {
   db: Db;
@@ -122,9 +151,12 @@ export const catalogRoutes: FastifyPluginAsync<CatalogDeps> = async (app, deps) 
     if (!(await requireRole(db, req, reply, MANAGERS))) return reply;
     const body = await parseBody(productBody, req.body, reply);
     if (!body) return reply;
+    const made = productFields(body);
+    if ('error' in made) return reply.code(400).send({ error: made.error });
     try {
       const product = await db.transaction(async (tx) => {
-        const { variants, ...fields } = body;
+        const { variants } = body;
+        const { fields } = made;
         const [p] = await tx.insert(products).values({ ...fields, workspaceId: req.params.workspaceId }).returning();
         const vs = await tx
           .insert(productVariants)
@@ -156,10 +188,13 @@ export const catalogRoutes: FastifyPluginAsync<CatalogDeps> = async (app, deps) 
     if (!existing) return reply.code(404).send({ error: 'Product not found' });
     const body = await parseBody(productBody, req.body, reply);
     if (!body) return reply;
+    const made = productFields(body);
+    if ('error' in made) return reply.code(400).send({ error: made.error });
 
     try {
       const product = await db.transaction(async (tx) => {
-        const { variants, ...fields } = body;
+        const { variants } = body;
+        const { fields } = made;
         const [p] = await tx.update(products).set(fields).where(eq(products.id, existing.id)).returning();
         const keep: string[] = [];
         for (const v of variants) {

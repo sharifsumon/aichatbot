@@ -143,6 +143,9 @@ export async function handleReply(deps: WorkerDeps, job: ReplyJob, opts: { final
     inputTokens: draft.usage.inputTokens,
     outputTokens: draft.usage.outputTokens,
   }, 'ai');
+  if (draft.photos.length && message.kind === 'message' && sent.some((s) => s.externalId)) {
+    await sendPhotos(deps, { pageToken, channelId: channel.id, source: message, urls: draft.photos });
+  }
   if (sent.some((s) => s.externalId)) {
     // One credit per AI reply that reached the customer.
     await recordUsage(db, { workspaceId: workspace.id, model: draft.model, aiReplies: 1, inputTokens: 0, outputTokens: 0, costUsd: 0 });
@@ -173,12 +176,7 @@ async function sendReply(
   const { source } = r;
 
   if (source.kind === 'message') {
-    const conversation = await db.query.conversations.findFirst({
-      where: eq(conversations.id, source.conversationId),
-      with: { customer: { with: { identities: true } } },
-    });
-    const psid = conversation?.customer.identities.find((i) => i.channelId === conversation.channelId)?.externalId;
-    if (!psid) throw new Error('Customer has no Messenger id on this page');
+    const psid = await customerPsid(deps, source.conversationId);
     const ids = await graph.sendText(r.pageToken, psid, r.text);
     return [{ kind: 'message', text: r.text, externalId: ids[0] }];
   }
@@ -195,6 +193,53 @@ async function sendReply(
     out.push({ kind: 'comment_reply', text: publicText, externalId: id });
   }
   return out;
+}
+
+async function customerPsid(deps: WorkerDeps, conversationId: string): Promise<string> {
+  const conversation = await deps.db.query.conversations.findFirst({
+    where: eq(conversations.id, conversationId),
+    with: { customer: { with: { identities: true } } },
+  });
+  const psid = conversation?.customer.identities.find((i) => i.channelId === conversation.channelId)?.externalId;
+  if (!psid) throw new Error('Customer has no Messenger id on this page');
+  return psid;
+}
+
+/**
+ * Product photos after the reply's text, one Messenger message each. The text
+ * already reached the customer, so a photo that fails is logged and saved as
+ * failed rather than retrying the whole reply.
+ */
+async function sendPhotos(
+  deps: WorkerDeps,
+  r: { pageToken: string; channelId: string; source: { workspaceId: string; conversationId: string; channelId: string; id: string }; urls: string[] },
+): Promise<void> {
+  const psid = await customerPsid(deps, r.source.conversationId);
+  for (const url of r.urls) {
+    let externalId: string | undefined;
+    try {
+      externalId = await deps.graph.sendImage(r.pageToken, psid, url);
+    } catch (err) {
+      deps.log.warn({ err, url }, 'Product photo failed to send');
+      if (err instanceof GraphApiError && err.tokenInvalid) {
+        await deps.db.update(channels).set({ status: 'token_expired', lastError: err.message }).where(eq(channels.id, r.channelId));
+        return;
+      }
+    }
+    await deps.db.insert(messages).values({
+      workspaceId: r.source.workspaceId,
+      conversationId: r.source.conversationId,
+      channelId: r.source.channelId,
+      direction: 'outbound',
+      kind: 'message',
+      sender: 'ai',
+      text: '',
+      attachments: [{ type: 'image', url }],
+      externalId,
+      delivery: externalId ? 'sent' : 'failed',
+      meta: { replyToMessageId: r.source.id },
+    });
+  }
 }
 
 /**

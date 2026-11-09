@@ -15,6 +15,8 @@ export interface ProductFact {
   description: string;
   price: string;
   variants: { color: string; size: string; stock: number; price: string | null }[];
+  /** Whether the product has a photo, and the colours that have their own. */
+  photos: { main: boolean; colors: string[] };
 }
 
 /** Closest knowledge chunks by cosine similarity, from this workspace only. */
@@ -70,6 +72,7 @@ export async function searchProducts(db: Db, workspaceId: string, query: string,
     description: p.description,
     price: p.price,
     variants: p.variants.map((v) => ({ color: v.color, size: v.size, stock: v.stock, price: v.price })),
+    photos: { main: p.images.length > 0, colors: [...new Set(p.images.map((i) => i.color).filter(Boolean))] },
   }));
 }
 

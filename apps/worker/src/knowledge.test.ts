@@ -45,7 +45,7 @@ function deps(overrides: Partial<WorkerDeps> = {}): WorkerDeps {
     log: pino({ level: 'silent' }),
     encryptionKey: '',
     pricing: { inputPerMTok: 0, outputPerMTok: 0 },
-    graph: { sendText: async () => [], replyToComment: async () => '', privateReply: async () => '' },
+    graph: { sendText: async () => [], sendImage: async () => '', replyToComment: async () => '', privateReply: async () => '' },
     enqueueReply: async () => {},
     enqueueKnowledge: async () => {},
     ...overrides,

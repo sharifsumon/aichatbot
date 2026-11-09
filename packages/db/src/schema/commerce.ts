@@ -1,7 +1,12 @@
-import { index, integer, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { index, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { createdAt, id, updatedAt } from './common.ts';
 import { conversations, customers } from './crm.ts';
 import { users, workspaces } from './tenancy.ts';
+
+export interface ProductImage {
+  url: string;
+  color: string;
+}
 
 export const productStatusEnum = pgEnum('product_status', ['active', 'draft', 'archived']);
 
@@ -48,7 +53,13 @@ export const products = pgTable(
     code: text().notNull(),
     description: text().notNull().default(''),
     price: numeric({ precision: 12, scale: 2 }).notNull(),
+    /** The main photo: always images[0], kept for lists and older readers. */
     imageUrl: text(),
+    /**
+     * Photos in display order; the first is the main one. `color` is one of the
+     * product's colours, or '' for a photo of the whole product.
+     */
+    images: jsonb().$type<ProductImage[]>().notNull().default([]),
     status: productStatusEnum().notNull().default('active'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),

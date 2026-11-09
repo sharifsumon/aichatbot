@@ -121,6 +121,43 @@ test('catalog: create with a colour × size grid, list, edit the grid, archive',
   assert.equal((await app.inject({ url: `${base}?status=archived`, ...s.auth })).json().products.length, 1);
 });
 
+test('catalog: several photos, each tagged with a colour; the first is the main one', { skip }, async () => {
+  const { app } = server();
+  const s = await shop();
+  const base = `/api/workspaces/${s.ws.id}/products`;
+  const photo = (n: string) => `https://socialbot.test/media/${n}.jpg`;
+
+  const created = await app.inject({
+    method: 'POST',
+    url: base,
+    payload: { ...tshirt, images: [{ url: photo('main'), color: '' }, { url: photo('black'), color: 'black' }, { url: photo('white'), color: 'White' }] },
+    ...s.auth,
+  });
+  assert.equal(created.statusCode, 201);
+  const p = created.json().product;
+  assert.equal(p.imageUrl, photo('main'));
+  // Colours are saved as the grid spells them.
+  assert.deepEqual(p.images, [{ url: photo('main'), color: '' }, { url: photo('black'), color: 'Black' }, { url: photo('white'), color: 'White' }]);
+
+  // A colour that is not in the grid is refused.
+  const red = await app.inject({ method: 'PUT', url: `${base}/${p.id}`, payload: { ...tshirt, images: [{ url: photo('red'), color: 'Red' }] }, ...s.auth });
+  assert.equal(red.statusCode, 400);
+  assert.match(red.json().error, /Red/);
+  // Ten photos at most.
+  const many = Array.from({ length: 11 }, (_, i) => ({ url: photo(String(i)), color: '' }));
+  assert.equal((await app.inject({ method: 'PUT', url: `${base}/${p.id}`, payload: { ...tshirt, images: many }, ...s.auth })).statusCode, 400);
+
+  // Reordering changes the main photo; an empty list clears it.
+  const reordered = await app.inject({ method: 'PUT', url: `${base}/${p.id}`, payload: { ...tshirt, images: [{ url: photo('white'), color: 'White' }] }, ...s.auth });
+  assert.equal(reordered.json().product.imageUrl, photo('white'));
+  const cleared = await app.inject({ method: 'PUT', url: `${base}/${p.id}`, payload: { ...tshirt, images: [] }, ...s.auth });
+  assert.equal(cleared.json().product.imageUrl, null);
+
+  // Older clients that send one imageUrl still work: it becomes the main photo.
+  const legacy = await app.inject({ method: 'PUT', url: `${base}/${p.id}`, payload: { ...tshirt, imageUrl: photo('old') }, ...s.auth });
+  assert.deepEqual(legacy.json().product.images, [{ url: photo('old'), color: '' }]);
+});
+
 test('catalog: staff can read but not edit; other shops get 404', { skip }, async () => {
   const { app } = server();
   const owner = await shop();
