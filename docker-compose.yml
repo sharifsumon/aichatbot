@@ -20,6 +20,8 @@ x-app-env: &app-env
   environment:
     DATABASE_URL: postgres://agently:${POSTGRES_PASSWORD:-agently}@postgres:5432/agently
     REDIS_URL: redis://redis:6379
+    # Uploaded photos and knowledge files, on the server's disk unless S3_ENDPOINT is set.
+    FILES_DIR: /data/files
   restart: unless-stopped
   depends_on:
     postgres: { condition: service_healthy }
@@ -67,6 +69,7 @@ services:
     profiles: [app]
     image: ${AGENTLY_IMAGES:-ghcr.io/sharifsumon/aichatbot}-api:${AGENTLY_TAG:-latest}
     build: { context: ., target: api }
+    volumes: [files:/data/files]
     # Localhost only: reached through Caddy, or through the shared server's own web server.
     ports: ["127.0.0.1:${API_HOST_PORT:-4000}:4000"]
     depends_on:
@@ -77,6 +80,7 @@ services:
     profiles: [app]
     image: ${AGENTLY_IMAGES:-ghcr.io/sharifsumon/aichatbot}-worker:${AGENTLY_TAG:-latest}
     build: { context: ., target: worker }
+    volumes: [files:/data/files]
     depends_on:
       migrate: { condition: service_completed_successfully }
 
@@ -109,5 +113,6 @@ services:
 
 volumes:
   postgres:
+  files:
   redis:
   caddy:
