@@ -11,6 +11,16 @@ interface MessagingEvent {
     is_echo?: boolean;
     attachments?: { type: string; payload?: { url?: string } }[];
   };
+  /** Tapping "Get Started" (or another button); carries the m.me ref for a new chat. */
+  postback?: { mid?: string; title?: string; payload?: string; referral?: Referral };
+  /** messaging_referrals: an m.me link with ?ref= opened in an existing chat. */
+  referral?: Referral;
+}
+
+interface Referral {
+  ref?: string;
+  source?: string;
+  type?: string;
 }
 
 interface FeedChange {
@@ -43,6 +53,23 @@ export function parsePageWebhook(payload: PageWebhookPayload): InboundJob[] {
 
   for (const entry of payload.entry ?? []) {
     for (const event of entry.messaging ?? []) {
+      const base = { channel: 'facebook_page' as const, channelExternalId: entry.id, senderExternalId: event.sender.id, attachments: [], timestamp: event.timestamp };
+      // m.me links: a new chat sends the ref with the Get Started postback, an existing one as a referral.
+      if (event.postback) {
+        const ref = event.postback.referral?.ref;
+        jobs.push({
+          ...base,
+          externalId: event.postback.mid ?? `postback-${event.sender.id}-${event.timestamp}`,
+          kind: 'message',
+          text: ref ? '' : (event.postback.title ?? 'Get Started'),
+          ...(ref ? { referral: { ref } } : {}),
+        });
+        continue;
+      }
+      if (event.referral?.ref) {
+        jobs.push({ ...base, externalId: `referral-${event.sender.id}-${event.timestamp}`, kind: 'message', text: '', referral: { ref: event.referral.ref } });
+        continue;
+      }
       const m = event.message;
       if (!m || m.is_echo) continue;
       jobs.push({

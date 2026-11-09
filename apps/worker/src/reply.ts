@@ -98,7 +98,13 @@ export async function handleReply(deps: WorkerDeps, job: ReplyJob, opts: { final
     ],
   };
 
-  const postProduct = message.kind === 'comment' && message.meta.postId ? await findPostProduct(deps, channel.id, message.meta.postId) : undefined;
+  // The product a comment's post shows, or the one whose link opened this chat.
+  const postProduct =
+    message.kind === 'comment' && message.meta.postId
+      ? await findPostProduct(deps, channel.id, message.meta.postId)
+      : message.meta.referral?.productId
+        ? await deps.db.query.products.findFirst({ columns: { id: true, title: true, code: true }, where: eq(products.id, message.meta.referral.productId) })
+        : undefined;
 
   let draft;
   try {

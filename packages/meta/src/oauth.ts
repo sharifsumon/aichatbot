@@ -16,7 +16,7 @@ export const FACEBOOK_SCOPES = [
 ];
 
 /** Webhook fields each connected page is subscribed to. */
-export const PAGE_SUBSCRIBED_FIELDS = ['messages', 'messaging_postbacks', 'feed'];
+export const PAGE_SUBSCRIBED_FIELDS = ['messages', 'messaging_postbacks', 'messaging_referrals', 'feed'];
 
 export interface FacebookPage {
   id: string;
@@ -103,9 +103,15 @@ export class FacebookApp {
     return pages;
   }
 
-  /** Starts webhook delivery for a page. */
+  /**
+   * Starts webhook delivery for a page, and turns on Messenger's Get Started
+   * button: a new customer opening an m.me link from a post taps it, and
+   * that is how the link's ref (which product) reaches the bot.
+   */
   async subscribePage(pageId: string, pageToken: string): Promise<void> {
     await this.call('POST', `/${pageId}/subscribed_apps`, { subscribed_fields: PAGE_SUBSCRIBED_FIELDS.join(',') }, pageToken);
+    // Best effort: without it messaging still works, only new chats from links lose the product.
+    await this.call('POST', '/me/messenger_profile', { get_started: JSON.stringify({ payload: 'GET_STARTED' }) }, pageToken).catch(() => undefined);
   }
 
   async unsubscribePage(pageId: string, pageToken: string): Promise<void> {

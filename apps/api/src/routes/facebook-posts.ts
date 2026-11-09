@@ -18,6 +18,23 @@ const postBody = z.object({
   message: z.string().trim().min(1, 'Write something for the post').max(MAX_POST_TEXT, `A post can be at most ${MAX_POST_TEXT} characters`),
   /** Chosen from the product's own photos, in the order they should appear. */
   photoUrls: z.array(z.string()).max(MAX_POST_PHOTOS, `A post can have at most ${MAX_POST_PHOTOS} photos`).default([]),
+  /** "Message us": a link that opens Messenger with the bot already on this product. */
+  messageButton: z.boolean().default(false),
+  /**
+   * "Order now": in Messenger, where the bot takes the order, or on the
+   * shop's website. `realButton` posts Facebook's own Order Now button, which
+   * shows the website's preview in place of the photos.
+   */
+  orderButton: z
+    .discriminatedUnion('to', [
+      z.object({ to: z.literal('messenger') }),
+      z.object({
+        to: z.literal('website'),
+        url: z.string().trim().max(2000).url('Paste the full product page address, starting with https://').refine((u) => /^https?:\/\//i.test(u), 'must be a web link'),
+        realButton: z.boolean().default(false),
+      }),
+    ])
+    .nullish(),
 });
 
 export interface FacebookPostDeps {
@@ -71,9 +88,23 @@ export const facebookPostRoutes: FastifyPluginAsync<FacebookPostDeps> = async (a
       return reply.code(409).send({ error: `${page.name} needs to be reconnected in Settings before you can post.` });
     }
 
+    const order = body.orderButton;
+    const realButton = order?.to === 'website' && order.realButton ? { type: 'ORDER_NOW' as const, link: order.url } : undefined;
+    const links = [
+      body.messageButton ? `💬 Message us: ${messengerLink(page.externalId, 'product', productId)}` : '',
+      // A real button already says Order Now; the link in the text would repeat it.
+      order && !realButton ? `🛒 Order now: ${order.to === 'website' ? order.url : messengerLink(page.externalId, 'order', productId)}` : '',
+    ].filter(Boolean);
+    const message = links.length ? `${body.message}\n\n${links.join('\n')}` : body.message;
+    if (message.length > MAX_POST_TEXT) return reply.code(400).send({ error: `A post can be at most ${MAX_POST_TEXT} characters` });
+
     let postId: string;
     try {
-      postId = await deps.graph.publishPost(decryptSecret(page.accessTokenEncrypted, deps.encryptionKey), page.externalId, { message: body.message, photoUrls });
+      postId = await deps.graph.publishPost(decryptSecret(page.accessTokenEncrypted, deps.encryptionKey), page.externalId, {
+        message,
+        photoUrls: realButton ? [] : photoUrls,
+        button: realButton,
+      });
     } catch (err) {
       if (!(err instanceof GraphApiError)) throw err;
       req.log.warn({ err, channelId: page.id }, 'Publishing a product post failed');
@@ -87,12 +118,15 @@ export const facebookPostRoutes: FastifyPluginAsync<FacebookPostDeps> = async (a
           reconnect: true,
         });
       }
+      if (realButton) {
+        return reply.code(502).send({ error: `Facebook refused the Order Now button: ${err.message}. Try again with the order link in the text instead.` });
+      }
       return reply.code(502).send({ error: `Facebook refused the post: ${err.message}` });
     }
 
     const [row] = await db
       .insert(productPosts)
-      .values({ workspaceId, productId, channelId: page.id, postId, message: body.message, photoUrls, createdByUserId: req.user.id })
+      .values({ workspaceId, productId, channelId: page.id, postId, message, photoUrls: realButton ? [] : photoUrls, createdByUserId: req.user.id })
       .returning();
     await db.insert(activities).values({
       workspaceId,
@@ -104,6 +138,13 @@ export const facebookPostRoutes: FastifyPluginAsync<FacebookPostDeps> = async (a
     return reply.code(201).send({ post: { id: row!.id, postId, url: postUrl(postId), pageName: page.name, createdAt: row!.createdAt } });
   });
 };
+
+/**
+ * Opens Messenger with the page. The ref reaches the bot (Get Started or a
+ * messaging_referrals event), which starts on the product or its order.
+ */
+export const messengerLink = (pageId: string, intent: 'product' | 'order', productId: string) =>
+  `https://m.me/${encodeURIComponent(pageId)}?ref=${intent}_${productId}`;
 
 /** "{pageId}_{postId}" opens directly at facebook.com/{pageId}_{postId}. */
 export const postUrl = (postId: string) => `https://www.facebook.com/${encodeURIComponent(postId)}`;
