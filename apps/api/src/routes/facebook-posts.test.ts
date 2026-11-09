@@ -163,22 +163,45 @@ test('adds Message us and Order now links, or posts a real Order Now button', { 
   assert.equal(site.statusCode, 201);
   assert.equal(published[1]!.message, 'New in\n\n🛒 Order now: https://banggii.com/p/pj-01');
 
-  const real = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', photoUrls, messageButton: true, realButton: { type: 'order', pageUrl: 'https://banggii.com/p/pj-01' } }, ...auth });
+  const share = (photo = 0) => `https://api.agently.test/share/products/${product.id}${photo ? `?photo=${photo}` : ''}`;
+  const real = await app.inject({
+    method: 'POST',
+    url: path,
+    payload: { message: 'New in', photoUrls: ['https://files.test/b.jpg'], messageButton: true, realButton: { type: 'order', websiteUrl: 'https://banggii.com/p/pj-01' } },
+    ...auth,
+  });
   assert.equal(real.statusCode, 201, real.body);
   assert.equal(published[2]!.message, 'New in');
   assert.deepEqual(published[2]!.photoUrls, []);
-  assert.deepEqual(published[2]!.button, { type: 'ORDER_NOW', link: 'https://banggii.com/p/pj-01', target: 'https://banggii.com/p/pj-01' });
+  // The post links to the share page with the chosen catalog photo; the button opens the website.
+  assert.deepEqual(published[2]!.button, { type: 'ORDER_NOW', link: share(1), target: 'https://banggii.com/p/pj-01' });
+  const [saved] = await db.select().from(products).where(eq(products.id, product.id));
+  assert.equal(saved!.websiteUrl, 'https://banggii.com/p/pj-01');
 
-  const toChat = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', realButton: { type: 'order', pageUrl: 'https://banggii.com/p/pj-01', orderTo: 'messenger' } }, ...auth });
+  // The website is remembered for the next post.
+  const again = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', realButton: { type: 'order' } }, ...auth });
+  assert.equal(again.statusCode, 201, again.body);
+  assert.deepEqual(published[3]!.button, { type: 'ORDER_NOW', link: share(), target: 'https://banggii.com/p/pj-01' });
+
+  const toChat = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', realButton: { type: 'order', orderTo: 'messenger' } }, ...auth });
   assert.equal(toChat.statusCode, 201);
-  assert.deepEqual(published[3]!.button, { type: 'ORDER_NOW', link: 'https://banggii.com/p/pj-01', target: `https://m.me/${page.externalId}?ref=order_${product.id}` });
+  assert.deepEqual(published[4]!.button, { type: 'ORDER_NOW', link: share(), target: `https://m.me/${page.externalId}?ref=order_${product.id}` });
 
-  const send = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', realButton: { type: 'message', pageUrl: 'https://banggii.com/p/pj-01' } }, ...auth });
+  const send = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', realButton: { type: 'message' } }, ...auth });
   assert.equal(send.statusCode, 201);
-  assert.deepEqual(published[4]!.button, { type: 'MESSAGE_PAGE', link: 'https://banggii.com/p/pj-01' });
+  assert.deepEqual(published[5]!.button, { type: 'MESSAGE_PAGE', link: share() });
 
-  const noPage = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', realButton: { type: 'message', pageUrl: 'nope' } }, ...auth });
+  const noPage = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', realButton: { type: 'order', websiteUrl: 'nope' } }, ...auth });
   assert.equal(noPage.statusCode, 400);
+
+  // The share page: Facebook sees the catalog photo, name and price; people go to the website.
+  const crawler = await app.inject({ url: '/share/products/' + product.id + '?photo=1', headers: { 'user-agent': 'facebookexternalhit/1.1' } });
+  assert.equal(crawler.statusCode, 200);
+  assert.match(crawler.body, /<meta property="og:image" content="https:\/\/files.test\/b.jpg">/);
+  assert.match(crawler.body, /og:title" content="Cotton Panjabi · ৳1,450"/);
+  const person = await app.inject({ url: '/share/products/' + product.id, headers: { 'user-agent': 'Mozilla/5.0' } });
+  assert.equal(person.statusCode, 302);
+  assert.equal(person.headers.location, 'https://banggii.com/p/pj-01');
 
   const bad = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', orderButton: { to: 'website', url: 'banggii' } }, ...auth });
   assert.equal(bad.statusCode, 400);

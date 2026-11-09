@@ -49,11 +49,11 @@ export function PostComposer({ product, onClose, onPosted }: { product: Product;
   /** 'button': one real button under the post (link post, website picture); 'links': all photos, links in the text. */
   const [style, setStyle] = useState<'button' | 'links'>('button');
   const [buttonType, setButtonType] = useState<'message' | 'order'>('message');
-  const [pageUrl, setPageUrl] = useState('');
+  const [websiteUrl, setWebsiteUrl] = useState(product.websiteUrl ?? '');
   const [messageButton, setMessageButton] = useState(true);
   const [orderOn, setOrderOn] = useState(true);
   const [orderTo, setOrderTo] = useState<'messenger' | 'website'>('messenger');
-  const [orderUrl, setOrderUrl] = useState('');
+  const [orderUrl, setOrderUrl] = useState(product.websiteUrl ?? '');
   const useRealButton = style === 'button';
   const isUrl = (u: string) => /^https?:\/\/\S+$/i.test(u.trim());
   const past = useLoad<{ posts: FacebookPost[] }>(`${ws}/products/${product.id}/facebook-posts`);
@@ -69,16 +69,18 @@ export function PostComposer({ product, onClose, onPosted }: { product: Product;
     if (!page) return 'Connect your Facebook page in Settings first.';
     if (!message) return 'Write something for the post.';
     if (message.length > MAX_TEXT) return `The post is ${message.length} characters; keep it under ${MAX_TEXT}.`;
-    if (useRealButton && !isUrl(pageUrl)) return "Paste this product's page on your website, starting with https://. Facebook shows its picture above the button.";
+    const toWebsite = buttonType === 'order' && orderTo === 'website';
+    if (useRealButton && toWebsite && !isUrl(websiteUrl)) return "Paste this product's page on your website, starting with https://";
     if (!useRealButton && orderOn && orderTo === 'website' && !isUrl(orderUrl)) return 'Paste the product page address on your website, starting with https://';
     const r = await api<{ post: FacebookPost }>(`${ws}/products/${product.id}/facebook-posts`, {
       method: 'POST',
       body: {
         channelId: page.id,
         message,
-        photoUrls: photos,
+        // With a real button only the first photo is used, as the picture above it.
+        photoUrls: useRealButton ? photos.slice(0, 1) : photos,
         ...(useRealButton
-          ? { realButton: { type: buttonType, pageUrl: pageUrl.trim(), orderTo } }
+          ? { realButton: { type: buttonType, orderTo, ...(isUrl(websiteUrl) ? { websiteUrl: websiteUrl.trim() } : {}) } }
           : { messageButton, orderButton: !orderOn ? null : orderTo === 'messenger' ? { to: 'messenger' } : { to: 'website', url: orderUrl.trim() } }),
       },
     });
@@ -131,8 +133,7 @@ export function PostComposer({ product, onClose, onPosted }: { product: Product;
         </div>
         {style === 'button' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingLeft: 26 }}>
-            <input className="input" type="url" aria-label="This product's page on your website" placeholder="https://banggii.com/product/…" value={pageUrl} onChange={(e) => setPageUrl(e.target.value)} style={{ height: 34, fontSize: 13 }} />
-            <small className="muted">Facebook allows one button per post, and only on a post that links to a web page. It shows this page&apos;s picture above the button, instead of the photos below.</small>
+            <small className="muted">Facebook allows one button per post, with one picture above it: the first photo you tick below.</small>
             <div role="radiogroup" aria-label="Which button" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <label className="check">
                 <input type="radio" name="button-type" checked={buttonType === 'message'} onChange={() => setButtonType('message')} />
@@ -150,8 +151,11 @@ export function PostComposer({ product, onClose, onPosted }: { product: Product;
                   </label>
                   <label className="check">
                     <input type="radio" name="order-to" checked={orderTo === 'website'} onChange={() => setOrderTo('website')} />
-                    To the page on my website
+                    To this product on my website
                   </label>
+                  {orderTo === 'website' && (
+                    <input className="input" type="url" aria-label="This product's page on your website" placeholder="https://banggii.com/product/…" value={websiteUrl} onChange={(e) => setWebsiteUrl(e.target.value)} style={{ height: 34, fontSize: 13 }} />
+                  )}
                 </div>
               )}
             </div>
@@ -185,10 +189,18 @@ export function PostComposer({ product, onClose, onPosted }: { product: Product;
           </div>
         )}
       </fieldset>
-      {useRealButton ? null : product.images.length > 0 ? (
+      {product.images.length > 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <span style={{ fontSize: 13, fontWeight: 600 }}>
-            Photos <small className="muted">({photos.length} of {product.images.length} chosen)</small>
+            {useRealButton ? (
+              <>
+                Picture above the button <small className="muted">(the first photo you tick)</small>
+              </>
+            ) : (
+              <>
+                Photos <small className="muted">({photos.length} of {product.images.length} chosen)</small>
+              </>
+            )}
           </span>
           <div className="photos">
             {product.images.map((img, i) => {

@@ -1,0 +1,1 @@
+ALTER TABLE "products" ADD COLUMN "website_url" text;

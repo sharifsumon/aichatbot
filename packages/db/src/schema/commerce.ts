@@ -61,6 +61,8 @@ export const products = pgTable(
      * product's colours, or '' for a photo of the whole product.
      */
     images: jsonb().$type<ProductImage[]>().notNull().default([]),
+    /** The product's page on the shop's own website, where "Order Now" on a post leads. */
+    websiteUrl: text(),
     status: productStatusEnum().notNull().default('active'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
