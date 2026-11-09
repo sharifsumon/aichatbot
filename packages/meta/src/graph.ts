@@ -92,34 +92,56 @@ export class GraphClient {
   }
 
   /**
-   * Publishes a post with one real button at the bottom and returns its id
-   * ("{pageId}_{postId}"). Facebook only puts a button on a link post and
-   * shows the link's own preview (its og:image) above it. MESSAGE_PAGE opens
-   * Messenger; ORDER_NOW opens `target` (default: `link`). Needs pages_manage_posts.
+   * Publishes a post on the page and returns its id ("{pageId}_{postId}").
+   * Needs pages_manage_posts.
+   *
+   * With a button: a link post with one real button at the bottom. Facebook
+   * only allows that on link posts and shows the link's own preview (its
+   * og:image) above it. MESSAGE_PAGE opens Messenger; ORDER_NOW opens
+   * `target` (default: `link`).
+   *
+   * Without: the photos are uploaded unpublished first, then attached to one
+   * post, so several photos show as one album-style post.
    */
   async publishPost(
     pageToken: string,
     pageId: string,
-    post: { message: string; button: { type: 'ORDER_NOW' | 'MESSAGE_PAGE'; link: string; target?: string } },
+    post: { message: string } & (
+      | { button: { type: 'ORDER_NOW' | 'MESSAGE_PAGE'; link: string; target?: string }; photoUrls?: never }
+      | { photoUrls: string[]; button?: never }
+    ),
   ): Promise<string> {
-    const { button } = post;
+    if (post.button) {
+      const { button } = post;
+      const res = await this.post<{ id: string }>(`/${pageId}/feed`, pageToken, {
+        message: post.message,
+        link: button.link,
+        call_to_action:
+          button.type === 'MESSAGE_PAGE'
+            ? { type: 'MESSAGE_PAGE', value: { app_destination: 'MESSENGER' } }
+            : { type: button.type, value: { link: button.target ?? button.link } },
+      });
+      return res.id;
+    }
+    const media: { media_fbid: string }[] = [];
+    for (const url of post.photoUrls) {
+      // Facebook downloads the photo while we wait, which can take a while.
+      const photo = await this.post<{ id: string }>(`/${pageId}/photos`, pageToken, { url, published: false }, 60_000);
+      media.push({ media_fbid: photo.id });
+    }
     const res = await this.post<{ id: string }>(`/${pageId}/feed`, pageToken, {
       message: post.message,
-      link: button.link,
-      call_to_action:
-        button.type === 'MESSAGE_PAGE'
-          ? { type: 'MESSAGE_PAGE', value: { app_destination: 'MESSENGER' } }
-          : { type: button.type, value: { link: button.target ?? button.link } },
+      ...(media.length ? { attached_media: media } : {}),
     });
     return res.id;
   }
 
-  private async post<T>(path: string, token: string, body: unknown): Promise<T> {
+  private async post<T>(path: string, token: string, body: unknown, timeoutMs = 15_000): Promise<T> {
     const res = await this.fetchImpl(`${this.base}${path}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(15_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     const json = (await res.json().catch(() => ({}))) as T & { error?: { message: string; code?: number } };
     if (!res.ok || json.error) {

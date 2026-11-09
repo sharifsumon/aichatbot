@@ -10,15 +10,20 @@ import { shareUrl } from './share.ts';
 
 /** Facebook allows longer posts, but a product post this long is a mistake. */
 export const MAX_POST_TEXT = 5000;
+/** Facebook attaches at most 10 photos to one post through attached_media. */
+export const MAX_POST_PHOTOS = 10;
 
 const postBody = z.object({
   /** The page to post on; may be left out when the shop has one connected page. */
   channelId: z.string().uuid().optional(),
   message: z.string().trim().min(1, 'Write something for the post').max(MAX_POST_TEXT, `A post can be at most ${MAX_POST_TEXT} characters`),
-  /** The catalog photo shown above the button: one of the product's own photos (default: the main one). */
-  photoUrls: z.array(z.string()).max(1, 'Choose one photo').default([]),
   /**
-   * The real button at the bottom of the post. Facebook only puts a button
+   * The product's own photos to post, in order. With a button only the first
+   * is used, as the picture above it; without one they're posted together.
+   */
+  photoUrls: z.array(z.string()).max(MAX_POST_PHOTOS, `A post can have at most ${MAX_POST_PHOTOS} photos`).default([]),
+  /**
+   * An optional real button at the bottom of the post. Facebook only puts a button
    * on a post that links to a web page and shows that page's picture, so the
    * post links to Agently's share page for the product: Facebook reads the
    * chosen catalog photo there, and visitors are sent on to the website.
@@ -28,7 +33,7 @@ const postBody = z.object({
     /** Order Now: the product's page on the shop's website (saved on the product), or Messenger. */
     orderTo: z.enum(['messenger', 'website']).default('website'),
     websiteUrl: z.string().trim().max(2000).url('Paste the product page address, starting with https://').refine((u) => /^https?:\/\//i.test(u), 'must be a web link').nullish(),
-  }),
+  }).nullish(),
 });
 
 export interface FacebookPostDeps {
@@ -85,27 +90,31 @@ export const facebookPostRoutes: FastifyPluginAsync<FacebookPostDeps> = async (a
     }
 
     const real = body.button;
-    const websiteUrl = real.websiteUrl ?? product.websiteUrl;
-    if (real.type === 'order' && real.orderTo === 'website' && !websiteUrl) {
+    const websiteUrl = real?.websiteUrl ?? product.websiteUrl;
+    if (real?.type === 'order' && real.orderTo === 'website' && !websiteUrl) {
       return reply.code(400).send({ error: "Paste this product's page on your website for the Order Now button" });
     }
-    if (real.websiteUrl && real.websiteUrl !== product.websiteUrl) {
+    if (real?.websiteUrl && real.websiteUrl !== product.websiteUrl) {
       // Remembered for the next post, and used by the share page.
       await db.update(products).set({ websiteUrl: real.websiteUrl }).where(eq(products.id, product.id));
     }
-    const photoIndex = Math.max(0, product.images.findIndex((i) => i.url === photoUrls[0]));
-    const link = shareUrl(deps.urls.api, productId, photoIndex);
-    const button =
-      real.type === 'message'
-        ? { type: 'MESSAGE_PAGE' as const, link }
-        : { type: 'ORDER_NOW' as const, link, target: real.orderTo === 'messenger' || !websiteUrl ? messengerLink(page.externalId, 'order', productId) : websiteUrl };
+    let button: { type: 'MESSAGE_PAGE' | 'ORDER_NOW'; link: string; target?: string } | undefined;
+    if (real) {
+      const photoIndex = Math.max(0, product.images.findIndex((i) => i.url === photoUrls[0]));
+      const link = shareUrl(deps.urls.api, productId, photoIndex);
+      button =
+        real.type === 'message'
+          ? { type: 'MESSAGE_PAGE', link }
+          : { type: 'ORDER_NOW', link, target: real.orderTo === 'messenger' || !websiteUrl ? messengerLink(page.externalId, 'order', productId) : websiteUrl };
+    }
     const { message } = body;
+    const posted = button ? photoUrls.slice(0, 1) : photoUrls;
 
     let postId: string;
     try {
       postId = await deps.graph.publishPost(decryptSecret(page.accessTokenEncrypted, deps.encryptionKey), page.externalId, {
         message,
-        button,
+        ...(button ? { button } : { photoUrls }),
       });
     } catch (err) {
       if (!(err instanceof GraphApiError)) throw err;
@@ -120,12 +129,13 @@ export const facebookPostRoutes: FastifyPluginAsync<FacebookPostDeps> = async (a
           reconnect: true,
         });
       }
-      return reply.code(502).send({ error: `Facebook refused the post with the ${button.type === 'MESSAGE_PAGE' ? 'Send Message' : 'Order Now'} button: ${err.message}` });
+      const what = button ? `the post with the ${button.type === 'MESSAGE_PAGE' ? 'Send Message' : 'Order Now'} button` : 'the post';
+      return reply.code(502).send({ error: `Facebook refused ${what}: ${err.message}` });
     }
 
     const [row] = await db
       .insert(productPosts)
-      .values({ workspaceId, productId, channelId: page.id, postId, message, photoUrls, createdByUserId: req.user.id })
+      .values({ workspaceId, productId, channelId: page.id, postId, message, photoUrls: posted, createdByUserId: req.user.id })
       .returning();
     await db.insert(activities).values({
       workspaceId,
