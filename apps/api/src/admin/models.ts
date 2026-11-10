@@ -33,7 +33,12 @@ export interface AdminModelDeps {
 const serviceBody = z
   .object({
     provider: z.enum(TRYON_SERVICES as ['fashn', 'gemini', 'fal']),
-    model: z.string().trim().max(120).default(''),
+    model: z
+      .string()
+      .trim()
+      .max(200)
+      .regex(/^[A-Za-z0-9._~:/?#=-]*$/, 'must be a model name like fal-ai/nano-banana/edit (no spaces or @)')
+      .default(''),
     mode: z.enum(['', 'performance', 'balanced', 'quality']).default(''),
     costPerImageUsd: z.number().min(0).max(10).nullable().default(null),
     /** Left out: keep the saved key. Empty: remove it (the server's .env key is used again). */

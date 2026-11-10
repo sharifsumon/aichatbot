@@ -121,3 +121,8 @@ test('fal.ai 404 says the model name is wrong', async () => {
   const p = new FalTryOn({ apiKey: 'k', pollMs: 0, model: 'fal-ai/nope/edit', fetch: (async () => json(404, {})) as typeof fetch });
   await assert.rejects(p.tryOn(req), (e: TryOnError) => /no model called fal-ai\/nope\/edit/.test(e.userMessage));
 });
+
+test('fal.ai 400 shows the reason fal gives', async () => {
+  const p = new FalTryOn({ apiKey: 'k', pollMs: 0, fetch: (async () => json(400, { detail: 'Cannot target application revisions directly.' })) as typeof fetch });
+  await assert.rejects(p.tryOn(req), (e: TryOnError) => e.userMessage === 'fal.ai did not accept the request: Cannot target application revisions directly.');
+});
