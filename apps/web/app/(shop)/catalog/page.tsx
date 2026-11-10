@@ -51,6 +51,16 @@ export default function CatalogPage() {
     load();
   }, [load]);
 
+  // "New product" from Images with models opens the editor with that photo.
+  const [newPhoto, setNewPhoto] = useState<string>();
+  useEffect(() => {
+    const photo = new URLSearchParams(window.location.search).get('newPhoto');
+    if (!photo || !manager) return;
+    setNewPhoto(photo);
+    setEditing('new');
+    window.history.replaceState(null, '', window.location.pathname);
+  }, [manager]);
+
   const onSearch = useCallback((v: string) => setQ(v), []);
   const current = editing === 'new' ? undefined : editing;
 
@@ -59,7 +69,12 @@ export default function CatalogPage() {
       <TopBar title="Product Catalog">
         <SearchBox label="Search products" placeholder="Name or product code…" onSearch={onSearch} />
         {manager && (
-          <button type="button" className="btn primary" onClick={() => setEditing('new')}>
+          <a className="btn" href="/model-images">
+            Images with models
+          </a>
+        )}
+        {manager && (
+          <button type="button" className="btn primary" onClick={() => (setNewPhoto(undefined), setEditing('new'))}>
             + Add product
           </button>
         )}
@@ -125,6 +140,7 @@ export default function CatalogPage() {
             <Editor
               key={current?.id ?? 'new'}
               product={current}
+              initialPhoto={current ? undefined : newPhoto}
               onClose={() => setEditing(undefined)}
               onPost={current ? () => setPosting(current) : undefined}
               onSaved={(p, message) => {
@@ -183,11 +199,14 @@ function variantsOf(g: Grid) {
 
 function Editor({
   product,
+  initialPhoto,
   onClose,
   onSaved,
   onPost,
 }: {
   product?: Product;
+  /** A photo to start a new product with. */
+  initialPhoto?: string;
   onClose: () => void;
   onSaved: (p: Product | null, message: string) => void;
   /** Opens the Facebook post composer for the saved product. */
@@ -205,7 +224,7 @@ function Editor({
   const [code, setCode] = useState(product?.code ?? '');
   const [description, setDescription] = useState(product?.description ?? '');
   const [price, setPrice] = useState(product ? String(Number(product.price)) : '');
-  const [images, setImages] = useState<ProductImage[]>(() => product?.images ?? []);
+  const [images, setImages] = useState<ProductImage[]>(() => product?.images ?? (initialPhoto ? [{ url: initialPhoto, color: '' }] : []));
   const [photoLink, setPhotoLink] = useState('');
   /** The colour new photos are tagged with; '' for the whole product. */
   const [photoColor, setPhotoColor] = useState('');

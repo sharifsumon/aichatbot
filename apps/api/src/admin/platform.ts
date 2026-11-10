@@ -48,6 +48,8 @@ const SETTINGS = {
   'ai.fallbackModel': z.string().trim().min(1).max(200).nullable(),
   'ai.defaultSystemInstruction': z.string().max(4000),
   'credits.topUp': z.object({ credits: z.number().int().min(1), priceBdt: money, priceUsd: money }),
+  /** AI credits one "product image with a model" uses from the shop's monthly credits. */
+  'tryon.creditsPerImage': z.number().int().min(0).max(1000),
 } as const;
 
 /** Plans, the Agently team, the audit log, platform settings and feature flags. */
@@ -211,7 +213,8 @@ export const adminPlatformRoutes: FastifyPluginAsync<{ db: Db }> = async (app, {
   app.get('/settings', async (req, reply) => {
     if (!(await requirePerm(req, reply, 'settings.manage'))) return reply;
     const rows = await db.select().from(platformSettings);
-    return { settings: Object.fromEntries(rows.map((r) => [r.key, r.value])), keys: Object.keys(SETTINGS) };
+    // Only the settings edited here; the try-on service (with its key) has its own route.
+    return { settings: Object.fromEntries(rows.filter((r) => r.key in SETTINGS).map((r) => [r.key, r.value])), keys: Object.keys(SETTINGS) };
   });
 
   app.put<{ Params: { key: string }; Body: { value?: unknown } }>('/settings/:key', async (req, reply) => {

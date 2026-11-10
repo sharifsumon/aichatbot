@@ -26,9 +26,10 @@ import { settingsRoutes } from './settings.ts';
 import { teamRoutes } from './team.ts';
 import { billingRoutes } from './billing.ts';
 import { homeRoutes } from './home.ts';
+import { tryOnRoutes, type TryOnDeps } from './tryon.ts';
 import { limitsFor, pagesInUse } from '@agently/billing';
 
-export type DashboardDeps = InboxDeps & CatalogDeps & KnowledgeDeps & FacebookPostDeps & {
+export type DashboardDeps = InboxDeps & CatalogDeps & KnowledgeDeps & FacebookPostDeps & TryOnDeps & {
   db: Db;
   facebook: Pick<FacebookApp, 'pages' | 'subscribePage' | 'unsubscribePage'>;
   encryptionKey: string;
@@ -77,6 +78,7 @@ export const dashboardApiRoutes: FastifyPluginAsync<DashboardDeps> = async (app,
   app.register(teamRoutes, childDeps);
   app.register(billingRoutes, childDeps);
   app.register(homeRoutes, childDeps);
+  app.register(tryOnRoutes, childDeps);
 
   /** Sign out from the dashboard (same origin rules as every other change). */
   app.post('/logout', async (req, reply) => {

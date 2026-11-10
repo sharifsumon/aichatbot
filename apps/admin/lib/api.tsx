@@ -86,3 +86,26 @@ export function qs(params: Record<string, string | number | boolean | null | und
   const s = p.toString();
   return s ? `?${s}` : '';
 }
+
+/** Sends a form with one file (and text fields first) as multipart/form-data. */
+export function useUpload() {
+  const base = useContext(ApiBase);
+  return useCallback(
+    async <T,>(path: string, file: File, fields: Record<string, string> = {}): Promise<T> => {
+      const form = new FormData();
+      // Text fields go before the file, so the API can read them with it.
+      for (const [k, v] of Object.entries(fields)) form.append(k, v);
+      form.append('file', file);
+      let res: Response;
+      try {
+        res = await fetch(`${base}/admin${path}`, { method: 'POST', credentials: 'include', body: form, signal: AbortSignal.timeout(120_000) });
+      } catch {
+        throw new ApiError(0, 'The upload did not finish. Check your connection and try again.');
+      }
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new ApiError(res.status, data.error ?? `Upload failed (${res.status})`);
+      return data as T;
+    },
+    [base],
+  );
+}

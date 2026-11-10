@@ -349,3 +349,26 @@ a.stat:hover { border-color: #c7d2fe; color: inherit; }
 .legal p, .legal li { color: var(--text); }
 .back-link { display: none; }
 @media (max-width: 720px) { .back-link { display: inline-flex; } }
+
+/* Generate product image with models */
+.tryon { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; align-items: start; }
+.pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; }
+.pick button { padding: 0; border: 2px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface); cursor: pointer; display: flex; flex-direction: column; color: var(--ink); text-align: left; }
+.pick button.on { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.pick img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; display: block; background: var(--line-soft); }
+.pick span { font-size: 12px; font-weight: 600; padding: 6px 8px; }
+.garment { display: flex; align-items: center; justify-content: center; aspect-ratio: 3 / 4; max-height: 320px; border: 2px dashed var(--line); border-radius: 12px; background: var(--line-soft); color: var(--subtle); font-size: 13px; cursor: pointer; overflow: hidden; width: 100%; padding: 0; }
+.garment img { width: 100%; height: 100%; object-fit: contain; }
+.results { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+.result { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; }
+.result .ph { aspect-ratio: 3 / 4; background: var(--line-soft); display: flex; align-items: center; justify-content: center; color: var(--subtle); font-size: 13px; text-align: center; padding: 0; position: relative; }
+.result .ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.result .ph .thumbs { position: absolute; left: 8px; bottom: 8px; display: flex; gap: 4px; }
+.result .ph .thumbs img { width: 36px; height: 48px; border-radius: 6px; border: 2px solid #fff; object-fit: cover; }
+.result .info { padding: 10px 12px 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.spinner { width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--brand-soft); border-top-color: var(--brand); animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.plist { display: flex; flex-direction: column; gap: 6px; max-height: 300px; overflow-y: auto; }
+.plist button { display: flex; align-items: center; gap: 10px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); cursor: pointer; text-align: left; color: var(--ink); }
+.plist button.on { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand-soft); }
+.plist img, .plist .noimg { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; background: var(--line-soft); flex: none; }

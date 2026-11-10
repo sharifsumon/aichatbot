@@ -42,6 +42,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@agently/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
       '@agently/billing':
         specifier: workspace:*
         version: link:../../packages/billing

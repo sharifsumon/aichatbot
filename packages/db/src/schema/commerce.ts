@@ -3,6 +3,7 @@ import { createdAt, id, updatedAt } from './common.ts';
 import { channels } from './agent.ts';
 import { conversations, customers } from './crm.ts';
 import { users, workspaces } from './tenancy.ts';
+import { modelCharacters } from './platform.ts';
 
 export interface ProductImage {
   url: string;
@@ -182,4 +183,35 @@ export const orderItems = pgTable(
     unitPrice: numeric({ precision: 12, scale: 2 }).notNull(),
   },
   (t) => [index().on(t.orderId)],
+);
+
+export const tryOnStatusEnum = pgEnum('try_on_status', ['pending', 'succeeded', 'failed']);
+
+/**
+ * One "product image with a model": the shop's garment photo put on one of
+ * the platform's model characters by the try-on AI. Runs in the background;
+ * the dashboard polls until it succeeds or fails.
+ */
+export const tryOnImages = pgTable(
+  'try_on_images',
+  {
+    id: id(),
+    workspaceId: uuid().notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    characterId: uuid().references(() => modelCharacters.id, { onDelete: 'set null' }),
+    /** The model photo used, kept in case the character is later deleted. */
+    modelImageUrl: text().notNull(),
+    garmentImageUrl: text().notNull(),
+    /** auto, tops, bottoms or one-pieces: helps the AI know what to replace. */
+    category: text().notNull().default('auto'),
+    status: tryOnStatusEnum().notNull().default('pending'),
+    resultImageUrl: text(),
+    error: text(),
+    provider: text().notNull(),
+    model: text().notNull(),
+    costUsd: numeric({ precision: 12, scale: 6 }).notNull().default('0'),
+    createdByUserId: uuid().references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    finishedAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [index().on(t.workspaceId, t.createdAt)],
 );
