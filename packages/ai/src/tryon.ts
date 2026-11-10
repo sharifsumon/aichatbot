@@ -312,7 +312,7 @@ export class FalTryOn implements TryOnProvider {
               ? 'The fal.ai account is out of balance or busy. Check the fal.ai billing page.'
               : start.status === 400 || start.status === 422
                 ? `fal.ai did not accept the request: ${falDetail(started.detail ?? started)}`
-                : 'The image AI refused the request. Try again in a minute.';
+                : `fal.ai error ${start.status}${started.detail ? `: ${falDetail(started.detail)}` : ''}. Try again in a minute.`;
       throw new TryOnError(`fal.ai submit to ${this.model} failed (${start.status}): ${JSON.stringify(started.detail ?? started)}`, message);
     }
     // Status and result live under owner/app only, e.g. fal-ai/nano-banana/requests/<id>.
