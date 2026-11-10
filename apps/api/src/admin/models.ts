@@ -45,9 +45,9 @@ const serviceBody = z
     apiKey: z.string().trim().max(500).optional(),
   })
   .strict()
-  // fal.ai keys are "<key id>:<secret>". This catches a browser filling in a login password.
-  .refine((b) => b.provider !== 'fal' || !b.apiKey || /^[A-Za-z0-9-]+:[A-Za-z0-9]+$/.test(b.apiKey), {
-    message: 'This is not a fal.ai API key. fal.ai keys look like abc123-…:def456…; copy one from fal.ai/dashboard/keys.',
+  // A browser can fill a saved login password into the key box. Real keys are long and have no spaces.
+  .refine((b) => !b.apiKey || (b.apiKey.length >= 20 && !/\s/.test(b.apiKey)), {
+    message: 'This does not look like an API key (too short or has spaces). Copy the key again from the AI service dashboard.',
     path: ['apiKey'],
   });
 
