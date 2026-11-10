@@ -238,6 +238,22 @@ const FAL_PRICES: Record<string, number> = {
 };
 
 /**
+ * Turns what a person may type in the Model box into a fal endpoint id:
+ * "https://fal.ai/models/fal-ai/nano-banana/edit/api" → "fal-ai/nano-banana/edit",
+ * "nano-banana-2" → "fal-ai/nano-banana-2/edit". Empty → fal-ai/nano-banana/edit.
+ */
+export function falModelId(input?: string): string {
+  let m = (input ?? '').trim();
+  m = m.replace(/^https?:\/\/(www\.)?fal\.ai\/models\//, '').replace(/^https?:\/\/(queue\.)?fal\.run\//, '');
+  m = m.replace(/[?#].*$/, '').replace(/\/(api|playground|readme)$/, '').replace(/^\/+|\/+$/g, '');
+  if (!m) return 'fal-ai/nano-banana/edit';
+  if (!m.includes('/')) m = `fal-ai/${m}`;
+  // Try-on needs the editing endpoint: the plain nano-banana models only make pictures from text.
+  if (/^fal-ai\/nano-banana[\w.-]*$/.test(m)) m = `${m}/edit`;
+  return m;
+}
+
+/**
  * fal.ai: Google's Nano Banana (Gemini image) models hosted by fal. Submits to
  * fal's queue, polls the status, then reads the result and downloads the image.
  */
@@ -247,7 +263,7 @@ export class FalTryOn implements TryOnProvider {
   private readonly o: Required<Omit<FalOptions, 'model' | 'costPerImageUsd'>> & { costPerImageUsd?: number };
 
   constructor(options: FalOptions) {
-    this.model = (options.model || 'fal-ai/nano-banana/edit').replace(/^\/+|\/+$/g, '');
+    this.model = falModelId(options.model);
     this.o = {
       apiKey: options.apiKey,
       costPerImageUsd: options.costPerImageUsd,
@@ -274,7 +290,15 @@ export class FalTryOn implements TryOnProvider {
     });
     const started = (await start.json().catch(() => ({}))) as { request_id?: string; status_url?: string; response_url?: string; detail?: unknown };
     if (!start.ok || !started.request_id) {
-      throw new TryOnError(`fal.ai submit failed (${start.status}): ${JSON.stringify(started.detail ?? started)}`, start.status === 401 || start.status === 403 ? 'The fal.ai API key was refused. Check it under Platform settings.' : 'The image AI refused the request. Try again in a minute.');
+      const message =
+        start.status === 401 || start.status === 403
+          ? 'The fal.ai API key was refused. Check it under Platform settings.'
+          : start.status === 404
+            ? `fal.ai has no model called ${this.model}. Check the Model box under Platform settings (e.g. fal-ai/nano-banana/edit).`
+            : start.status === 402 || start.status === 429
+              ? 'The fal.ai account is out of balance or busy. Check the fal.ai billing page.'
+              : 'The image AI refused the request. Try again in a minute.';
+      throw new TryOnError(`fal.ai submit to ${this.model} failed (${start.status}): ${JSON.stringify(started.detail ?? started)}`, message);
     }
     // Status and result live under owner/app only, e.g. fal-ai/nano-banana/requests/<id>.
     const app = this.model.split('/').slice(0, 2).join('/');

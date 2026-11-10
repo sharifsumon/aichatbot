@@ -364,7 +364,14 @@ function TryOnServiceCard() {
       {load.error && <Notice tone="error">{load.error}</Notice>}
       <label className="field">
         Service
-        <select value={provider} onChange={(e) => setProvider(e.target.value as TryOnService['provider'])}>
+        <select
+          value={provider}
+          onChange={(e) => {
+            // A model name belongs to one service; switching starts from that service's default.
+            setProvider(e.target.value as TryOnService['provider']);
+            setModel('');
+          }}
+        >
           <option value="fashn">{SERVICE_HELP.fashn.name}</option>
           <option value="gemini">{SERVICE_HELP.gemini.name}</option>
           <option value="fal">{SERVICE_HELP.fal.name}</option>

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { FalTryOn, FashnTryOn, GeminiTryOn, TryOnError, tryOnFromEnv } from './tryon.ts';
+import { FalTryOn, falModelId, FashnTryOn, GeminiTryOn, TryOnError, tryOnFromEnv } from './tryon.ts';
 
 const img = (b: number[]) => ({ bytes: new Uint8Array(b), contentType: 'image/jpeg' });
 const req = { model: img([1, 2]), garment: img([3, 4]), category: 'one-pieces' as const };
@@ -104,4 +104,20 @@ test('fal.ai refused key and failed runs carry readable messages', async () => {
   });
   await assert.rejects(failed.tryOn(req), (e: TryOnError) => /content rules/.test(e.userMessage));
   assert.equal(tryOnFromEnv({ TRYON_API_KEY: 'k', TRYON_PROVIDER: 'fal' })?.model, 'fal-ai/nano-banana/edit');
+});
+
+test('fal model names typed in many ways become an endpoint id', () => {
+  assert.equal(falModelId(''), 'fal-ai/nano-banana/edit');
+  assert.equal(falModelId('  '), 'fal-ai/nano-banana/edit');
+  assert.equal(falModelId('fal-ai/nano-banana/edit'), 'fal-ai/nano-banana/edit');
+  assert.equal(falModelId('https://fal.ai/models/fal-ai/nano-banana/api#api-call-setup'), 'fal-ai/nano-banana/edit');
+  assert.equal(falModelId('https://fal.ai/models/fal-ai/nano-banana-pro/edit/api'), 'fal-ai/nano-banana-pro/edit');
+  assert.equal(falModelId('nano-banana-2'), 'fal-ai/nano-banana-2/edit');
+  assert.equal(falModelId('/fal-ai/nano-banana/'), 'fal-ai/nano-banana/edit');
+  assert.equal(falModelId('https://queue.fal.run/fal-ai/nano-banana-2/edit'), 'fal-ai/nano-banana-2/edit');
+});
+
+test('fal.ai 404 says the model name is wrong', async () => {
+  const p = new FalTryOn({ apiKey: 'k', pollMs: 0, model: 'fal-ai/nope/edit', fetch: (async () => json(404, {})) as typeof fetch });
+  await assert.rejects(p.tryOn(req), (e: TryOnError) => /no model called fal-ai\/nope\/edit/.test(e.userMessage));
 });
