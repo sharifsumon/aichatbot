@@ -53,6 +53,12 @@ export const Icon = {
       <path d="M8 21l1.5-9L7 9.5 9.5 8h5L17 9.5 14.5 12 16 21z" />
     </Svg>
   ),
+  video: () => (
+    <Svg>
+      <rect x="3" y="6" width="13" height="12" rx="2" />
+      <path d="M16 10l5-3v10l-5-3z" />
+    </Svg>
+  ),
   comments: () => (
     <Svg>
       <path d="M4 5h16v10H10l-5 4v-4H4z" />

@@ -40,6 +40,8 @@ const app = buildServer({
   publicFileUrl: publicBase ? (key) => `${publicBase}/${key}` : undefined,
   // Product images with models; off until TRYON_API_KEY is set.
   tryOn: tryOnFromEnv(),
+  // Videos with models use fal.ai: FAL_KEY, or the try-on key when try-on is on fal.
+  falApiKey: process.env.FAL_KEY || (process.env.TRYON_PROVIDER === 'fal' ? process.env.TRYON_API_KEY : undefined) || undefined,
   enqueueKnowledge: async (job) => {
     // Same job id as the worker's scheduler uses: repeated clicks in a minute merge.
     await knowledge.add('sync', job, {

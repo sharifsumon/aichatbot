@@ -43,6 +43,14 @@ export const TRYON_STYLES = {
     neutral: 'a calm, neutral expression',
     confident: 'a confident, serious fashion-model expression',
   },
+  camera: {
+    closeup: 'close-up shot from the chest up, the face and neckline clearly visible',
+    half: 'medium shot from the waist up',
+    full: 'full-length shot showing the whole body from head to feet',
+    'three-quarter': 'shot from a three-quarter angle, slightly to the side',
+    low: 'shot from a slightly low camera angle, making the model look tall and elegant',
+    high: 'shot from a slightly high camera angle',
+  },
   background: {
     white: 'a clean plain white studio background',
     grey: 'a plain light grey studio background with soft shadows',
@@ -58,6 +66,7 @@ export const TRYON_STYLES = {
 export type TryOnStyle = {
   pose?: keyof typeof TRYON_STYLES.pose;
   expression?: keyof typeof TRYON_STYLES.expression;
+  camera?: keyof typeof TRYON_STYLES.camera;
   background?: keyof typeof TRYON_STYLES.background;
 };
 
@@ -206,12 +215,14 @@ export function tryOnPrompt(req: TryOnRequest): string {
   const pose = req.style?.pose && TRYON_STYLES.pose[req.style.pose];
   const face = req.style?.expression && TRYON_STYLES.expression[req.style.expression];
   const background = req.style?.background && TRYON_STYLES.background[req.style.background];
+  const camera = req.style?.camera && TRYON_STYLES.camera[req.style.camera];
   return [
     `The first image is a fashion model. The second image shows ${what} a shop sells.`,
     `Make a realistic e-commerce product photo of the same model wearing exactly ${what} from the second image.`,
     'Keep the model’s face, identity, body, skin tone and hair unchanged.',
     pose ? `Pose: ${pose}.` : 'Keep the pose.',
     face ? `Expression: ${face}.` : '',
+    camera ? `Camera: ${camera}.` : '',
     background ? `Background: ${background}.` : 'Keep the background.',
     'Copy the garment faithfully: colour, print, embroidery, fabric texture, neckline, sleeves and length.',
     'Do not add text, logos or watermarks.',
@@ -288,7 +299,7 @@ const FAL_PRICES: Record<string, number> = {
  * "nano-banana-2" → "fal-ai/nano-banana-2/edit". Empty → fal-ai/nano-banana/edit.
  */
 /** fal's error detail as one short line for the shop. */
-function falDetail(detail: unknown): string {
+export function falDetail(detail: unknown): string {
   const text =
     typeof detail === 'string'
       ? detail

@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useShop } from '@/components/Shell';
-import { Chips, Dialog, Empty, Loading, Notice, Pill, TopBar } from '@/components/ui';
+import { AddToProduct } from '@/components/AddToProduct';
+import { Chips, Empty, Loading, Notice, Pill, TopBar } from '@/components/ui';
 import { ApiError, qs, useApi, useLoad, useUpload } from '@/lib/api';
 import { shrinkImage } from '@/lib/image';
 import type { Product } from '@/lib/types';
@@ -36,6 +37,7 @@ const CATEGORIES: { value: Category; label: string }[] = [
 
 type Pose = '' | 'standing' | 'walking' | 'sitting' | 'hand-on-hip' | 'side' | 'back';
 type Expression = '' | 'smile' | 'laughing' | 'neutral' | 'confident';
+type Camera = '' | 'closeup' | 'half' | 'full' | 'three-quarter' | 'low' | 'high';
 type Background = '' | 'white' | 'grey' | 'pastel' | 'street' | 'garden' | 'indoor' | 'beach' | 'festive';
 
 const POSES: { value: Pose; label: string }[] = [
@@ -53,6 +55,15 @@ const EXPRESSIONS: { value: Expression; label: string }[] = [
   { value: 'laughing', label: 'Laughing' },
   { value: 'neutral', label: 'Calm' },
   { value: 'confident', label: 'Confident, serious' },
+];
+const CAMERAS: { value: Camera; label: string }[] = [
+  { value: '', label: 'Same as the model photo' },
+  { value: 'closeup', label: 'Close-up (chest up)' },
+  { value: 'half', label: 'Waist up' },
+  { value: 'full', label: 'Full body' },
+  { value: 'three-quarter', label: 'Three-quarter angle' },
+  { value: 'low', label: 'Low angle' },
+  { value: 'high', label: 'High angle' },
 ];
 const BACKGROUNDS: { value: Background; label: string }[] = [
   { value: '', label: 'Same as the model photo' },
@@ -87,6 +98,7 @@ export default function ModelImagesPage() {
   const [category, setCategory] = useState<Category>('auto');
   const [pose, setPose] = useState<Pose>('');
   const [expression, setExpression] = useState<Expression>('');
+  const [camera, setCamera] = useState<Camera>('');
   const [background, setBackground] = useState<Background>('');
   const [note, setNote] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -147,6 +159,7 @@ export default function ModelImagesPage() {
           ...(styleOptions && {
             ...(pose && { pose }),
             ...(expression && { expression }),
+            ...(camera && { camera }),
             ...(background && { background }),
             ...(note.trim() && { note: note.trim() }),
           }),
@@ -264,6 +277,16 @@ export default function ModelImagesPage() {
                   </select>
                 </label>
                 <label className="field">
+                  Camera
+                  <select value={camera} onChange={(e) => setCamera(e.target.value as Camera)}>
+                    {CAMERAS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
                   Background
                   <select value={background} onChange={(e) => setBackground(e.target.value as Background)}>
                     {BACKGROUNDS.map((o) => (
@@ -352,76 +375,5 @@ export default function ModelImagesPage() {
         />
       )}
     </>
-  );
-}
-
-/** Adds the image as the last photo of an existing product. */
-function AddToProduct({ url, onClose, onDone }: { url: string; onClose: () => void; onDone: (p: Product) => void }) {
-  const { ws } = useShop();
-  const api = useApi();
-  const [q, setQ] = useState('');
-  const [products, setProducts] = useState<Product[]>();
-  const [chosen, setChosen] = useState<Product>();
-
-  useEffect(() => {
-    let live = true;
-    const t = setTimeout(() => {
-      api<{ products: Product[] }>(`${ws}/products${qs({ q: q.trim(), limit: 30 })}`)
-        .then((r) => live && setProducts(r.products))
-        .catch(() => live && setProducts([]));
-    }, 250);
-    return () => {
-      live = false;
-      clearTimeout(t);
-    };
-  }, [api, ws, q]);
-
-  return (
-    <Dialog
-      title="Add to a product"
-      submitLabel="Add photo"
-      onClose={onClose}
-      onSubmit={async () => {
-        if (!chosen) return 'Choose a product';
-        // Read it fresh, so nothing changed since the list loaded is lost.
-        const { product: p } = await api<{ product: Product }>(`${ws}/products/${chosen.id}`);
-        if (p.images.length >= 10) return `${p.title} already has 10 photos. Remove one in the catalog first.`;
-        if (p.images.some((i) => i.url === url)) return `${p.title} already has this photo.`;
-        await api(`${ws}/products/${p.id}`, {
-          method: 'PUT',
-          body: {
-            title: p.title,
-            code: p.code,
-            description: p.description,
-            price: p.price,
-            images: [...p.images, { url, color: '' }],
-            videoUrl: p.videoUrl,
-            status: p.status,
-            variants: p.variants.map((v) => ({ color: v.color, size: v.size, stock: v.stock, price: v.price })),
-          },
-        });
-        onDone(p);
-      }}
-    >
-      <label className="field">
-        <span className="sr">Search products</span>
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name or code…" autoFocus />
-      </label>
-      <div className="plist" role="listbox" aria-label="Products">
-        {!products && <Loading />}
-        {products?.length === 0 && <Empty>No products found.</Empty>}
-        {products?.map((p) => (
-          <button key={p.id} type="button" role="option" aria-selected={chosen?.id === p.id} className={chosen?.id === p.id ? 'on' : ''} onClick={() => setChosen(p)}>
-            {p.imageUrl ? <img src={p.imageUrl} alt="" /> : <span className="noimg" />}
-            <span>
-              <strong style={{ display: 'block', fontSize: 14 }}>{p.title}</strong>
-              <span className="sub">
-                {p.code} · {p.images.length} photo{p.images.length === 1 ? '' : 's'}
-              </span>
-            </span>
-          </button>
-        ))}
-      </div>
-    </Dialog>
   );
 }

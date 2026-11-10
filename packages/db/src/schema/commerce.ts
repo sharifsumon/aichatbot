@@ -215,3 +215,38 @@ export const tryOnImages = pgTable(
   },
   (t) => [index().on(t.workspaceId, t.createdAt)],
 );
+
+/**
+ * "Videos with models": a model photo turned into a short product video,
+ * talking from the shop's script or walking and talking.
+ */
+export const modelVideos = pgTable(
+  'model_videos',
+  {
+    id: id(),
+    workspaceId: uuid().notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    /** The photo the video starts from: a generated image or the shop's own upload. */
+    sourceImageUrl: text().notNull(),
+    /** talk (lip-sync to a voice) or walk (full motion, speech from the prompt). */
+    mode: text().notNull().default('talk'),
+    script: text(),
+    /** A voice recording the shop uploaded instead of a script. */
+    audioUrl: text(),
+    voice: text(),
+    language: text(),
+    /** Movement and camera choices, plus the shop's own words. */
+    options: jsonb().$type<Record<string, unknown>>().notNull().default({}),
+    status: tryOnStatusEnum().notNull().default('pending'),
+    resultVideoUrl: text(),
+    durationSec: numeric({ precision: 8, scale: 2 }),
+    credits: integer().notNull().default(0),
+    error: text(),
+    provider: text().notNull(),
+    model: text().notNull(),
+    costUsd: numeric({ precision: 12, scale: 6 }).notNull().default('0'),
+    createdByUserId: uuid().references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    finishedAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [index().on(t.workspaceId, t.createdAt)],
+);

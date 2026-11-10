@@ -50,6 +50,11 @@ const SETTINGS = {
   'credits.topUp': z.object({ credits: z.number().int().min(1), priceBdt: money, priceUsd: money }),
   /** AI credits one "product image with a model" uses from the shop's monthly credits. */
   'tryon.creditsPerImage': z.number().int().min(0).max(1000),
+  /** AI credits one second of a "video with a model" uses. */
+  'video.creditsPerSecond': z.number().int().min(0).max(1000),
+  /** fal.ai endpoints for videos: talking (lip-sync) and walk-and-talk. Empty uses the default. */
+  'video.talkModel': z.string().trim().max(200).regex(/^[A-Za-z0-9._~:/-]*$/),
+  'video.walkModel': z.string().trim().max(200).regex(/^[A-Za-z0-9._~:/-]*$/),
 } as const;
 
 /** Plans, the Agently team, the audit log, platform settings and feature flags. */

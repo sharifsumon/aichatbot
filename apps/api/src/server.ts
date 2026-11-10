@@ -8,6 +8,7 @@ import type { ObjectStore } from '@agently/storage';
 import type { CookieSettings } from './auth/session.ts';
 import { facebookAuthRoutes } from './routes/auth-facebook.ts';
 import { dashboardApiRoutes } from './routes/dashboard-api.ts';
+import type { VideoDeps } from './routes/video.ts';
 import { adminRoutes } from './admin/index.ts';
 import { healthRoutes, type HealthDeps } from './routes/health.ts';
 import { metaDataDeletionRoutes } from './routes/meta-data-deletion.ts';
@@ -33,6 +34,10 @@ export type ServerDeps = HealthDeps &
     publicFileUrl?: (key: string) => string;
     /** The try-on AI for product images with models; without it that feature answers 503. */
     tryOn?: TryOnProvider;
+    /** A fal.ai key for videos with models, when Platform settings hold none. */
+    falApiKey?: string;
+    /** For tests: replaces the fal.ai video client. */
+    makeVideo?: VideoDeps['makeVideo'];
   };
 
 export function buildServer(deps: ServerDeps) {
