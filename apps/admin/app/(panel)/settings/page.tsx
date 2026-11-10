@@ -283,7 +283,7 @@ function FlagDialog({ plans, onClose, onDone }: { plans: Plan[]; onClose: () => 
 }
 
 interface TryOnService {
-  provider: 'fashn' | 'gemini';
+  provider: 'fashn' | 'gemini' | 'fal';
   model: string;
   mode: string;
   costPerImageUsd: number | null;
@@ -295,6 +295,7 @@ interface TryOnService {
 const SERVICE_HELP: Record<TryOnService['provider'], { name: string; model: string; cost: string; keyUrl: string }> = {
   fashn: { name: 'FASHN (built for clothes)', model: 'tryon-v1.6', cost: '0.075', keyUrl: 'https://app.fashn.ai/api' },
   gemini: { name: 'Google Gemini image', model: 'gemini-2.5-flash-image', cost: '0.039', keyUrl: 'https://aistudio.google.com/apikey' },
+  fal: { name: 'fal.ai (Nano Banana)', model: 'fal-ai/nano-banana/edit', cost: '0.0398', keyUrl: 'https://fal.ai/dashboard/keys' },
 };
 
 /** The try-on AI service and its API key. The key is write-only: only its last 4 characters come back. */
@@ -366,13 +367,17 @@ function TryOnServiceCard() {
         <select value={provider} onChange={(e) => setProvider(e.target.value as TryOnService['provider'])}>
           <option value="fashn">{SERVICE_HELP.fashn.name}</option>
           <option value="gemini">{SERVICE_HELP.gemini.name}</option>
+          <option value="fal">{SERVICE_HELP.fal.name}</option>
         </select>
       </label>
       <div className="row">
         <label className="field" style={{ flex: '2 1 160px' }}>
           Model
           <input value={model} onChange={(e) => setModel(e.target.value)} placeholder={help.model} maxLength={120} />
-          <small>Empty uses {help.model}.</small>
+          <small>
+            Empty uses {help.model}.
+            {provider === 'fal' && ' Better: fal-ai/nano-banana-2/edit ($0.08) or fal-ai/nano-banana-pro/edit ($0.15).'}
+          </small>
         </label>
         {provider === 'fashn' && (
           <label className="field">

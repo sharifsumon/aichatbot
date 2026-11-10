@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { FashnTryOn, GeminiTryOn, TryOnError, tryOnFromEnv } from './tryon.ts';
+import { FalTryOn, FashnTryOn, GeminiTryOn, TryOnError, tryOnFromEnv } from './tryon.ts';
 
 const img = (b: number[]) => ({ bytes: new Uint8Array(b), contentType: 'image/jpeg' });
 const req = { model: img([1, 2]), garment: img([3, 4]), category: 'one-pieces' as const };
@@ -64,4 +64,44 @@ test('settings pick the service; no key means off', () => {
   assert.equal(tryOnFromEnv({ TRYON_API_KEY: 'k' })?.name, 'fashn');
   assert.equal(tryOnFromEnv({ TRYON_API_KEY: 'k', TRYON_PROVIDER: 'gemini', TRYON_MODEL: 'gemini-x' })?.model, 'gemini-x');
   assert.throws(() => tryOnFromEnv({ TRYON_API_KEY: 'k', TRYON_PROVIDER: 'other' }));
+});
+
+test('fal.ai submits to the queue with public links, polls, and downloads the image', async () => {
+  const calls: { url: string; method?: string; body?: any; auth?: string }[] = [];
+  let polls = 0;
+  const provider = new FalTryOn({
+    apiKey: 'fk',
+    pollMs: 0,
+    fetch: (async (url: string, init: RequestInit = {}) => {
+      calls.push({ url, method: init.method, body: init.body ? JSON.parse(init.body as string) : undefined, auth: (init.headers as Record<string, string> | undefined)?.authorization });
+      if (url === 'https://queue.fal.run/fal-ai/nano-banana/edit') {
+        return json(200, { request_id: 'r1', status_url: 'https://queue.fal.run/fal-ai/nano-banana/requests/r1/status', response_url: 'https://queue.fal.run/fal-ai/nano-banana/requests/r1' });
+      }
+      if (url.endsWith('/status')) return json(200, { status: ++polls === 1 ? 'IN_PROGRESS' : 'COMPLETED' });
+      if (url.endsWith('/requests/r1')) return json(200, { images: [{ url: 'https://fal.media/out.jpg', content_type: 'image/jpeg' }], description: '' });
+      return new Response(new Uint8Array([5, 6]), { status: 200, headers: { 'content-type': 'image/jpeg' } });
+    }) as typeof fetch,
+  });
+  const r = await provider.tryOn({ ...req, model: { ...req.model, url: 'https://files.example/m.jpg' } });
+  assert.equal(calls[0]!.auth, 'Key fk');
+  assert.equal(calls[0]!.body.image_urls[0], 'https://files.example/m.jpg');
+  assert.match(calls[0]!.body.image_urls[1], /^data:image\/jpeg;base64,/);
+  assert.match(calls[0]!.body.prompt, /full outfit/);
+  assert.equal(calls.at(-1)!.url, 'https://fal.media/out.jpg');
+  assert.deepEqual([...r.image.bytes], [5, 6]);
+  assert.equal(r.costUsd, 0.0398);
+});
+
+test('fal.ai refused key and failed runs carry readable messages', async () => {
+  const refused = new FalTryOn({ apiKey: 'bad', pollMs: 0, fetch: (async () => json(401, { detail: 'Invalid key' })) as typeof fetch });
+  await assert.rejects(refused.tryOn(req), (e: TryOnError) => /API key was refused/.test(e.userMessage));
+  const failed = new FalTryOn({
+    apiKey: 'k',
+    pollMs: 0,
+    model: 'fal-ai/nano-banana-2/edit',
+    fetch: (async (url: string) =>
+      url.endsWith('/edit') ? json(200, { request_id: 'r2' }) : url.endsWith('/status') ? json(200, { status: 'COMPLETED' }) : json(422, { detail: [{ msg: 'content policy violation' }] })) as typeof fetch,
+  });
+  await assert.rejects(failed.tryOn(req), (e: TryOnError) => /content rules/.test(e.userMessage));
+  assert.equal(tryOnFromEnv({ TRYON_API_KEY: 'k', TRYON_PROVIDER: 'fal' })?.model, 'fal-ai/nano-banana/edit');
 });
