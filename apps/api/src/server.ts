@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
+import type { TryOnProvider } from '@agently/ai';
 import type { Db } from '@agently/db';
 import type { FacebookApp, GraphClient } from '@agently/meta';
 import type { KnowledgeJob } from '@agently/shared';
@@ -30,6 +31,8 @@ export type ServerDeps = HealthDeps &
     storage?: ObjectStore;
     /** Public URL for a stored key (product images). */
     publicFileUrl?: (key: string) => string;
+    /** The try-on AI for product images with models; without it that feature answers 503. */
+    tryOn?: TryOnProvider;
   };
 
 export function buildServer(deps: ServerDeps) {

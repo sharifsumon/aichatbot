@@ -22,6 +22,7 @@ const NAV: { href: string; label: string; perm?: Permission }[] = [
   { href: '/plans', label: 'Plans' },
   { href: '/audit', label: 'Audit log', perm: 'audit.read' },
   { href: '/team', label: 'Team and roles', perm: 'team.manage' },
+  { href: '/models', label: 'Model characters' },
   { href: '/settings', label: 'Platform settings', perm: 'settings.manage' },
 ];
 

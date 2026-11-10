@@ -13,6 +13,7 @@
     "shop:connect": "tsx --env-file-if-exists=../../.env src/scripts/connect-test-shop.ts"
   },
   "dependencies": {
+    "@agently/ai": "workspace:*",
     "@agently/billing": "workspace:*",
     "@agently/commerce": "workspace:*",
     "@agently/db": "workspace:*",

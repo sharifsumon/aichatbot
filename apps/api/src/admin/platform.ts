@@ -48,6 +48,8 @@ const SETTINGS = {
   'ai.fallbackModel': z.string().trim().min(1).max(200).nullable(),
   'ai.defaultSystemInstruction': z.string().max(4000),
   'credits.topUp': z.object({ credits: z.number().int().min(1), priceBdt: money, priceUsd: money }),
+  /** AI credits one "product image with a model" uses from the shop's monthly credits. */
+  'tryon.creditsPerImage': z.number().int().min(0).max(1000),
 } as const;
 
 /** Plans, the Agently team, the audit log, platform settings and feature flags. */

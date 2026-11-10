@@ -75,7 +75,7 @@ export interface CatalogDeps {
 }
 
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const IMAGE_TYPES: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+export const IMAGE_TYPES: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
 /** Product videos are stored as uploaded; phone clips of a minute or two fit. */
 export const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 const VIDEO_TYPES: Record<string, string> = { 'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm' };
@@ -283,7 +283,7 @@ function withGrid<P extends object>(product: P, variants: (typeof productVariant
 }
 
 /** Checks the file's first bytes, so a renamed file can't be served as an image. */
-function looksLike(ext: string, b: Uint8Array): boolean {
+export function looksLike(ext: string, b: Uint8Array): boolean {
   if (ext === 'jpg') return b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;
   if (ext === 'png') return b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47;
   return Buffer.from(b.subarray(0, 4)).toString('latin1') === 'RIFF' && Buffer.from(b.subarray(8, 12)).toString('latin1') === 'WEBP';

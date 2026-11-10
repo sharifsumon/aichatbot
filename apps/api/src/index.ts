@@ -1,4 +1,5 @@
 import { Queue } from 'bullmq';
+import { tryOnFromEnv } from '@agently/ai';
 import { Redis } from 'ioredis';
 import { createDb } from '@agently/db';
 import { FacebookApp, GraphClient } from '@agently/meta';
@@ -37,6 +38,8 @@ const app = buildServer({
   cookies: { secure: env.API_URL.startsWith('https://'), domain: env.COOKIE_DOMAIN || undefined },
   storage,
   publicFileUrl: publicBase ? (key) => `${publicBase}/${key}` : undefined,
+  // Product images with models; off until TRYON_API_KEY is set.
+  tryOn: tryOnFromEnv(),
   enqueueKnowledge: async (job) => {
     // Same job id as the worker's scheduler uses: repeated clicks in a minute merge.
     await knowledge.add('sync', job, {

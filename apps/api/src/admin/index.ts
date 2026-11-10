@@ -1,11 +1,14 @@
 import cors from '@fastify/cors';
+import multipart from '@fastify/multipart';
 import type { FastifyPluginAsync } from 'fastify';
 import type { Db } from '@agently/db';
 import type { GraphClient } from '@agently/meta';
+import type { ObjectStore } from '@agently/storage';
 import type { CookieSettings } from '../auth/session.ts';
 import { adminAuthRoutes } from './auth.ts';
 import { adminConversationRoutes } from './conversations.ts';
 import { adminInsightRoutes } from './insights.ts';
+import { adminModelRoutes } from './models.ts';
 import { adminPlatformRoutes } from './platform.ts';
 import { adminSession } from './session.ts';
 import { adminTenantRoutes } from './tenants.ts';
@@ -18,6 +21,9 @@ export interface AdminDeps {
   cookies: CookieSettings;
   /** The admin panel's own address; requests that change things must come from it. */
   adminUrl: string;
+  /** Model character photos; without it adding a model answers 503. */
+  storage?: ObjectStore;
+  publicFileUrl?: (key: string) => string;
 }
 
 /**
@@ -36,6 +42,9 @@ export const adminRoutes: FastifyPluginAsync<AdminDeps> = async (app, deps) => {
     }
   });
 
+  // Model character photos.
+  await app.register(multipart, { limits: { files: 1, fields: 5, fileSize: 10 * 1024 * 1024 } });
+
   const { prefix: _prefix, ...childDeps } = deps as AdminDeps & { prefix?: string };
   app.register(adminAuthRoutes, childDeps);
 
@@ -51,5 +60,6 @@ export const adminRoutes: FastifyPluginAsync<AdminDeps> = async (app, deps) => {
     secured.register(adminConversationRoutes, childDeps);
     secured.register(adminInsightRoutes, childDeps);
     secured.register(adminPlatformRoutes, childDeps);
+    secured.register(adminModelRoutes, childDeps);
   });
 };

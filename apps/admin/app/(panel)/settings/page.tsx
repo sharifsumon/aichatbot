@@ -15,6 +15,7 @@ interface Settings {
   'ai.fallbackModel'?: string | null;
   'ai.defaultSystemInstruction'?: string;
   'credits.topUp'?: TopUp;
+  'tryon.creditsPerImage'?: number;
 }
 interface Flag {
   id: string;
@@ -33,6 +34,7 @@ export default function SettingsPage() {
   const [fallback, setFallback] = useState('');
   const [instruction, setInstruction] = useState('');
   const [topUp, setTopUp] = useState({ credits: '', priceBdt: '', priceUsd: '' });
+  const [tryOnCredits, setTryOnCredits] = useState('');
   const [saving, setSaving] = useState<string>();
   const [done, setDone] = useState<string>();
   const [error, setError] = useState<string>();
@@ -44,6 +46,7 @@ export default function SettingsPage() {
     setModel(s['ai.defaultModel'] ?? '');
     setFallback(s['ai.fallbackModel'] ?? '');
     setInstruction(s['ai.defaultSystemInstruction'] ?? '');
+    setTryOnCredits(String(s['tryon.creditsPerImage'] ?? 10));
     const t = s['credits.topUp'];
     setTopUp({ credits: t ? String(t.credits) : '', priceBdt: t ? String(t.priceBdt) : '', priceUsd: t ? String(t.priceUsd) : '' });
   }, [settings.data]);
@@ -135,6 +138,24 @@ export default function SettingsPage() {
               </div>
               <button className="btn primary" style={{ alignSelf: 'flex-start' }} disabled={saving === 'credits.topUp'}>
                 Save top-up
+              </button>
+            </form>
+
+            <form
+              className="card pad"
+              aria-label="Product images with models"
+              onSubmit={submit('tryon.creditsPerImage', () => Number.parseInt(tryOnCredits, 10), 'Credits per image')}
+            >
+              <h2>Product images with models</h2>
+              <p className="sub" style={{ margin: 0 }}>
+                AI credits a shop uses for each image of a <a href="/models">model character</a> wearing its garment. One credit is one AI reply; a try-on image costs the platform far more than a reply.
+              </p>
+              <label className="field">
+                Credits per image
+                <input type="number" min={0} max={1000} required value={tryOnCredits} onChange={(e) => setTryOnCredits(e.target.value)} />
+              </label>
+              <button className="btn primary" style={{ alignSelf: 'flex-start' }} disabled={saving === 'tryon.creditsPerImage'}>
+                Save
               </button>
             </form>
 

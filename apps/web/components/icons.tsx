@@ -47,6 +47,12 @@ export const Icon = {
       <path d="M9 11h7M9 15h7" />
     </Svg>
   ),
+  models: () => (
+    <Svg>
+      <circle cx="12" cy="5" r="2.5" />
+      <path d="M8 21l1.5-9L7 9.5 9.5 8h5L17 9.5 14.5 12 16 21z" />
+    </Svg>
+  ),
   comments: () => (
     <Svg>
       <path d="M4 5h16v10H10l-5 4v-4H4z" />

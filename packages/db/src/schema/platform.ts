@@ -156,3 +156,28 @@ export const platformSettings = pgTable('platform_settings', {
   value: jsonb().notNull(),
   updatedAt: updatedAt(),
 });
+
+export const modelGenderEnum = pgEnum('model_gender', ['female', 'male']);
+
+/**
+ * A model photo the Agently team uploads for virtual try-on. Shared with every
+ * shop: a shop picks one and the AI dresses that person in the shop's garment.
+ */
+export const modelCharacters = pgTable(
+  'model_characters',
+  {
+    id: id(),
+    name: text().notNull(),
+    gender: modelGenderEnum().notNull(),
+    imageUrl: text().notNull(),
+    /** The stored object's key, so the photo can be deleted with the model. */
+    imageKey: text(),
+    /** Hidden models stay out of the shops' picker; past try-ons keep their result. */
+    active: boolean().notNull().default(true),
+    sortOrder: integer().notNull().default(0),
+    createdByPlatformUserId: uuid().references(() => platformUsers.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index().on(t.active, t.sortOrder)],
+);
