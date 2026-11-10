@@ -1,12 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { asc, desc, eq } from 'drizzle-orm';
+import { TRYON_SERVICES, type TryOnProvider } from '@agently/ai';
+import { encryptSecret } from '@agently/shared';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import { modelCharacters, type Db } from '@agently/db';
+import { modelCharacters, platformSettings, type Db } from '@agently/db';
 import type { ObjectStore } from '@agently/storage';
 import { IMAGE_TYPES, looksLike } from '../routes/catalog.ts';
 import { isUuid } from '../routes/guard.ts';
 import { parseBody } from '../routes/validate.ts';
+import { TRYON_SERVICE_KEY, storedTryOnService, type StoredTryOnService } from '../routes/tryon-service.ts';
 import { audit, requirePerm } from './guard.ts';
 
 /** Model photos are larger than product photos: the try-on AI wants a sharp, full-length person. */
@@ -22,7 +25,21 @@ export interface AdminModelDeps {
   db: Db;
   storage?: ObjectStore;
   publicFileUrl?: (key: string) => string;
+  encryptionKey: string;
+  /** The try-on AI from the server's .env, shown when no key is saved here. */
+  tryOn?: TryOnProvider;
 }
+
+const serviceBody = z
+  .object({
+    provider: z.enum(TRYON_SERVICES as ['fashn', 'gemini']),
+    model: z.string().trim().max(120).default(''),
+    mode: z.enum(['', 'performance', 'balanced', 'quality']).default(''),
+    costPerImageUsd: z.number().min(0).max(10).nullable().default(null),
+    /** Left out: keep the saved key. Empty: remove it (the server's .env key is used again). */
+    apiKey: z.string().trim().max(500).optional(),
+  })
+  .strict();
 
 /**
  * Model characters for "Generate product image with models": photos of men
@@ -35,6 +52,49 @@ export const adminModelRoutes: FastifyPluginAsync<AdminModelDeps> = async (app, 
   app.get('/models', async () => ({
     models: await db.select().from(modelCharacters).orderBy(asc(modelCharacters.sortOrder), desc(modelCharacters.createdAt)),
   }));
+
+  /** Which try-on AI the shops use. The API key itself is never sent back. */
+  app.get('/tryon-service', async (req, reply) => {
+    if (!(await requirePerm(req, reply, 'settings.manage'))) return reply;
+    const s = await storedTryOnService(db);
+    const source = s?.apiKeyEncrypted ? 'settings' : deps.tryOn ? 'server' : 'off';
+    return {
+      service: {
+        provider: s?.provider ?? (deps.tryOn?.name as StoredTryOnService['provider'] | undefined) ?? 'fashn',
+        model: s?.model ?? '',
+        mode: s?.mode ?? '',
+        costPerImageUsd: s?.costPerImageUsd ?? null,
+        apiKeyLast4: s?.apiKeyEncrypted ? s.apiKeyLast4 : null,
+        source,
+        /** What runs now: service and model. */
+        active: source === 'settings' ? { provider: s!.provider, model: s!.model || null } : deps.tryOn ? { provider: deps.tryOn.name, model: deps.tryOn.model } : null,
+      },
+    };
+  });
+
+  app.put('/tryon-service', async (req, reply) => {
+    if (!(await requirePerm(req, reply, 'settings.manage'))) return reply;
+    const body = await parseBody(serviceBody, req.body, reply);
+    if (!body) return reply;
+    const before = await storedTryOnService(db);
+    const { apiKey, ...rest } = body;
+    const value: StoredTryOnService = {
+      ...rest,
+      apiKeyEncrypted: apiKey === undefined ? (before?.apiKeyEncrypted ?? null) : apiKey ? encryptSecret(apiKey, deps.encryptionKey) : null,
+      apiKeyLast4: apiKey === undefined ? (before?.apiKeyLast4 ?? null) : apiKey ? apiKey.slice(-4) : null,
+    };
+    await db
+      .insert(platformSettings)
+      .values({ key: TRYON_SERVICE_KEY, value })
+      .onConflictDoUpdate({ target: platformSettings.key, set: { value } });
+    await audit(db, req, 'settings.updated', {
+      targetType: 'setting',
+      targetId: TRYON_SERVICE_KEY,
+      // Never the key itself.
+      data: { ...rest, apiKey: apiKey === undefined ? 'unchanged' : apiKey ? `changed (…${apiKey.slice(-4)})` : 'removed' },
+    });
+    return reply.code(204).send();
+  });
 
   /** multipart/form-data: `name` and `gender` fields first, then one `file` (JPEG, PNG or WebP, up to 10 MB). */
   app.post('/models', async (req, reply) => {

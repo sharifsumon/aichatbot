@@ -8,13 +8,16 @@ import { modelCharacters, platformSettings, tryOnImages, type Db } from '@agentl
 import { workspaceKey, type ObjectStore } from '@agently/storage';
 import { ALL_ROLES, MANAGERS, isUuid, requireRole } from './guard.ts';
 import { parseBody } from './validate.ts';
+import { currentTryOn } from './tryon-service.ts';
 
 export interface TryOnDeps {
   db: Db;
   storage?: ObjectStore;
   publicFileUrl?: (key: string) => string;
-  /** The try-on AI; without it generating answers 503. */
+  /** The try-on AI from the server's .env; the super admin's settings override it. */
   tryOn?: TryOnProvider;
+  /** Decrypts the API key saved in Platform settings. */
+  encryptionKey: string;
 }
 
 /** Credits one image uses when the super admin has not set tryon.creditsPerImage. */
@@ -56,9 +59,10 @@ export const tryOnRoutes: FastifyPluginAsync<TryOnDeps> = async (app, deps) => {
       .from(modelCharacters)
       .where(eq(modelCharacters.active, true))
       .orderBy(asc(modelCharacters.sortOrder), desc(modelCharacters.createdAt));
+    const tryOn = await currentTryOn(db, deps.encryptionKey, deps.tryOn).catch(() => undefined);
     return {
       models,
-      enabled: !!(deps.tryOn && deps.storage && deps.publicFileUrl),
+      enabled: !!(tryOn && deps.storage && deps.publicFileUrl),
       creditsPerImage: await creditsPerTryOn(db),
     };
   });
@@ -90,7 +94,14 @@ export const tryOnRoutes: FastifyPluginAsync<TryOnDeps> = async (app, deps) => {
   /** Starts making an image. Answers at once with a pending image; poll it until it succeeds or fails. */
   app.post<{ Params: { workspaceId: string } }>('/workspaces/:workspaceId/try-on', async (req, reply) => {
     if (!(await requireRole(db, req, reply, MANAGERS))) return reply;
-    const { tryOn, storage, publicFileUrl } = deps;
+    const { storage, publicFileUrl } = deps;
+    let tryOn: TryOnProvider | undefined;
+    try {
+      tryOn = await currentTryOn(db, deps.encryptionKey, deps.tryOn);
+    } catch (err) {
+      req.log.error({ err }, 'Try-on settings unreadable');
+      return reply.code(503).send({ error: 'Product images with models are not set up correctly. Ask Agently support.' });
+    }
     if (!tryOn || !storage || !publicFileUrl) return reply.code(503).send({ error: 'Product images with models are not switched on yet' });
     const body = await parseBody(generateBody, req.body, reply);
     if (!body) return reply;

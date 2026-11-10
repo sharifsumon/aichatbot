@@ -236,3 +236,39 @@ test('without a try-on service the feature says it is off', { skip }, async () =
   const res = await app.inject({ method: 'POST', url: `/api/workspaces/${ws.id}/try-on`, ...auth, payload: { characterId: randomUUID(), garmentImageUrl: `${FILES}${ws.id}/images/a.jpg` } });
   assert.equal(res.statusCode, 503);
 });
+
+test('a super admin sets the try-on service and key; the key never comes back', { skip }, async () => {
+  const { app } = server();
+  const sa = await admin('super_admin');
+  const { ws, auth } = await shop(100);
+
+  const off = await app.inject({ method: 'GET', url: '/admin/tryon-service', ...sa });
+  assert.equal(off.json().service.source, 'off');
+
+  const put = await app.inject({ method: 'PUT', url: '/admin/tryon-service', ...sa, payload: { provider: 'gemini', model: 'gemini-x', apiKey: 'secret-key-1234' } });
+  assert.equal(put.statusCode, 204, put.body);
+  const got = await app.inject({ method: 'GET', url: '/admin/tryon-service', ...sa });
+  assert.equal(got.json().service.source, 'settings');
+  assert.equal(got.json().service.apiKeyLast4, '1234');
+  assert.deepEqual(got.json().service.active, { provider: 'gemini', model: 'gemini-x' });
+  assert.ok(!got.body.includes('secret-key'));
+  const all = await app.inject({ method: 'GET', url: '/admin/settings', ...sa });
+  assert.ok(!('tryon.service' in all.json().settings));
+
+  // The shop now sees the feature switched on, without any .env key.
+  const models = await app.inject({ method: 'GET', url: `/api/workspaces/${ws.id}/try-on/models`, ...auth });
+  assert.equal(models.json().enabled, true);
+
+  // Changing the model keeps the saved key.
+  await app.inject({ method: 'PUT', url: '/admin/tryon-service', ...sa, payload: { provider: 'fashn', mode: 'balanced' } });
+  const kept = await app.inject({ method: 'GET', url: '/admin/tryon-service', ...sa });
+  assert.equal(kept.json().service.apiKeyLast4, '1234');
+  assert.equal(kept.json().service.active.provider, 'fashn');
+
+  const support = await admin('support');
+  assert.equal((await app.inject({ method: 'GET', url: '/admin/tryon-service', ...support })).statusCode, 403);
+
+  await app.inject({ method: 'PUT', url: '/admin/tryon-service', ...sa, payload: { provider: 'fashn', apiKey: '' } });
+  const removed = await app.inject({ method: 'GET', url: '/admin/tryon-service', ...sa });
+  assert.equal(removed.json().service.source, 'off');
+});

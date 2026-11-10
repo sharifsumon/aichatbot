@@ -159,6 +159,8 @@ export default function SettingsPage() {
               </button>
             </form>
 
+            <TryOnServiceCard />
+
             <form className="card pad" onSubmit={submit('ai.defaultSystemInstruction', () => instruction, 'Default instruction')} aria-label="Default instruction" style={{ gridColumn: '1 / -1' }}>
               <h2>Default bot instruction</h2>
               <p className="sub" style={{ margin: 0 }}>
@@ -277,5 +279,145 @@ function FlagDialog({ plans, onClose, onDone }: { plans: Plan[]; onClose: () => 
         On
       </label>
     </Dialog>
+  );
+}
+
+interface TryOnService {
+  provider: 'fashn' | 'gemini';
+  model: string;
+  mode: string;
+  costPerImageUsd: number | null;
+  apiKeyLast4: string | null;
+  source: 'settings' | 'server' | 'off';
+  active: { provider: string; model: string | null } | null;
+}
+
+const SERVICE_HELP: Record<TryOnService['provider'], { name: string; model: string; cost: string; keyUrl: string }> = {
+  fashn: { name: 'FASHN (built for clothes)', model: 'tryon-v1.6', cost: '0.075', keyUrl: 'https://app.fashn.ai/api' },
+  gemini: { name: 'Google Gemini image', model: 'gemini-2.5-flash-image', cost: '0.039', keyUrl: 'https://aistudio.google.com/apikey' },
+};
+
+/** The try-on AI service and its API key. The key is write-only: only its last 4 characters come back. */
+function TryOnServiceCard() {
+  const api = useApi();
+  const load = useLoad<{ service: TryOnService }>('/tryon-service');
+  const [provider, setProvider] = useState<TryOnService['provider']>('fashn');
+  const [model, setModel] = useState('');
+  const [mode, setMode] = useState('');
+  const [cost, setCost] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ tone: 'ok' | 'error'; text: string }>();
+
+  useEffect(() => {
+    const s = load.data?.service;
+    if (!s) return;
+    setProvider(s.provider);
+    setModel(s.model);
+    setMode(s.mode);
+    setCost(s.costPerImageUsd == null ? '' : String(s.costPerImageUsd));
+  }, [load.data]);
+
+  async function save(removeKey = false) {
+    setBusy(true);
+    setNote(undefined);
+    try {
+      await api('/tryon-service', {
+        method: 'PUT',
+        body: {
+          provider,
+          model: model.trim(),
+          mode: provider === 'fashn' ? mode : '',
+          costPerImageUsd: cost.trim() ? Number(cost) : null,
+          ...(removeKey ? { apiKey: '' } : apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
+        },
+      });
+      setApiKey('');
+      setNote({ tone: 'ok', text: removeKey ? 'API key removed.' : 'Try-on service saved. Shops use it from their next image.' });
+      load.reload();
+    } catch (e) {
+      setNote({ tone: 'error', text: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const s = load.data?.service;
+  const help = SERVICE_HELP[provider];
+  return (
+    <form
+      className="card pad"
+      aria-label="Try-on AI service"
+      onSubmit={(e) => {
+        e.preventDefault();
+        save();
+      }}
+    >
+      <h2>Try-on AI service</h2>
+      <p className="sub" style={{ margin: 0 }}>
+        The AI that dresses the model characters in the shops&apos; garments.{' '}
+        {s?.source === 'settings' && s.active && `Now using ${SERVICE_HELP[s.active.provider as TryOnService['provider']]?.name ?? s.active.provider} with the key saved here.`}
+        {s?.source === 'server' && s.active && `Now using ${s.active.provider} (${s.active.model}) from the server's .env file. A key saved here takes over.`}
+        {s?.source === 'off' && 'Switched off: add an API key to turn it on for every shop.'}
+      </p>
+      {load.error && <Notice tone="error">{load.error}</Notice>}
+      <label className="field">
+        Service
+        <select value={provider} onChange={(e) => setProvider(e.target.value as TryOnService['provider'])}>
+          <option value="fashn">{SERVICE_HELP.fashn.name}</option>
+          <option value="gemini">{SERVICE_HELP.gemini.name}</option>
+        </select>
+      </label>
+      <div className="row">
+        <label className="field" style={{ flex: '2 1 160px' }}>
+          Model
+          <input value={model} onChange={(e) => setModel(e.target.value)} placeholder={help.model} maxLength={120} />
+          <small>Empty uses {help.model}.</small>
+        </label>
+        {provider === 'fashn' && (
+          <label className="field">
+            Quality
+            <select value={mode} onChange={(e) => setMode(e.target.value)}>
+              <option value="">Best (quality)</option>
+              <option value="balanced">Balanced</option>
+              <option value="performance">Fastest</option>
+            </select>
+          </label>
+        )}
+      </div>
+      <label className="field">
+        API key
+        <input
+          type="password"
+          autoComplete="off"
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+          placeholder={s?.apiKeyLast4 ? `Saved: ••••${s.apiKeyLast4} (type to replace)` : 'Paste the API key'}
+        />
+        <small>
+          Stored encrypted and never shown again. Get one at{' '}
+          <a href={help.keyUrl} target="_blank" rel="noreferrer">
+            {new URL(help.keyUrl).host}
+          </a>
+          .
+        </small>
+      </label>
+      <label className="field">
+        Cost per image ($)
+        <input inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} placeholder={help.cost} />
+        <small>For the AI usage page. Empty uses {help.cost}.</small>
+      </label>
+      {note && <Notice tone={note.tone}>{note.text}</Notice>}
+      <div className="row" style={{ gap: 8 }}>
+        <button className="btn primary" disabled={busy || (!apiKey.trim() && !s?.apiKeyLast4 && s?.source !== 'server')}>
+          Save service
+        </button>
+        {s?.apiKeyLast4 && (
+          <button type="button" className="btn" disabled={busy} onClick={() => window.confirm('Remove the saved API key? Shops fall back to the server key, or the feature switches off.') && save(true)}>
+            Remove key
+          </button>
+        )}
+      </div>
+    </form>
   );
 }

@@ -213,13 +213,36 @@ export class GeminiTryOn implements TryOnProvider {
   }
 }
 
+export type TryOnServiceName = 'fashn' | 'gemini';
+export const TRYON_SERVICES: TryOnServiceName[] = ['fashn', 'gemini'];
+
+export interface TryOnConfig {
+  provider: string;
+  apiKey: string;
+  /** Empty for the service's default model. */
+  model?: string;
+  /** fashn only. */
+  mode?: string;
+  costPerImageUsd?: number;
+}
+
+/** Builds the provider for a service name and key, from the server's .env or the super admin's settings. */
+export function makeTryOn(c: TryOnConfig): TryOnProvider {
+  const provider = c.provider.toLowerCase();
+  const model = c.model || undefined;
+  if (provider === 'gemini') return new GeminiTryOn({ apiKey: c.apiKey, model, costPerImageUsd: c.costPerImageUsd });
+  if (provider === 'fashn') return new FashnTryOn({ apiKey: c.apiKey, model, costPerImageUsd: c.costPerImageUsd, mode: (c.mode as FashnOptions['mode']) || undefined });
+  throw new Error(`TRYON_PROVIDER must be fashn or gemini, not ${provider}`);
+}
+
 /** Reads TRYON_* settings; undefined when no service is configured. */
 export function tryOnFromEnv(env: Record<string, string | undefined> = process.env): TryOnProvider | undefined {
-  const provider = (env.TRYON_PROVIDER || 'fashn').toLowerCase();
-  const apiKey = env.TRYON_API_KEY;
-  if (!apiKey) return undefined;
-  const cost = env.TRYON_COST_PER_IMAGE_USD ? Number(env.TRYON_COST_PER_IMAGE_USD) : undefined;
-  if (provider === 'gemini') return new GeminiTryOn({ apiKey, model: env.TRYON_MODEL, costPerImageUsd: cost });
-  if (provider === 'fashn') return new FashnTryOn({ apiKey, model: env.TRYON_MODEL, costPerImageUsd: cost, mode: (env.TRYON_MODE as FashnOptions['mode']) || undefined });
-  throw new Error(`TRYON_PROVIDER must be fashn or gemini, not ${provider}`);
+  if (!env.TRYON_API_KEY) return undefined;
+  return makeTryOn({
+    provider: env.TRYON_PROVIDER || 'fashn',
+    apiKey: env.TRYON_API_KEY,
+    model: env.TRYON_MODEL,
+    mode: env.TRYON_MODE,
+    costPerImageUsd: env.TRYON_COST_PER_IMAGE_USD ? Number(env.TRYON_COST_PER_IMAGE_USD) : undefined,
+  });
 }

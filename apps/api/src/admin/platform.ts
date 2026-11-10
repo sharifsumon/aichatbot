@@ -213,7 +213,8 @@ export const adminPlatformRoutes: FastifyPluginAsync<{ db: Db }> = async (app, {
   app.get('/settings', async (req, reply) => {
     if (!(await requirePerm(req, reply, 'settings.manage'))) return reply;
     const rows = await db.select().from(platformSettings);
-    return { settings: Object.fromEntries(rows.map((r) => [r.key, r.value])), keys: Object.keys(SETTINGS) };
+    // Only the settings edited here; the try-on service (with its key) has its own route.
+    return { settings: Object.fromEntries(rows.filter((r) => r.key in SETTINGS).map((r) => [r.key, r.value])), keys: Object.keys(SETTINGS) };
   });
 
   app.put<{ Params: { key: string }; Body: { value?: unknown } }>('/settings/:key', async (req, reply) => {

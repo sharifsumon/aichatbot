@@ -4,6 +4,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { Db } from '@agently/db';
 import type { GraphClient } from '@agently/meta';
 import type { ObjectStore } from '@agently/storage';
+import type { TryOnProvider } from '@agently/ai';
 import type { CookieSettings } from '../auth/session.ts';
 import { adminAuthRoutes } from './auth.ts';
 import { adminConversationRoutes } from './conversations.ts';
@@ -24,6 +25,8 @@ export interface AdminDeps {
   /** Model character photos; without it adding a model answers 503. */
   storage?: ObjectStore;
   publicFileUrl?: (key: string) => string;
+  /** The try-on AI from the server's .env. */
+  tryOn?: TryOnProvider;
 }
 
 /**
