@@ -245,7 +245,7 @@ test('a super admin sets the try-on service and key; the key never comes back', 
   const off = await app.inject({ method: 'GET', url: '/admin/tryon-service', ...sa });
   assert.equal(off.json().service.source, 'off');
 
-  const put = await app.inject({ method: 'PUT', url: '/admin/tryon-service', ...sa, payload: { provider: 'gemini', model: 'gemini-x', apiKey: 'secret-key-1234' } });
+  const put = await app.inject({ method: 'PUT', url: '/admin/tryon-service', ...sa, payload: { provider: 'gemini', model: 'gemini-x', apiKey: 'secret-key-000000001234' } });
   assert.equal(put.statusCode, 204, put.body);
   const got = await app.inject({ method: 'GET', url: '/admin/tryon-service', ...sa });
   assert.equal(got.json().service.source, 'settings');
@@ -271,7 +271,7 @@ test('a super admin sets the try-on service and key; the key never comes back', 
   // So is a password filled into the fal key box.
   const password = await app.inject({ method: 'PUT', url: '/admin/tryon-service', ...sa, payload: { provider: 'fal', apiKey: 'MyPassw0rd!' } });
   assert.equal(password.statusCode, 400);
-  const falKey = await app.inject({ method: 'PUT', url: '/admin/tryon-service', ...sa, payload: { provider: 'fal', apiKey: '1a2b-3c4d:5e6f7a8b' } });
+  const falKey = await app.inject({ method: 'PUT', url: '/admin/tryon-service', ...sa, payload: { provider: 'fal', apiKey: 'fal_AbCdEf0123456789xyz' } });
   assert.equal(falKey.statusCode, 204);
 
   const support = await admin('support');
