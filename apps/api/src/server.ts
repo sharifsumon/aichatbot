@@ -38,6 +38,8 @@ export type ServerDeps = HealthDeps &
     falApiKey?: string;
     /** For tests: replaces the fal.ai video client. */
     makeVideo?: VideoDeps['makeVideo'];
+    /** For tests: replaces ffmpeg for joining video clips. */
+    media?: VideoDeps['media'];
   };
 
 export function buildServer(deps: ServerDeps) {

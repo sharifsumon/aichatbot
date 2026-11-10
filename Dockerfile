@@ -21,6 +21,8 @@ CMD ["pnpm", "db:migrate"]
 
 FROM node:22-alpine AS api
 ENV NODE_ENV=production
+# ffmpeg joins walk-and-talk clips into longer videos.
+RUN apk add --no-cache ffmpeg
 WORKDIR /app
 COPY --from=build /out/api .
 USER node

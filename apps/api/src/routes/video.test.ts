@@ -85,6 +85,10 @@ function server(video?: ReturnType<typeof fakeVideo>['video']) {
     publicFileUrl: (k: string) => `${FILES}${k}`,
     falApiKey: video ? 'fal-key' : undefined,
     makeVideo: video ? () => video : undefined,
+    media: {
+      lastFrame: async () => new Uint8Array([0xff, 0xd8, 0xff, 1]),
+      concat: async (clips) => new Uint8Array(clips.flatMap((c) => [...c])),
+    },
   });
   return { app, objects };
 }
@@ -244,4 +248,29 @@ test('videos refuse other photos, missing scripts, no credits, staff, and record
   assert.equal(f.status, 'failed');
   assert.equal(f.error, 'The AI could not make this video: boom');
   assert.equal(f.credits, 0);
+});
+
+test('a 30-second walk and talk is made as 3 clips, each from the last frame, then joined', { skip }, async () => {
+  const { video, calls } = fakeVideo();
+  const { app, objects } = server(video);
+  const { ws, auth } = await shop(2000);
+  const photo = await uploadPhoto(app, ws.id, auth);
+  const started = await app.inject({
+    method: 'POST',
+    url: `/api/workspaces/${ws.id}/videos`,
+    ...auth,
+    payload: { sourceImageUrl: photo, mode: 'walk', script: 'Welcome to our shop. This dress is pure cotton. Order today!', seconds: 30 },
+  });
+  assert.equal(started.statusCode, 202, started.body);
+  const done = await waitFor(app, `/api/workspaces/${ws.id}/videos/${started.json().video.id}`, auth);
+  assert.equal(done.status, 'succeeded', done.error);
+  const walks = calls.walk as { imageUrl: string; prompt: string; seconds: number }[];
+  assert.equal(walks.length, 3);
+  assert.equal(walks[0]!.imageUrl, photo);
+  assert.notEqual(walks[1]!.imageUrl, photo);
+  assert.match(walks[1]!.prompt, /Continue smoothly/);
+  assert.match(walks[0]!.prompt, /welcome to our shop/);
+  assert.equal(done.credits, 15 * 15);
+  assert.deepEqual([...objects.get((done.resultVideoUrl as string).slice(FILES.length))!.body], [4, 5, 4, 5, 4, 5]);
+  assert.equal((await app.inject({ method: 'POST', url: `/api/workspaces/${ws.id}/videos`, ...auth, payload: { sourceImageUrl: photo, mode: 'walk', script: 'hi', seconds: 25 } })).statusCode, 400);
 });
