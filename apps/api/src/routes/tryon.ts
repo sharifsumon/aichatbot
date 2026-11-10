@@ -35,6 +35,7 @@ const generateBody = z.object({
   category: z.enum(GARMENT_CATEGORIES as [string, ...string[]]).default('auto'),
   pose: z.enum(Object.keys(TRYON_STYLES.pose) as [string, ...string[]]).optional(),
   expression: z.enum(Object.keys(TRYON_STYLES.expression) as [string, ...string[]]).optional(),
+  camera: z.enum(Object.keys(TRYON_STYLES.camera) as [string, ...string[]]).optional(),
   background: z.enum(Object.keys(TRYON_STYLES.background) as [string, ...string[]]).optional(),
   /** The shop's own instructions for the photo. */
   note: z.string().trim().max(500).optional(),
@@ -154,7 +155,7 @@ export const tryOnRoutes: FastifyPluginAsync<TryOnDeps> = async (app, deps) => {
       garmentKey,
       garmentUrl: body.garmentImageUrl,
       category: body.category as (typeof GARMENT_CATEGORIES)[number],
-      style: { pose: body.pose, expression: body.expression, background: body.background } as TryOnStyle,
+      style: { pose: body.pose, expression: body.expression, camera: body.camera, background: body.background } as TryOnStyle,
       note: body.note || undefined,
       credits: cost,
     });

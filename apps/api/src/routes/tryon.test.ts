@@ -183,7 +183,7 @@ test('a shop makes a product image with a model and pays in credits', { skip }, 
   assert.deepEqual(tryOn.seen.model, [...JPEG]);
   assert.deepEqual(tryOn.seen.garment, [0xff, 0xd8, 0xff, 7]);
   assert.equal(tryOn.seen.category, 'one-pieces');
-  assert.deepEqual(tryOn.seen.style, { pose: 'sitting', expression: undefined, background: 'garden' });
+  assert.deepEqual(tryOn.seen.style, { pose: 'sitting', expression: undefined, camera: undefined, background: 'garden' });
   assert.equal(tryOn.seen.note, 'smiling, holding a clutch');
   assert.equal(models.json().styleOptions, true);
   const badPose = await app.inject({ method: 'POST', url: `/api/workspaces/${ws.id}/try-on`, ...auth, payload: { characterId: model.id, garmentImageUrl, pose: 'flying' } });

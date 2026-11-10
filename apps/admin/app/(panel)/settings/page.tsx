@@ -16,6 +16,9 @@ interface Settings {
   'ai.defaultSystemInstruction'?: string;
   'credits.topUp'?: TopUp;
   'tryon.creditsPerImage'?: number;
+  'video.creditsPerSecond'?: number;
+  'video.talkModel'?: string;
+  'video.walkModel'?: string;
 }
 interface Flag {
   id: string;
@@ -35,6 +38,7 @@ export default function SettingsPage() {
   const [instruction, setInstruction] = useState('');
   const [topUp, setTopUp] = useState({ credits: '', priceBdt: '', priceUsd: '' });
   const [tryOnCredits, setTryOnCredits] = useState('');
+  const [video, setVideo] = useState({ credits: '', talk: '', walk: '' });
   const [saving, setSaving] = useState<string>();
   const [done, setDone] = useState<string>();
   const [error, setError] = useState<string>();
@@ -47,6 +51,7 @@ export default function SettingsPage() {
     setFallback(s['ai.fallbackModel'] ?? '');
     setInstruction(s['ai.defaultSystemInstruction'] ?? '');
     setTryOnCredits(String(s['tryon.creditsPerImage'] ?? 10));
+    setVideo({ credits: String(s['video.creditsPerSecond'] ?? 15), talk: s['video.talkModel'] ?? '', walk: s['video.walkModel'] ?? '' });
     const t = s['credits.topUp'];
     setTopUp({ credits: t ? String(t.credits) : '', priceBdt: t ? String(t.priceBdt) : '', priceUsd: t ? String(t.priceUsd) : '' });
   }, [settings.data]);
@@ -61,6 +66,24 @@ export default function SettingsPage() {
       settings.reload();
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      setSaving(undefined);
+    }
+  }
+
+  async function saveVideo(e: FormEvent) {
+    e.preventDefault();
+    setSaving('video');
+    setError(undefined);
+    setDone(undefined);
+    try {
+      await api(`/settings/${encodeURIComponent('video.creditsPerSecond')}`, { method: 'PUT', body: { value: Number.parseInt(video.credits, 10) } });
+      await api(`/settings/${encodeURIComponent('video.talkModel')}`, { method: 'PUT', body: { value: video.talk.trim() } });
+      await api(`/settings/${encodeURIComponent('video.walkModel')}`, { method: 'PUT', body: { value: video.walk.trim() } });
+      setDone('Video settings saved.');
+      settings.reload();
+    } catch (err) {
+      setError((err as Error).message);
     } finally {
       setSaving(undefined);
     }
@@ -160,6 +183,46 @@ export default function SettingsPage() {
             </form>
 
             <TryOnServiceCard />
+
+            <form className="card pad" aria-label="Videos with models" onSubmit={saveVideo}>
+              <h2>Videos with models</h2>
+              <p className="sub" style={{ margin: 0 }}>
+                Shops turn model photos into short videos on fal.ai, using the fal.ai key saved under Try-on AI service. Leave a model empty for the default.
+              </p>
+              <label className="field">
+                Credits per second of video
+                <input type="number" min={0} max={1000} required value={video.credits} onChange={(e) => setVideo((v) => ({ ...v, credits: e.target.value }))} />
+                <small>Kling costs about $0.06 a second for talking and $0.14 for walk and talk. 15 credits a second suits most plans.</small>
+              </label>
+              <label className="field">
+                Talking model (fal.ai)
+                <input
+                  value={video.talk}
+                  onChange={(e) => setVideo((v) => ({ ...v, talk: e.target.value }))}
+                  placeholder="fal-ai/kling-video/ai-avatar/v2/standard"
+                  autoComplete="off"
+                  name="video-talk-model"
+                  data-1p-ignore
+                  data-lpignore="true"
+                />
+                <small>For higher quality: fal-ai/kling-video/ai-avatar/v2/pro (about twice the price).</small>
+              </label>
+              <label className="field">
+                Walk and talk model (fal.ai)
+                <input
+                  value={video.walk}
+                  onChange={(e) => setVideo((v) => ({ ...v, walk: e.target.value }))}
+                  placeholder="fal-ai/kling-video/v2.6/pro/image-to-video"
+                  autoComplete="off"
+                  name="video-walk-model"
+                  data-1p-ignore
+                  data-lpignore="true"
+                />
+              </label>
+              <button className="btn primary" style={{ alignSelf: 'flex-start' }} disabled={saving === 'video'}>
+                Save
+              </button>
+            </form>
 
             <form className="card pad" onSubmit={submit('ai.defaultSystemInstruction', () => instruction, 'Default instruction')} aria-label="Default instruction" style={{ gridColumn: '1 / -1' }}>
               <h2>Default bot instruction</h2>

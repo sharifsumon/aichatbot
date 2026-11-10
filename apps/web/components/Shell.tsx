@@ -54,6 +54,7 @@ const NAV: { href: string; label: string; icon: keyof typeof Icon; managers?: bo
   { href: '/orders', label: 'Orders', icon: 'orders', badge: (h) => h.stats.awaitingPayment },
   { href: '/catalog', label: 'Product Catalog', icon: 'catalog' },
   { href: '/model-images', label: 'Images with models', icon: 'models', managers: true },
+  { href: '/model-videos', label: 'Videos with models', icon: 'video', managers: true },
   { href: '/comments', label: 'Comments', icon: 'comments' },
   { href: '/agent', label: 'Chat Agent', icon: 'agent', managers: true },
   { href: '/knowledge', label: 'Knowledge base', icon: 'knowledge', managers: true },

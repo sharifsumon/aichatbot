@@ -264,7 +264,7 @@ test('overview and AI usage: tiles, top tenants, shops near their limit', { skip
   const boss = await admin('super_admin');
   const monthEnd = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 1));
   await db.insert(creditGrants).values({ workspaceId: t.ws.id, reason: 'plan', credits: 100, expiresAt: monthEnd });
-  await db.insert(usageRecords).values({ workspaceId: t.ws.id, day: new Date().toISOString().slice(0, 10), model: 'test-model', aiReplies: 95, inputTokens: 1000, outputTokens: 200, costUsd: '0.5', failedCalls: 5 });
+  await db.insert(usageRecords).values({ workspaceId: t.ws.id, day: new Date().toISOString().slice(0, 10), model: 'test-model', aiReplies: 95, inputTokens: 1000, outputTokens: 200, costUsd: '500', failedCalls: 5 });
 
   const overview = await app.inject({ url: '/admin/overview', ...boss.auth });
   assert.equal(overview.statusCode, 200);
