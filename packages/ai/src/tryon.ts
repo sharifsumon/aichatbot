@@ -302,7 +302,9 @@ export class FalTryOn implements TryOnProvider {
     const started = (await start.json().catch(() => ({}))) as { request_id?: string; status_url?: string; response_url?: string; detail?: unknown };
     if (!start.ok || !started.request_id) {
       const message =
-        start.status === 401 || start.status === 403
+        start.status === 403 && /balance|locked/i.test(falDetail(started.detail ?? ''))
+          ? 'The fal.ai account is out of balance. Top it up at fal.ai/dashboard/billing.'
+          : start.status === 401 || start.status === 403
           ? 'The fal.ai API key was refused. Check it under Platform settings.'
           : start.status === 404
             ? `fal.ai has no model called ${this.model}. Check the Model box under Platform settings (e.g. fal-ai/nano-banana/edit).`
