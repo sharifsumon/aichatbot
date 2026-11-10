@@ -50,6 +50,8 @@ export function PostComposer({ product, onClose, onPosted }: { product: Product;
   /** The single photo shown above the button. */
   const [photo, setPhoto] = useState(() => product.images[0]?.url ?? '');
   const [withButton, setWithButton] = useState(false);
+  /** Without a button: end the text with a "Message now" Messenger link. */
+  const [messageLink, setMessageLink] = useState(true);
   const [buttonType, setButtonType] = useState<'message' | 'order'>('order');
   const [orderTo, setOrderTo] = useState<'messenger' | 'website'>(product.websiteUrl ? 'website' : 'messenger');
   const [websiteUrl, setWebsiteUrl] = useState(product.websiteUrl ?? '');
@@ -75,7 +77,7 @@ export function PostComposer({ product, onClose, onPosted }: { product: Product;
         message,
         ...(withButton
           ? { photoUrls: photo ? [photo] : [], button: { type: buttonType, orderTo, ...(isUrl(websiteUrl) ? { websiteUrl: websiteUrl.trim() } : {}) } }
-          : { photoUrls: photos }),
+          : { photoUrls: photos, messageLink }),
       },
     });
     onPosted(r.post);
@@ -145,6 +147,12 @@ export function PostComposer({ product, onClose, onPosted }: { product: Product;
           </label>
           <small className="muted">Facebook shows one photo with a button.</small>
         </div>
+        )}
+        {!withButton && (
+          <label className="check" style={{ paddingLeft: 26 }}>
+            <input type="checkbox" checked={messageLink} onChange={(e) => setMessageLink(e.target.checked)} />
+            Add a &ldquo;Message now 👉&rdquo; Messenger link at the end of the text
+          </label>
         )}
       </fieldset>
       {product.images.length > 0 ? (
