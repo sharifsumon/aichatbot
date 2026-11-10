@@ -34,6 +34,39 @@ const CATEGORIES: { value: Category; label: string }[] = [
   { value: 'bottoms', label: 'Bottom (pants, skirt, palazzo)' },
 ];
 
+type Pose = '' | 'standing' | 'walking' | 'sitting' | 'hand-on-hip' | 'side' | 'back';
+type Expression = '' | 'smile' | 'laughing' | 'neutral' | 'confident';
+type Background = '' | 'white' | 'grey' | 'pastel' | 'street' | 'garden' | 'indoor' | 'beach' | 'festive';
+
+const POSES: { value: Pose; label: string }[] = [
+  { value: '', label: 'Same as the model photo' },
+  { value: 'standing', label: 'Standing, full length' },
+  { value: 'walking', label: 'Walking' },
+  { value: 'sitting', label: 'Sitting' },
+  { value: 'hand-on-hip', label: 'Hand on hip' },
+  { value: 'side', label: 'Turned to the side' },
+  { value: 'back', label: 'Showing the back' },
+];
+const EXPRESSIONS: { value: Expression; label: string }[] = [
+  { value: '', label: 'Same as the model photo' },
+  { value: 'smile', label: 'Smiling' },
+  { value: 'laughing', label: 'Laughing' },
+  { value: 'neutral', label: 'Calm' },
+  { value: 'confident', label: 'Confident, serious' },
+];
+const BACKGROUNDS: { value: Background; label: string }[] = [
+  { value: '', label: 'Same as the model photo' },
+  { value: 'white', label: 'Plain white studio' },
+  { value: 'grey', label: 'Light grey studio' },
+  { value: 'pastel', label: 'Soft pastel colour' },
+  { value: 'street', label: 'City street' },
+  { value: 'garden', label: 'Garden' },
+  { value: 'indoor', label: 'Living room' },
+  { value: 'beach', label: 'Beach' },
+  { value: 'festive', label: 'Eid / wedding decor' },
+];
+const MAX_NOTE = 500;
+
 /** Same limit as the API: product photos are at most 5 MB after shrinking. */
 const MAX_PHOTO_MB = 5;
 
@@ -46,12 +79,16 @@ export default function ModelImagesPage() {
   const api = useApi();
   const upload = useUpload();
   const router = useRouter();
-  const setup = useLoad<{ models: Model[]; enabled: boolean; creditsPerImage: number }>(`${ws}/try-on/models`);
+  const setup = useLoad<{ models: Model[]; enabled: boolean; creditsPerImage: number; styleOptions?: boolean }>(`${ws}/try-on/models`);
   const [images, setImages] = useState<TryOnImage[]>();
   const [gender, setGender] = useState<Gender | 'all'>('all');
   const [model, setModel] = useState<Model>();
   const [garment, setGarment] = useState<string>();
   const [category, setCategory] = useState<Category>('auto');
+  const [pose, setPose] = useState<Pose>('');
+  const [expression, setExpression] = useState<Expression>('');
+  const [background, setBackground] = useState<Background>('');
+  const [note, setNote] = useState('');
   const [uploading, setUploading] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string>();
@@ -103,7 +140,18 @@ export default function ModelImagesPage() {
     setError(undefined);
     setDone(undefined);
     try {
-      const r = await api<{ image: TryOnImage }>(`${ws}/try-on`, { method: 'POST', body: { characterId: model.id, garmentImageUrl: garment, category } });
+      const r = await api<{ image: TryOnImage }>(`${ws}/try-on`, { method: 'POST', body: {
+          characterId: model.id,
+          garmentImageUrl: garment,
+          category,
+          ...(styleOptions && {
+            ...(pose && { pose }),
+            ...(expression && { expression }),
+            ...(background && { background }),
+            ...(note.trim() && { note: note.trim() }),
+          }),
+        },
+      });
       setImages((cur) => [r.image, ...(cur ?? [])]);
       reloadHome();
     } catch (e) {
@@ -136,6 +184,7 @@ export default function ModelImagesPage() {
 
   const models = (setup.data?.models ?? []).filter((m) => gender === 'all' || m.gender === gender);
   const credits = setup.data?.creditsPerImage ?? 0;
+  const styleOptions = setup.data?.styleOptions !== false;
 
   return (
     <>
@@ -191,6 +240,52 @@ export default function ModelImagesPage() {
                 ))}
               </select>
             </label>
+            {styleOptions && (
+              <fieldset className="style">
+                <legend>Style (optional)</legend>
+                <label className="field">
+                  Pose
+                  <select value={pose} onChange={(e) => setPose(e.target.value as Pose)}>
+                    {POSES.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  Expression
+                  <select value={expression} onChange={(e) => setExpression(e.target.value as Expression)}>
+                    {EXPRESSIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  Background
+                  <select value={background} onChange={(e) => setBackground(e.target.value as Background)}>
+                    {BACKGROUNDS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  Your own instructions
+                  <textarea
+                    rows={3}
+                    maxLength={MAX_NOTE}
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="e.g. holding a small golden clutch, soft evening light, wearing gold earrings"
+                  />
+                </label>
+                <small className="muted">Write in English for best results. The garment is always copied as it is.</small>
+              </fieldset>
+            )}
             <button type="button" className="btn primary" disabled={!model || !garment || starting || uploading || !setup.data?.enabled} onClick={generate}>
               {starting ? 'Starting…' : `Generate image${credits ? ` · ${credits} credits` : ''}`}
             </button>

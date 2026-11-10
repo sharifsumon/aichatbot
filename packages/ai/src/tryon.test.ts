@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { FalTryOn, falModelId, FashnTryOn, GeminiTryOn, TryOnError, tryOnFromEnv } from './tryon.ts';
+import { FalTryOn, falModelId, FashnTryOn, GeminiTryOn, TryOnError, tryOnFromEnv, tryOnPrompt } from './tryon.ts';
 
 const img = (b: number[]) => ({ bytes: new Uint8Array(b), contentType: 'image/jpeg' });
 const req = { model: img([1, 2]), garment: img([3, 4]), category: 'one-pieces' as const };
@@ -134,4 +134,16 @@ test('fal.ai empty balance says to top up, not that the key is wrong', async () 
     fetch: (async () => json(403, { detail: 'User is locked. Reason: Exhausted balance. Top up your balance at fal.ai/dashboard/billing.' })) as typeof fetch,
   });
   await assert.rejects(p.tryOn(req), (e: TryOnError) => /out of balance/.test(e.userMessage));
+});
+
+test('the prompt carries the chosen pose, expression, background and the shop note', () => {
+  const plain = tryOnPrompt(req);
+  assert.match(plain, /Keep the pose\./);
+  assert.match(plain, /Keep the background\./);
+  const styled = tryOnPrompt({ ...req, style: { pose: 'sitting', expression: 'smile', background: 'white' }, note: 'holding a red clutch' });
+  assert.match(styled, /Pose: sitting/);
+  assert.match(styled, /Expression: a natural, warm smile/);
+  assert.match(styled, /Background: a clean plain white studio background/);
+  assert.match(styled, /holding a red clutch/);
+  assert.doesNotMatch(styled, /Keep the (pose|background)/);
 });
