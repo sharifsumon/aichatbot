@@ -242,6 +242,17 @@ const FAL_PRICES: Record<string, number> = {
  * "https://fal.ai/models/fal-ai/nano-banana/edit/api" → "fal-ai/nano-banana/edit",
  * "nano-banana-2" → "fal-ai/nano-banana-2/edit". Empty → fal-ai/nano-banana/edit.
  */
+/** fal's error detail as one short line for the shop. */
+function falDetail(detail: unknown): string {
+  const text =
+    typeof detail === 'string'
+      ? detail
+      : Array.isArray(detail)
+        ? detail.map((d) => (d && typeof d === 'object' && 'msg' in d ? String((d as { msg: unknown }).msg) : JSON.stringify(d))).join('; ')
+        : JSON.stringify(detail);
+  return text.length > 200 ? `${text.slice(0, 200)}…` : text;
+}
+
 export function falModelId(input?: string): string {
   let m = (input ?? '').trim();
   m = m.replace(/^https?:\/\/(www\.)?fal\.ai\/models\//, '').replace(/^https?:\/\/(queue\.)?fal\.run\//, '');
@@ -291,13 +302,17 @@ export class FalTryOn implements TryOnProvider {
     const started = (await start.json().catch(() => ({}))) as { request_id?: string; status_url?: string; response_url?: string; detail?: unknown };
     if (!start.ok || !started.request_id) {
       const message =
-        start.status === 401 || start.status === 403
+        start.status === 403 && /balance|locked/i.test(falDetail(started.detail ?? ''))
+          ? 'The fal.ai account is out of balance. Top it up at fal.ai/dashboard/billing.'
+          : start.status === 401 || start.status === 403
           ? 'The fal.ai API key was refused. Check it under Platform settings.'
           : start.status === 404
             ? `fal.ai has no model called ${this.model}. Check the Model box under Platform settings (e.g. fal-ai/nano-banana/edit).`
             : start.status === 402 || start.status === 429
               ? 'The fal.ai account is out of balance or busy. Check the fal.ai billing page.'
-              : 'The image AI refused the request. Try again in a minute.';
+              : start.status === 400 || start.status === 422
+                ? `fal.ai did not accept the request: ${falDetail(started.detail ?? started)}`
+                : 'The image AI refused the request. Try again in a minute.';
       throw new TryOnError(`fal.ai submit to ${this.model} failed (${start.status}): ${JSON.stringify(started.detail ?? started)}`, message);
     }
     // Status and result live under owner/app only, e.g. fal-ai/nano-banana/requests/<id>.

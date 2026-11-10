@@ -265,6 +265,15 @@ test('a super admin sets the try-on service and key; the key never comes back', 
   assert.equal(kept.json().service.apiKeyLast4, '1234');
   assert.equal(kept.json().service.active.provider, 'fashn');
 
+  // A browser-filled email in the Model box is refused.
+  const email = await app.inject({ method: 'PUT', url: '/admin/tryon-service', ...sa, payload: { provider: 'fal', model: 'someone@example.com' } });
+  assert.equal(email.statusCode, 400);
+  // So is a password filled into the fal key box.
+  const password = await app.inject({ method: 'PUT', url: '/admin/tryon-service', ...sa, payload: { provider: 'fal', apiKey: 'MyPassw0rd!' } });
+  assert.equal(password.statusCode, 400);
+  const falKey = await app.inject({ method: 'PUT', url: '/admin/tryon-service', ...sa, payload: { provider: 'fal', apiKey: '1a2b-3c4d:5e6f7a8b' } });
+  assert.equal(falKey.statusCode, 204);
+
   const support = await admin('support');
   assert.equal((await app.inject({ method: 'GET', url: '/admin/tryon-service', ...support })).statusCode, 403);
 

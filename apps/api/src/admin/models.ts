@@ -33,13 +33,23 @@ export interface AdminModelDeps {
 const serviceBody = z
   .object({
     provider: z.enum(TRYON_SERVICES as ['fashn', 'gemini', 'fal']),
-    model: z.string().trim().max(120).default(''),
+    model: z
+      .string()
+      .trim()
+      .max(200)
+      .regex(/^[A-Za-z0-9._~:/?#=-]*$/, 'must be a model name like fal-ai/nano-banana/edit (no spaces or @)')
+      .default(''),
     mode: z.enum(['', 'performance', 'balanced', 'quality']).default(''),
     costPerImageUsd: z.number().min(0).max(10).nullable().default(null),
     /** Left out: keep the saved key. Empty: remove it (the server's .env key is used again). */
     apiKey: z.string().trim().max(500).optional(),
   })
-  .strict();
+  .strict()
+  // fal.ai keys are "<key id>:<secret>". This catches a browser filling in a login password.
+  .refine((b) => b.provider !== 'fal' || !b.apiKey || /^[A-Za-z0-9-]+:[A-Za-z0-9]+$/.test(b.apiKey), {
+    message: 'This is not a fal.ai API key. fal.ai keys look like abc123-…:def456…; copy one from fal.ai/dashboard/keys.',
+    path: ['apiKey'],
+  });
 
 /**
  * Model characters for "Generate product image with models": photos of men

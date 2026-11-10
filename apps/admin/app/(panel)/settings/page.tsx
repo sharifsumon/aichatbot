@@ -380,7 +380,18 @@ function TryOnServiceCard() {
       <div className="row">
         <label className="field" style={{ flex: '2 1 160px' }}>
           Model
-          <input value={model} onChange={(e) => setModel(e.target.value)} placeholder={help.model} maxLength={120} />
+          {/* Not a username: keep browsers and password managers from filling an email in here. */}
+          <input
+            name="tryon-model"
+            autoComplete="off"
+            data-1p-ignore
+            data-lpignore="true"
+            spellCheck={false}
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder={help.model}
+            maxLength={200}
+          />
           <small>
             Empty uses {help.model}.
             {provider === 'fal' && ' Better: fal-ai/nano-banana-2/edit ($0.08) or fal-ai/nano-banana-pro/edit ($0.15).'}
@@ -401,7 +412,8 @@ function TryOnServiceCard() {
         API key
         <input
           type="password"
-          autoComplete="off"
+          name="tryon-api-key"
+          autoComplete="new-password"
           value={apiKey}
           onChange={(e) => setApiKey(e.target.value)}
           placeholder={s?.apiKeyLast4 ? `Saved: ••••${s.apiKeyLast4} (type to replace)` : 'Paste the API key'}
