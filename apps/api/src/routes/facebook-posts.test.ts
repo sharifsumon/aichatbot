@@ -160,6 +160,10 @@ test('Order Now to the website or Messenger, Send Message, and the share page wi
   const plain = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', photoUrls: ['https://files.test/b.jpg', 'https://files.test/a.jpg'] }, ...auth });
   assert.equal(plain.statusCode, 201, plain.body);
   assert.deepEqual({ ...published[0] }, { token: 'page-token', pageId: page.externalId, message: 'New in', photoUrls: ['https://files.test/b.jpg', 'https://files.test/a.jpg'] });
+  // A "Message now" link at the end of the text, opening Messenger on this product.
+  const linked = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', photoUrls: ['https://files.test/a.jpg'], messageLink: true }, ...auth });
+  assert.equal(linked.statusCode, 201, linked.body);
+  assert.equal(published[1]!.message, `New in\n\n📩 Message now 👉 https://m.me/${page.externalId}?ref=product_${product.id}`);
   const noSite = await app.inject({ method: 'POST', url: path, payload: { message: 'New in', button: { type: 'order' } }, ...auth });
   assert.equal(noSite.statusCode, 400);
   published.splice(0);

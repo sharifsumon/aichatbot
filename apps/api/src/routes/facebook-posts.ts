@@ -28,6 +28,8 @@ const postBody = z.object({
    * post links to Agently's share page for the product: Facebook reads the
    * chosen catalog photo there, and visitors are sent on to the website.
    */
+  /** Without a button: end the text with a "Message now" link that opens Messenger with the bot on this product. */
+  messageLink: z.boolean().default(false),
   button: z.object({
     type: z.enum(['message', 'order']),
     /** Order Now: the product's page on the shop's website (saved on the product), or Messenger. */
@@ -107,7 +109,8 @@ export const facebookPostRoutes: FastifyPluginAsync<FacebookPostDeps> = async (a
           ? { type: 'MESSAGE_PAGE', link }
           : { type: 'ORDER_NOW', link, target: real.orderTo === 'messenger' || !websiteUrl ? messengerLink(page.externalId, 'order', productId) : websiteUrl };
     }
-    const { message } = body;
+    // Facebook allows no button or link under the photos of a photo post, so the link goes at the end of the text.
+    const message = !button && body.messageLink ? `${body.message}\n\n📩 Message now 👉 ${messengerLink(page.externalId, 'product', productId)}` : body.message;
     const posted = button ? photoUrls.slice(0, 1) : photoUrls;
 
     let postId: string;
