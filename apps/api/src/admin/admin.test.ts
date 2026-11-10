@@ -2,7 +2,7 @@
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import {
   auditLogs,
   channels,
@@ -90,7 +90,7 @@ async function tenant() {
 }
 
 async function auditFor(adminId: string) {
-  return (await db.select().from(auditLogs).where(eq(auditLogs.platformUserId, adminId))).map((a) => a.action);
+  return (await db.select().from(auditLogs).where(eq(auditLogs.platformUserId, adminId)).orderBy(asc(auditLogs.createdAt))).map((a) => a.action);
 }
 
 test('sign-in: password, then authenticator setup; later sign-ins need a fresh code', { skip }, async () => {
