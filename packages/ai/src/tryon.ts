@@ -18,9 +18,48 @@ export interface TryOnRequest {
   model: TryOnImage;
   garment: TryOnImage;
   category: GarmentCategory;
-  /** Optional extra words from the shop, e.g. "full length, plain studio background". */
+  /** How the shop wants the photo: pose, expression and background presets (keys of TRYON_STYLES). */
+  style?: TryOnStyle;
+  /** The shop's own instructions, e.g. "holding a small handbag, soft evening light". */
   note?: string;
 }
+
+/**
+ * Presets the shop can pick on the try-on page. Each maps to the words sent to
+ * the image AI. "keep" (or leaving it out) keeps what is in the model photo.
+ */
+export const TRYON_STYLES = {
+  pose: {
+    standing: 'standing straight, facing the camera, full length from head to feet',
+    walking: 'walking towards the camera mid-step, full length',
+    sitting: 'sitting elegantly on a simple stool or chair',
+    'hand-on-hip': 'standing with one hand on the hip, confident fashion pose',
+    side: 'standing turned three-quarters to the side to show the garment’s side',
+    back: 'standing with the back to the camera, looking over the shoulder, to show the back of the garment',
+  },
+  expression: {
+    smile: 'a natural, warm smile',
+    laughing: 'a happy, laughing expression',
+    neutral: 'a calm, neutral expression',
+    confident: 'a confident, serious fashion-model expression',
+  },
+  background: {
+    white: 'a clean plain white studio background',
+    grey: 'a plain light grey studio background with soft shadows',
+    pastel: 'a soft pastel-coloured studio background',
+    street: 'a modern city street outdoors, softly blurred',
+    garden: 'a green garden with natural daylight, softly blurred',
+    indoor: 'an elegant, bright living room interior, softly blurred',
+    beach: 'a sunny beach, softly blurred',
+    festive: 'a festive Eid or wedding decorated setting with warm lights, softly blurred',
+  },
+} as const;
+
+export type TryOnStyle = {
+  pose?: keyof typeof TRYON_STYLES.pose;
+  expression?: keyof typeof TRYON_STYLES.expression;
+  background?: keyof typeof TRYON_STYLES.background;
+};
 
 export interface TryOnResult {
   image: TryOnImage;
@@ -164,13 +203,19 @@ const CATEGORY_WORDS: Record<GarmentCategory, string> = {
 /** The instruction for general image models (Gemini, fal.ai Nano Banana): photo 1 is the model, photo 2 the garment. */
 export function tryOnPrompt(req: TryOnRequest): string {
   const what = CATEGORY_WORDS[req.category];
+  const pose = req.style?.pose && TRYON_STYLES.pose[req.style.pose];
+  const face = req.style?.expression && TRYON_STYLES.expression[req.style.expression];
+  const background = req.style?.background && TRYON_STYLES.background[req.style.background];
   return [
     `The first image is a fashion model. The second image shows ${what} a shop sells.`,
     `Make a realistic e-commerce product photo of the same model wearing exactly ${what} from the second image.`,
-    'Keep the model’s face, body, skin tone, hair and pose unchanged, and keep the background.',
+    'Keep the model’s face, identity, body, skin tone and hair unchanged.',
+    pose ? `Pose: ${pose}.` : 'Keep the pose.',
+    face ? `Expression: ${face}.` : '',
+    background ? `Background: ${background}.` : 'Keep the background.',
     'Copy the garment faithfully: colour, print, embroidery, fabric texture, neckline, sleeves and length.',
     'Do not add text, logos or watermarks.',
-    req.note ? `Also: ${req.note}` : '',
+    req.note ? `The shop also asks: ${req.note}` : '',
   ]
     .filter(Boolean)
     .join(' ');

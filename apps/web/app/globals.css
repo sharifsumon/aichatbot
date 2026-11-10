@@ -359,6 +359,9 @@ a.stat:hover { border-color: #c7d2fe; color: inherit; }
 .pick span { font-size: 12px; font-weight: 600; padding: 6px 8px; }
 .garment { display: flex; align-items: center; justify-content: center; aspect-ratio: 3 / 4; max-height: 320px; border: 2px dashed var(--line); border-radius: 12px; background: var(--line-soft); color: var(--subtle); font-size: 13px; cursor: pointer; overflow: hidden; width: 100%; padding: 0; }
 .garment img { width: 100%; height: 100%; object-fit: contain; }
+.tryon fieldset.style { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.tryon fieldset.style legend { font-size: 13px; font-weight: 700; padding: 0 6px; }
+.tryon fieldset.style .field:has(textarea), .tryon fieldset.style small { grid-column: 1 / -1; }
 .results { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
 .result { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; }
 .result .ph { aspect-ratio: 3 / 4; background: var(--line-soft); display: flex; align-items: center; justify-content: center; color: var(--subtle); font-size: 13px; text-align: center; padding: 0; position: relative; }

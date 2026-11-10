@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { and, asc, desc, eq, lt, sql } from 'drizzle-orm';
 import type { FastifyBaseLogger, FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import { GARMENT_CATEGORIES, TryOnError, type TryOnProvider } from '@agently/ai';
+import { GARMENT_CATEGORIES, TRYON_STYLES, TryOnError, type TryOnProvider, type TryOnStyle } from '@agently/ai';
 import { creditsRemaining, recordUsage } from '@agently/billing';
 import { modelCharacters, platformSettings, tryOnImages, type Db } from '@agently/db';
 import { workspaceKey, type ObjectStore } from '@agently/storage';
@@ -33,7 +33,11 @@ const generateBody = z.object({
   /** A photo uploaded with POST /uploads/images. */
   garmentImageUrl: z.string().url(),
   category: z.enum(GARMENT_CATEGORIES as [string, ...string[]]).default('auto'),
-  note: z.string().trim().max(300).optional(),
+  pose: z.enum(Object.keys(TRYON_STYLES.pose) as [string, ...string[]]).optional(),
+  expression: z.enum(Object.keys(TRYON_STYLES.expression) as [string, ...string[]]).optional(),
+  background: z.enum(Object.keys(TRYON_STYLES.background) as [string, ...string[]]).optional(),
+  /** The shop's own instructions for the photo. */
+  note: z.string().trim().max(500).optional(),
 });
 
 const EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
@@ -64,6 +68,8 @@ export const tryOnRoutes: FastifyPluginAsync<TryOnDeps> = async (app, deps) => {
       models,
       enabled: !!(tryOn && deps.storage && deps.publicFileUrl),
       creditsPerImage: await creditsPerTryOn(db),
+      /** FASHN makes try-ons only; pose, expression, background and instructions need an image model (fal.ai, Gemini). */
+      styleOptions: tryOn ? tryOn.name !== 'fashn' : true,
     };
   });
 
@@ -148,7 +154,8 @@ export const tryOnRoutes: FastifyPluginAsync<TryOnDeps> = async (app, deps) => {
       garmentKey,
       garmentUrl: body.garmentImageUrl,
       category: body.category as (typeof GARMENT_CATEGORIES)[number],
-      note: body.note,
+      style: { pose: body.pose, expression: body.expression, background: body.background } as TryOnStyle,
+      note: body.note || undefined,
       credits: cost,
     });
     return reply.code(202).send({ image: view(image!) });
@@ -172,7 +179,7 @@ export async function run(
   deps: { db: Db; storage: ObjectStore; publicFileUrl: (key: string) => string; tryOn: TryOnProvider; log: FastifyBaseLogger },
   imageId: string,
   workspaceId: string,
-  job: { modelKey: string; modelUrl?: string; garmentKey: string; garmentUrl?: string; category: (typeof GARMENT_CATEGORIES)[number]; note?: string; credits: number },
+  job: { modelKey: string; modelUrl?: string; garmentKey: string; garmentUrl?: string; category: (typeof GARMENT_CATEGORIES)[number]; style?: TryOnStyle; note?: string; credits: number },
 ): Promise<void> {
   const { db, storage, tryOn } = deps;
   const usageModel = `tryon:${tryOn.model}`;
@@ -183,6 +190,7 @@ export async function run(
         model: { bytes: modelBytes, contentType: typeOf(job.modelKey), url: job.modelUrl },
         garment: { bytes: garmentBytes, contentType: typeOf(job.garmentKey), url: job.garmentUrl },
         category: job.category,
+        style: job.style,
         note: job.note,
       },
       AbortSignal.timeout(RUN_TIMEOUT_MS),

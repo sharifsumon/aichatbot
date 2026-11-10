@@ -65,8 +65,9 @@ function server(tryOn?: TryOnProvider) {
   return { app, objects };
 }
 
-const fakeTryOn = (fail = false): TryOnProvider & { seen: { model?: number[]; garment?: number[]; category?: string } } => {
-  const seen: { model?: number[]; garment?: number[]; category?: string } = {};
+type Seen = { model?: number[]; garment?: number[]; category?: string; style?: unknown; note?: string };
+const fakeTryOn = (fail = false): TryOnProvider & { seen: Seen } => {
+  const seen: Seen = {};
   return {
     name: 'fake',
     model: 'fake-tryon-1',
@@ -75,6 +76,8 @@ const fakeTryOn = (fail = false): TryOnProvider & { seen: { model?: number[]; ga
       seen.model = [...req.model.bytes];
       seen.garment = [...req.garment.bytes];
       seen.category = req.category;
+      seen.style = req.style;
+      seen.note = req.note;
       if (fail) throw new TryOnError('PoseError', 'No clear person');
       return { image: { bytes: new Uint8Array(PNG), contentType: 'image/png' }, costUsd: 0.05 };
     },
@@ -172,7 +175,7 @@ test('a shop makes a product image with a model and pays in credits', { skip }, 
   const up = await app.inject({ method: 'POST', url: `/api/workspaces/${ws.id}/uploads/images`, ...auth, headers: { ...auth.headers, ...f.headers }, payload: f.payload });
   const garmentImageUrl = up.json().url as string;
 
-  const started = await app.inject({ method: 'POST', url: `/api/workspaces/${ws.id}/try-on`, ...auth, payload: { characterId: model.id, garmentImageUrl, category: 'one-pieces' } });
+  const started = await app.inject({ method: 'POST', url: `/api/workspaces/${ws.id}/try-on`, ...auth, payload: { characterId: model.id, garmentImageUrl, category: 'one-pieces', pose: 'sitting', background: 'garden', note: 'smiling, holding a clutch' } });
   assert.equal(started.statusCode, 202, started.body);
   assert.equal(started.json().image.status, 'pending');
   const done = await waitFor(app, `/api/workspaces/${ws.id}/try-on/${started.json().image.id}`, auth);
@@ -180,6 +183,11 @@ test('a shop makes a product image with a model and pays in credits', { skip }, 
   assert.deepEqual(tryOn.seen.model, [...JPEG]);
   assert.deepEqual(tryOn.seen.garment, [0xff, 0xd8, 0xff, 7]);
   assert.equal(tryOn.seen.category, 'one-pieces');
+  assert.deepEqual(tryOn.seen.style, { pose: 'sitting', expression: undefined, background: 'garden' });
+  assert.equal(tryOn.seen.note, 'smiling, holding a clutch');
+  assert.equal(models.json().styleOptions, true);
+  const badPose = await app.inject({ method: 'POST', url: `/api/workspaces/${ws.id}/try-on`, ...auth, payload: { characterId: model.id, garmentImageUrl, pose: 'flying' } });
+  assert.equal(badPose.statusCode, 400);
   const key = (done.resultImageUrl as string).slice(FILES.length);
   assert.ok(key.startsWith(`${ws.id}/images/`) && key.endsWith('.png'));
   assert.deepEqual([...objects.get(key)!.body], [...PNG]);
