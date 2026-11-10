@@ -24,6 +24,7 @@ interface Video {
   durationSec: number | null;
   credits: number;
   error: string | null;
+  options: { progress?: { clip: number; of: number } } | null;
   createdAt: string;
 }
 interface Photo {
@@ -52,6 +53,9 @@ const CAMERAS: { value: string; label: string; modes: Mode[] }[] = [
 ];
 const LANGUAGE_LABEL: Record<string, string> = { auto: 'Detect from the script' };
 const CHARS_PER_SECOND = 14;
+const WALK_SECONDS = [5, 10, 15, 20, 30, 45, 60];
+/** About 60 seconds of speech. */
+const MAX_TALK_SCRIPT = 900;
 
 /**
  * Videos with models: a model photo becomes a short product video, talking
@@ -76,7 +80,7 @@ export default function ModelVideosPage() {
   const [language, setLanguage] = useState('auto');
   const [voice, setVoice] = useState('Wise_Woman');
   const [recording, setRecording] = useState<{ url: string; name: string }>();
-  const [seconds, setSeconds] = useState<5 | 10>(10);
+  const [seconds, setSeconds] = useState(10);
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState<string>();
   const [done, setDone] = useState<string>();
@@ -169,7 +173,7 @@ export default function ModelVideosPage() {
         },
       });
       setVideos((cur) => [r.video, ...(cur ?? [])]);
-      setDone('Your video is being made. It usually takes 2 to 6 minutes; you can leave this page.');
+      setDone(mode === 'walk' && seconds > 10 ? `Your video is being made in ${Math.ceil(seconds / 10)} clips. It can take ${Math.ceil(seconds / 10) * 3} to ${Math.ceil(seconds / 10) * 6} minutes; you can leave this page.` : 'Your video is being made. It usually takes 2 to 6 minutes; you can leave this page.');
       reloadHome();
     } catch (e) {
       setError((e as Error).message);
@@ -242,8 +246,8 @@ export default function ModelVideosPage() {
             />
             <small className="muted">
               {mode === 'walk'
-                ? 'The model moves and the camera follows. 5 or 10 seconds. Speech is in English (other languages are translated).'
-                : 'The model talks to the camera with accurate lip-sync; little walking. Any length. For Bangla, upload your own recording.'}
+                ? 'The model moves and the camera follows. Up to 60 seconds. Speech is in English (other languages are translated).'
+                : 'The model talks to the camera with accurate lip-sync; little walking. Up to about 60 seconds. For Bangla, upload your own recording.'}
             </small>
             <fieldset className="style">
               <legend>Movement and camera</legend>
@@ -270,9 +274,12 @@ export default function ModelVideosPage() {
               {mode === 'walk' && (
                 <label className="field">
                   Length
-                  <select value={seconds} onChange={(e) => setSeconds(Number(e.target.value) as 5 | 10)}>
-                    <option value={5}>5 seconds</option>
-                    <option value={10}>10 seconds</option>
+                  <select value={seconds} onChange={(e) => setSeconds(Number(e.target.value))}>
+                    {WALK_SECONDS.map((n) => (
+                      <option key={n} value={n}>
+                        {n} seconds{n > 10 ? ` (${Math.ceil(n / 10)} clips joined)` : ''}
+                      </option>
+                    ))}
                   </select>
                 </label>
               )}
@@ -307,7 +314,7 @@ export default function ModelVideosPage() {
                     Script
                     <textarea
                       rows={4}
-                      maxLength={mode === 'walk' ? 200 : 1500}
+                      maxLength={mode === 'walk' ? Math.max(200, seconds * 18) : MAX_TALK_SCRIPT}
                       value={script}
                       onChange={(e) => setScript(e.target.value)}
                       placeholder={mode === 'walk' ? 'One or two short lines, e.g. “Our new Eid collection is here. Order today!”' : 'e.g. “Assalamu alaikum! This is our new cotton kurti, perfect for summer…”'}
@@ -338,7 +345,9 @@ export default function ModelVideosPage() {
                     </>
                   )}
                   <small className="muted">
-                    {mode === 'walk' ? 'About 2 to 3 words a second fit; 10 seconds is roughly 25 words.' : 'Bangla is not available as an AI voice yet. Upload your own recording for Bangla.'}
+                    {mode === 'walk'
+                      ? `About 2 to 3 words a second fit, so ${seconds} seconds is roughly ${Math.round(seconds * 2.5)} words.${seconds > 10 ? ' Longer videos are made in 10-second clips joined together; the script is shared between them.' : ''}`
+                      : `Up to about 60 seconds (${script.length}/${MAX_TALK_SCRIPT} characters). Bangla is not available as an AI voice yet; upload your own recording for Bangla.`}
                   </small>
                 </>
               ) : (
@@ -348,7 +357,7 @@ export default function ModelVideosPage() {
                   </button>
                   <input ref={audioInput} type="file" accept="audio/*" hidden onChange={(e) => pickRecording(e.target.files?.[0])} />
                   {recording && <audio controls src={recording.url} style={{ width: '100%' }} />}
-                  <small className="muted">MP3, WAV, M4A or OGG, up to 10 MB. Record on your phone in any language, including Bangla.</small>
+                  <small className="muted">MP3, WAV, M4A or OGG, up to 10 MB and about 60 seconds. Record on your phone in any language, including Bangla.</small>
                 </>
               )}
             </fieldset>
@@ -375,7 +384,7 @@ export default function ModelVideosPage() {
                   ) : v.status === 'pending' ? (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
                       <div className="spinner" aria-hidden="true" />
-                      Making your video…
+                      {v.options?.progress ? `Making clip ${v.options.progress.clip} of ${v.options.progress.of}…` : 'Making your video…'}
                     </div>
                   ) : (
                     <div style={{ padding: 16 }}>{v.error ?? 'This video could not be made.'}</div>

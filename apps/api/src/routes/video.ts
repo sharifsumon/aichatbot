@@ -23,6 +23,7 @@ import { decryptSecret } from '@agently/shared';
 import { workspaceKey, type ObjectStore } from '@agently/storage';
 import { ALL_ROLES, MANAGERS, isUuid, requireRole } from './guard.ts';
 import { parseBody } from './validate.ts';
+import { clipLengths, ffmpegMedia, splitScript, type Media } from '../lib/media.ts';
 import { storedTryOnService } from './tryon-service.ts';
 
 export interface VideoDeps {
@@ -34,7 +35,14 @@ export interface VideoDeps {
   falApiKey?: string;
   /** For tests: replaces the real fal.ai client. */
   makeVideo?: (opts: { apiKey: string; model?: string; walkModel?: string }) => Pick<FalVideo, 'speak' | 'talk' | 'walk' | 'model' | 'walkModel'>;
+  /** For tests: replaces ffmpeg for joining walk-and-talk clips. */
+  media?: Media;
 }
+
+/** Walk-and-talk lengths the shop can pick; over 10 seconds, clips are made one after another and joined. */
+export const WALK_SECONDS = [5, 10, 15, 20, 30, 45, 60] as const;
+/** About 60 seconds of speech. */
+const MAX_TALK_SCRIPT = 900;
 
 /** Credits one second of video uses when the super admin has not set video.creditsPerSecond. */
 export const DEFAULT_VIDEO_CREDITS_PER_SECOND = 15;
@@ -43,8 +51,8 @@ const CHARS_PER_SECOND = 14;
 /** What a talking video with an uploaded voice is assumed to last, before it is made. */
 const ASSUMED_RECORDING_SEC = 20;
 const MAX_RUNNING = 2;
-const STALE_MS = 25 * 60_000;
-const RUN_TIMEOUT_MS = 20 * 60_000;
+const STALE_MS = 60 * 60_000;
+const RUN_TIMEOUT_MS = 55 * 60_000;
 const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
 const AUDIO_TYPES: Record<string, string> = {
   'audio/mpeg': 'mp3',
@@ -73,7 +81,11 @@ const createBody = z
     gesture: z.enum(keys(VIDEO_STYLES.gesture)).optional(),
     camera: z.enum(keys(VIDEO_STYLES.camera)).optional(),
     note: z.string().trim().max(500).optional(),
-    seconds: z.union([z.literal(5), z.literal(10)]).default(10),
+    seconds: z
+      .number()
+      .int()
+      .refine((n) => (WALK_SECONDS as readonly number[]).includes(n), 'must be 5, 10, 15, 20, 30, 45 or 60')
+      .default(10),
   })
   .strict();
 
@@ -188,6 +200,9 @@ export const videoRoutes: FastifyPluginAsync<VideoDeps> = async (app, deps) => {
     }
     if (body.mode === 'walk' && body.audioUrl) return reply.code(400).send({ error: 'Walk and talk makes its own voice from the script. Use Talking for a recording.' });
     if (body.mode === 'talk' && !body.script && !body.audioUrl) return reply.code(400).send({ error: 'Write a script or upload a voice recording' });
+    if (body.mode === 'talk' && !body.audioUrl && body.script!.length > MAX_TALK_SCRIPT) {
+      return reply.code(400).send({ error: `Keep the script under ${MAX_TALK_SCRIPT} characters (about 60 seconds of speech).` });
+    }
 
     const perSecond = await videoCreditsPerSecond(db);
     const estimateSec = body.mode === 'walk' ? body.seconds : body.audioUrl ? ASSUMED_RECORDING_SEC : Math.max(3, Math.ceil(body.script!.length / CHARS_PER_SECOND));
@@ -221,7 +236,7 @@ export const videoRoutes: FastifyPluginAsync<VideoDeps> = async (app, deps) => {
       .returning();
 
     // In the background: videos take minutes, far past the proxy's timeout.
-    void runVideo({ db, storage, publicFileUrl, video, log: req.log }, row!.id, workspaceId, {
+    void runVideo({ db, storage, publicFileUrl, video, media: deps.media ?? ffmpegMedia, log: req.log }, row!.id, workspaceId, {
       mode: body.mode,
       imageUrl: body.sourceImageUrl,
       script: body.script || undefined,
@@ -233,6 +248,7 @@ export const videoRoutes: FastifyPluginAsync<VideoDeps> = async (app, deps) => {
       note: body.note || undefined,
       seconds: body.seconds,
       creditsPerSecond: perSecond,
+      options,
     });
     return reply.code(202).send({ video: view(row!) });
   });
@@ -251,7 +267,14 @@ export const videoRoutes: FastifyPluginAsync<VideoDeps> = async (app, deps) => {
 
 /** Makes the video and saves it. Never throws: failures are written to the row. */
 export async function runVideo(
-  deps: { db: Db; storage: ObjectStore; publicFileUrl: (key: string) => string; video: Pick<FalVideo, 'speak' | 'talk' | 'walk' | 'model' | 'walkModel'>; log: FastifyBaseLogger },
+  deps: {
+    db: Db;
+    storage: ObjectStore;
+    publicFileUrl: (key: string) => string;
+    video: Pick<FalVideo, 'speak' | 'talk' | 'walk' | 'model' | 'walkModel'>;
+    media: Media;
+    log: FastifyBaseLogger;
+  },
   videoId: string,
   workspaceId: string,
   job: {
@@ -264,7 +287,8 @@ export async function runVideo(
     emotion: VideoEmotion;
     style: VideoStyle;
     note?: string;
-    seconds: 5 | 10;
+    seconds: number;
+    options?: Record<string, unknown>;
     creditsPerSecond: number;
   },
 ): Promise<void> {
@@ -275,7 +299,7 @@ export async function runVideo(
   try {
     let result;
     if (job.mode === 'walk') {
-      result = await video.walk({ imageUrl: job.imageUrl, prompt: videoPrompt(job.style, job.note, job.script), seconds: job.seconds }, signal);
+      result = await walkLong(deps, videoId, workspaceId, job, signal);
     } else {
       const audioUrl = job.audioUrl ?? (await video.speak({ text: job.script!, voice: job.voice, language: job.language, emotion: job.emotion }, signal)).audioUrl;
       result = await video.talk({ imageUrl: job.imageUrl, audioUrl, prompt: videoPrompt(job.style, job.note), scriptChars: job.audioUrl ? 0 : job.script?.length }, signal);
@@ -301,6 +325,47 @@ export async function runVideo(
     await db.update(modelVideos).set({ status: 'failed', error: message, finishedAt: new Date() }).where(eq(modelVideos.id, videoId)).catch(() => undefined);
     await recordUsage(db, { workspaceId, model: usageModel, aiReplies: 0, inputTokens: 0, outputTokens: 0, costUsd: 0, failed: true }).catch(() => undefined);
   }
+}
+
+/**
+ * Walk and talk for any length: clips of up to 10 seconds, each starting from
+ * the last frame of the one before, with the script shared out, then joined.
+ */
+async function walkLong(
+  deps: Parameters<typeof runVideo>[0],
+  videoId: string,
+  workspaceId: string,
+  job: Parameters<typeof runVideo>[3],
+  signal: AbortSignal,
+) {
+  const lengths = clipLengths(job.seconds);
+  if (lengths.length === 1) {
+    return deps.video.walk({ imageUrl: job.imageUrl, prompt: videoPrompt(job.style, job.note, job.script), seconds: lengths[0]! }, signal);
+  }
+  const lines = splitScript(job.script ?? '', lengths.length);
+  const clips: Uint8Array[] = [];
+  let imageUrl = job.imageUrl;
+  let durationSec = 0;
+  let costUsd = 0;
+  for (let i = 0; i < lengths.length; i++) {
+    await deps.db
+      .update(modelVideos)
+      .set({ options: { ...job.options, progress: { clip: i + 1, of: lengths.length } } })
+      .where(eq(modelVideos.id, videoId));
+    // Later clips carry on from where the last one ended.
+    const note = [job.note, i > 0 ? 'Continue smoothly from this exact frame: same person, outfit, place and lighting.' : ''].filter(Boolean).join(' ');
+    const clip = await deps.video.walk({ imageUrl, prompt: videoPrompt(job.style, note || undefined, lines[i] || undefined), seconds: lengths[i]! }, signal);
+    clips.push(clip.video.bytes);
+    durationSec += clip.durationSec;
+    costUsd += clip.costUsd;
+    if (i < lengths.length - 1) {
+      const frame = await deps.media.lastFrame(clip.video.bytes);
+      const key = workspaceKey(workspaceId, 'images', `${randomUUID()}.jpg`);
+      await deps.storage.put(key, frame, 'image/jpeg');
+      imageUrl = deps.publicFileUrl(key);
+    }
+  }
+  return { video: { bytes: await deps.media.concat(clips), contentType: 'video/mp4' }, durationSec, costUsd };
 }
 
 async function failStale(db: Db, workspaceId: string) {
