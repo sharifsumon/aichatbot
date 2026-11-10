@@ -198,6 +198,35 @@ test('uploads: product photos are checked and stored under the shop; 503 without
   assert.equal(objects.size, 1);
 });
 
+test('uploads: a product video is checked, stored under the shop, and saved on the product', { skip }, async () => {
+  const s = await shop();
+  const { app, objects } = server({ storage: true });
+  const up = (name: string, type: string, body: Buffer) => {
+    const m = multipart(name, type, body);
+    return app.inject({ method: 'POST', url: `/api/workspaces/${s.ws.id}/uploads/videos`, payload: m.payload, cookies: s.auth.cookies, headers: { ...m.headers, origin: WEB } });
+  };
+  const mp4 = Buffer.concat([Buffer.from([0, 0, 0, 0x20]), Buffer.from('ftypisom'), randomBytes(64)]);
+  const ok = await up('clip.mp4', 'video/mp4', mp4);
+  assert.equal(ok.statusCode, 201, ok.body);
+  assert.match(ok.json().url, new RegExp(`^https://files.agently.test/${s.ws.id}/videos/.+\\.mp4$`));
+  assert.equal((await up('clip.mov', 'video/quicktime', mp4)).statusCode, 201);
+  assert.equal((await up('fake.mp4', 'video/mp4', Buffer.from('not a video at all'))).statusCode, 415);
+  assert.equal((await up('photo.png', 'image/png', mp4)).statusCode, 415);
+  assert.equal(objects.size, 2);
+
+  const made = await app.inject({
+    method: 'POST',
+    url: `/api/workspaces/${s.ws.id}/products`,
+    payload: { title: 'Kurti', code: 'KR-1', price: 900, videoUrl: ok.json().url, variants: [{ stock: 3 }] },
+    ...s.auth,
+  });
+  assert.equal(made.statusCode, 201, made.body);
+  assert.equal(made.json().product.videoUrl, ok.json().url);
+  const id = made.json().product.id;
+  const cleared = await app.inject({ method: 'PUT', url: `/api/workspaces/${s.ws.id}/products/${id}`, payload: { title: 'Kurti', code: 'KR-1', price: 900, videoUrl: null, variants: [{ stock: 3 }] }, ...s.auth });
+  assert.equal(cleared.json().product.videoUrl, null);
+});
+
 test('knowledge: add text, Q&A, website, sheet and file sources; edit, re-sync, delete', { skip }, async () => {
   const { app, queued, objects } = server({ storage: true });
   const s = await shop();

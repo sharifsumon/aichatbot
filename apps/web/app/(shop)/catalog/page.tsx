@@ -11,6 +11,8 @@ import type { FacebookPost, Product, ProductImage } from '@/lib/types';
 
 /** Same limit as the API. */
 const MAX_PHOTOS = 10;
+/** Same limit as the API. */
+const MAX_VIDEO_MB = 100;
 
 const LOW_STOCK = 10;
 
@@ -195,6 +197,10 @@ function Editor({
   const api = useApi();
   const upload = useUpload();
   const file = useRef<HTMLInputElement>(null);
+  const videoFile = useRef<HTMLInputElement>(null);
+  const [videoUrl, setVideoUrl] = useState(product?.videoUrl ?? '');
+  const [videoLink, setVideoLink] = useState('');
+  const [videoUploading, setVideoUploading] = useState(false);
   const [title, setTitle] = useState(product?.title ?? '');
   const [code, setCode] = useState(product?.code ?? '');
   const [description, setDescription] = useState(product?.description ?? '');
@@ -264,6 +270,33 @@ function Editor({
     }
   }
 
+  async function pickVideo(f: File | undefined) {
+    if (!f) return;
+    if (f.size > MAX_VIDEO_MB * 1024 * 1024) return setError(`A video can be at most ${MAX_VIDEO_MB} MB. Trim it or record a shorter one.`);
+    setBusy(true);
+    setVideoUploading(true);
+    setError(undefined);
+    try {
+      // Large clips on a mobile connection take a while.
+      const r = await upload<{ url: string }>(`${ws}/uploads/videos`, f, 10 * 60_000);
+      setVideoUrl(r.url);
+    } catch (e) {
+      setError((e as ApiError).status === 503 ? 'Video uploads are not switched on yet. Paste a link to the video instead.' : (e as Error).message);
+    } finally {
+      setBusy(false);
+      setVideoUploading(false);
+      if (videoFile.current) videoFile.current.value = '';
+    }
+  }
+
+  function addVideoLink() {
+    const url = videoLink.trim();
+    if (!/^https?:\/\/\S+$/.test(url)) return setError('Paste a full video link starting with https://');
+    setVideoUrl(url);
+    setVideoLink('');
+    setError(undefined);
+  }
+
   function addLink() {
     const url = photoLink.trim();
     if (!url) return;
@@ -282,7 +315,7 @@ function Editor({
     e.preventDefault();
     setBusy(true);
     setError(undefined);
-    const body = { title, code, description, price, images: shownImages, status: draft ? 'draft' : 'active', variants: variantsOf(grid) };
+    const body = { title, code, description, price, images: shownImages, videoUrl: videoUrl || null, status: draft ? 'draft' : 'active', variants: variantsOf(grid) };
     try {
       const r = product
         ? await api<{ product: Product }>(`${ws}/products/${product.id}`, { method: 'PUT', body })
@@ -380,6 +413,34 @@ function Editor({
           </button>
         </span>
         {photoColors.length > 0 && <small className="muted">Give each colour its own photo, and the bot sends that photo when a customer asks to see the colour.</small>}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>
+          Video <small className="muted">(optional; MP4, MOV or WebM up to {MAX_VIDEO_MB} MB)</small>
+        </span>
+        {videoUrl ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
+            <video src={videoUrl} controls preload="metadata" style={{ width: '100%', maxWidth: 360, maxHeight: 320, borderRadius: 12, background: '#000' }} />
+            <button type="button" className="btn link" onClick={() => setVideoUrl('')} disabled={busy}>
+              Remove video
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+              <button type="button" className="btn sm" onClick={() => videoFile.current?.click()} disabled={busy}>
+                {videoUploading ? 'Uploading video…' : '+ Add a video'}
+              </button>
+              <input ref={videoFile} type="file" accept="video/mp4,video/quicktime,video/webm" hidden onChange={(e) => pickVideo(e.target.files?.[0])} />
+            </div>
+            <span style={{ display: 'flex', gap: 6 }}>
+              <input className="input" aria-label="Video link" placeholder="or paste a video link" value={videoLink} onChange={(e) => setVideoLink(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addVideoLink())} style={{ height: 34, fontSize: 13, flex: 1, minWidth: 0 }} />
+              <button type="button" className="btn sm" onClick={addVideoLink} disabled={!videoLink.trim()}>
+                Add
+              </button>
+            </span>
+          </>
+        )}
       </div>
       <div className="row">
         <label className="field" style={{ flex: '2 1 160px' }}>

@@ -35,6 +35,8 @@ const productBody = z.object({
     .array(z.object({ url: webLink, color: z.string().trim().max(40).default('') }))
     .max(MAX_PHOTOS, `a product can have at most ${MAX_PHOTOS} photos`)
     .optional(),
+  /** One product video; null removes it. */
+  videoUrl: webLink.nullish(),
   status: z.enum(['active', 'draft', 'archived']).default('active'),
   /** The colour × size grid. A product with no options has one cell with both empty. */
   variants: z
@@ -74,6 +76,9 @@ export interface CatalogDeps {
 
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const IMAGE_TYPES: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+/** Product videos are stored as uploaded; phone clips of a minute or two fit. */
+export const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
+const VIDEO_TYPES: Record<string, string> = { 'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm' };
 
 /** Product Catalog: products with a colour × size stock grid. Staff read; owners and admins edit. */
 export const catalogRoutes: FastifyPluginAsync<CatalogDeps> = async (app, deps) => {
@@ -102,6 +107,30 @@ export const catalogRoutes: FastifyPluginAsync<CatalogDeps> = async (app, deps) 
     if (!looksLike(ext, bytes)) return reply.code(415).send({ error: 'That file is not a JPEG, PNG or WebP image' });
 
     const key = workspaceKey(req.params.workspaceId, 'images', `${randomUUID()}.${ext}`);
+    await deps.storage.put(key, bytes, file.mimetype);
+    return reply.code(201).send({ url: deps.publicFileUrl(key) });
+  });
+
+  /** Upload a product video (multipart/form-data, one `file`): MP4, MOV or WebM up to 100 MB. Returns its URL. */
+  app.post<{ Params: { workspaceId: string } }>('/workspaces/:workspaceId/uploads/videos', async (req, reply) => {
+    if (!(await requireRole(db, req, reply, MANAGERS))) return reply;
+    if (!deps.storage || !deps.publicFileUrl) return reply.code(503).send({ error: 'Video uploads are not set up yet' });
+    if (!req.isMultipart()) return reply.code(415).send({ error: 'Send the video as multipart/form-data' });
+    const file = await req.file({ limits: { fileSize: MAX_VIDEO_BYTES, files: 1 } });
+    if (!file) return reply.code(400).send({ error: 'No video was sent' });
+    const ext = VIDEO_TYPES[file.mimetype];
+    if (!ext) {
+      file.file.resume();
+      return reply.code(415).send({ error: 'Upload an MP4, MOV or WebM video' });
+    }
+    const bytes = await file.toBuffer().catch((err: { code?: string }) => {
+      if (err.code === 'FST_REQ_FILE_TOO_LARGE') return undefined;
+      throw err;
+    });
+    if (!bytes || file.file.truncated) return reply.code(413).send({ error: 'A video can be at most 100 MB' });
+    if (!looksLikeVideo(ext, bytes)) return reply.code(415).send({ error: 'That file is not an MP4, MOV or WebM video' });
+
+    const key = workspaceKey(req.params.workspaceId, 'videos', `${randomUUID()}.${ext}`);
     await deps.storage.put(key, bytes, file.mimetype);
     return reply.code(201).send({ url: deps.publicFileUrl(key) });
   });
@@ -258,6 +287,12 @@ function looksLike(ext: string, b: Uint8Array): boolean {
   if (ext === 'jpg') return b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;
   if (ext === 'png') return b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47;
   return Buffer.from(b.subarray(0, 4)).toString('latin1') === 'RIFF' && Buffer.from(b.subarray(8, 12)).toString('latin1') === 'WEBP';
+}
+
+/** MP4 and MOV have an "ftyp" box at byte 4; WebM starts with the EBML header. */
+function looksLikeVideo(ext: string, b: Uint8Array): boolean {
+  if (ext === 'webm') return b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3;
+  return Buffer.from(b.subarray(4, 8)).toString('latin1') === 'ftyp';
 }
 
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);

@@ -150,6 +150,7 @@ export interface Product {
   images: ProductImage[];
   /** The product's page on the shop's own website, for Order Now on posts. */
   websiteUrl: string | null;
+  videoUrl: string | null;
   status: 'active' | 'draft' | 'archived';
   variants: Variant[];
   colors: string[];
