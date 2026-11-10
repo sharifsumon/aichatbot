@@ -32,7 +32,7 @@ export interface AdminModelDeps {
 
 const serviceBody = z
   .object({
-    provider: z.enum(TRYON_SERVICES as ['fashn', 'gemini']),
+    provider: z.enum(TRYON_SERVICES as ['fashn', 'gemini', 'fal']),
     model: z.string().trim().max(120).default(''),
     mode: z.enum(['', 'performance', 'balanced', 'quality']).default(''),
     costPerImageUsd: z.number().min(0).max(10).nullable().default(null),

@@ -144,7 +144,9 @@ export const tryOnRoutes: FastifyPluginAsync<TryOnDeps> = async (app, deps) => {
     // In the background, so a slow AI never holds the request past the proxy's timeout.
     void run({ db, storage, publicFileUrl, tryOn, log: req.log }, image!.id, workspaceId, {
       modelKey: character.imageKey,
+      modelUrl: character.imageUrl,
       garmentKey,
+      garmentUrl: body.garmentImageUrl,
       category: body.category as (typeof GARMENT_CATEGORIES)[number],
       note: body.note,
       credits: cost,
@@ -170,7 +172,7 @@ export async function run(
   deps: { db: Db; storage: ObjectStore; publicFileUrl: (key: string) => string; tryOn: TryOnProvider; log: FastifyBaseLogger },
   imageId: string,
   workspaceId: string,
-  job: { modelKey: string; garmentKey: string; category: (typeof GARMENT_CATEGORIES)[number]; note?: string; credits: number },
+  job: { modelKey: string; modelUrl?: string; garmentKey: string; garmentUrl?: string; category: (typeof GARMENT_CATEGORIES)[number]; note?: string; credits: number },
 ): Promise<void> {
   const { db, storage, tryOn } = deps;
   const usageModel = `tryon:${tryOn.model}`;
@@ -178,8 +180,8 @@ export async function run(
     const [modelBytes, garmentBytes] = await Promise.all([storage.get(job.modelKey), storage.get(job.garmentKey)]);
     const result = await tryOn.tryOn(
       {
-        model: { bytes: modelBytes, contentType: typeOf(job.modelKey) },
-        garment: { bytes: garmentBytes, contentType: typeOf(job.garmentKey) },
+        model: { bytes: modelBytes, contentType: typeOf(job.modelKey), url: job.modelUrl },
+        garment: { bytes: garmentBytes, contentType: typeOf(job.garmentKey), url: job.garmentUrl },
         category: job.category,
         note: job.note,
       },

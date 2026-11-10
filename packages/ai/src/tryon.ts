@@ -10,6 +10,8 @@ export const GARMENT_CATEGORIES: GarmentCategory[] = ['auto', 'tops', 'bottoms',
 export interface TryOnImage {
   bytes: Uint8Array;
   contentType: string;
+  /** A public link to the same photo, when there is one; services that fetch by link use it. */
+  url?: string;
 }
 
 export interface TryOnRequest {
@@ -159,6 +161,21 @@ const CATEGORY_WORDS: Record<GarmentCategory, string> = {
   'one-pieces': 'the full outfit',
 };
 
+/** The instruction for general image models (Gemini, fal.ai Nano Banana): photo 1 is the model, photo 2 the garment. */
+export function tryOnPrompt(req: TryOnRequest): string {
+  const what = CATEGORY_WORDS[req.category];
+  return [
+    `The first image is a fashion model. The second image shows ${what} a shop sells.`,
+    `Make a realistic e-commerce product photo of the same model wearing exactly ${what} from the second image.`,
+    'Keep the model’s face, body, skin tone, hair and pose unchanged, and keep the background.',
+    'Copy the garment faithfully: colour, print, embroidery, fabric texture, neckline, sleeves and length.',
+    'Do not add text, logos or watermarks.',
+    req.note ? `Also: ${req.note}` : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
 /** Google Gemini's image model ("Nano Banana"): a general image editor told to dress the model. */
 export class GeminiTryOn implements TryOnProvider {
   readonly name = 'gemini';
@@ -176,17 +193,7 @@ export class GeminiTryOn implements TryOnProvider {
   }
 
   async tryOn(req: TryOnRequest, signal?: AbortSignal): Promise<TryOnResult> {
-    const what = CATEGORY_WORDS[req.category];
-    const prompt = [
-      `The first image is a fashion model. The second image shows ${what} a shop sells.`,
-      `Make a realistic e-commerce product photo of the same model wearing exactly ${what} from the second image.`,
-      'Keep the model’s face, body, skin tone, hair and pose unchanged, and keep the background.',
-      'Copy the garment faithfully: colour, print, embroidery, fabric texture, neckline, sleeves and length.',
-      'Do not add text, logos or watermarks.',
-      req.note ? `Also: ${req.note}` : '',
-    ]
-      .filter(Boolean)
-      .join(' ');
+    const prompt = tryOnPrompt(req);
     const inline = (img: TryOnImage) => ({ inline_data: { mime_type: img.contentType, data: Buffer.from(img.bytes).toString('base64') } });
     const res = await this.o.fetch(`${this.o.baseUrl}/models/${encodeURIComponent(this.model)}:generateContent`, {
       method: 'POST',
@@ -213,8 +220,92 @@ export class GeminiTryOn implements TryOnProvider {
   }
 }
 
-export type TryOnServiceName = 'fashn' | 'gemini';
-export const TRYON_SERVICES: TryOnServiceName[] = ['fashn', 'gemini'];
+export interface FalOptions {
+  apiKey: string;
+  /** A fal.ai image-editing endpoint id, e.g. fal-ai/nano-banana/edit (default), fal-ai/nano-banana-2/edit or fal-ai/nano-banana-pro/edit. */
+  model?: string;
+  costPerImageUsd?: number;
+  baseUrl?: string;
+  fetch?: Fetch;
+  pollMs?: number;
+}
+
+/** Known fal.ai prices per image (fal.ai/pricing), for the usage page when no cost is set. */
+const FAL_PRICES: Record<string, number> = {
+  'fal-ai/nano-banana/edit': 0.0398,
+  'fal-ai/nano-banana-2/edit': 0.08,
+  'fal-ai/nano-banana-pro/edit': 0.15,
+};
+
+/**
+ * fal.ai: Google's Nano Banana (Gemini image) models hosted by fal. Submits to
+ * fal's queue, polls the status, then reads the result and downloads the image.
+ */
+export class FalTryOn implements TryOnProvider {
+  readonly name = 'fal';
+  readonly model: string;
+  private readonly o: Required<Omit<FalOptions, 'model' | 'costPerImageUsd'>> & { costPerImageUsd?: number };
+
+  constructor(options: FalOptions) {
+    this.model = (options.model || 'fal-ai/nano-banana/edit').replace(/^\/+|\/+$/g, '');
+    this.o = {
+      apiKey: options.apiKey,
+      costPerImageUsd: options.costPerImageUsd,
+      baseUrl: (options.baseUrl ?? 'https://queue.fal.run').replace(/\/+$/, ''),
+      fetch: options.fetch ?? fetch,
+      pollMs: options.pollMs ?? 2000,
+    };
+  }
+
+  async tryOn(req: TryOnRequest, signal?: AbortSignal): Promise<TryOnResult> {
+    const headers = { authorization: `Key ${this.o.apiKey}`, 'content-type': 'application/json' };
+    const start = await this.o.fetch(`${this.o.baseUrl}/${this.model}`, {
+      method: 'POST',
+      headers,
+      signal,
+      body: JSON.stringify({
+        prompt: tryOnPrompt(req),
+        // Public links when we have them (smaller requests); otherwise the photos inline.
+        image_urls: [req.model.url ?? dataUri(req.model), req.garment.url ?? dataUri(req.garment)],
+        num_images: 1,
+        aspect_ratio: '3:4',
+        output_format: 'jpeg',
+      }),
+    });
+    const started = (await start.json().catch(() => ({}))) as { request_id?: string; status_url?: string; response_url?: string; detail?: unknown };
+    if (!start.ok || !started.request_id) {
+      throw new TryOnError(`fal.ai submit failed (${start.status}): ${JSON.stringify(started.detail ?? started)}`, start.status === 401 || start.status === 403 ? 'The fal.ai API key was refused. Check it under Platform settings.' : 'The image AI refused the request. Try again in a minute.');
+    }
+    // Status and result live under owner/app only, e.g. fal-ai/nano-banana/requests/<id>.
+    const app = this.model.split('/').slice(0, 2).join('/');
+    const statusUrl = started.status_url ?? `${this.o.baseUrl}/${app}/requests/${started.request_id}/status`;
+    const responseUrl = started.response_url ?? `${this.o.baseUrl}/${app}/requests/${started.request_id}`;
+
+    for (let i = 0; i < 120; i++) {
+      await sleep(this.o.pollMs, signal);
+      const res = await this.o.fetch(statusUrl, { headers, signal });
+      if (res.status === 429 || res.status >= 500) continue;
+      const st = (await res.json().catch(() => ({}))) as { status?: string; error?: string; error_type?: string };
+      if (st.error) throw new TryOnError(`fal.ai ${st.error_type ?? 'error'}: ${st.error}`);
+      if (st.status !== 'COMPLETED') continue;
+      const out = await this.o.fetch(responseUrl, { headers, signal });
+      const body = (await out.json().catch(() => ({}))) as { images?: { url?: string }[]; detail?: unknown };
+      if (!out.ok) {
+        const blocked = JSON.stringify(body.detail ?? '').toLowerCase().includes('content');
+        throw new TryOnError(`fal.ai result ${out.status}: ${JSON.stringify(body.detail ?? body)}`, blocked ? 'The photo was refused by the AI service’s content rules.' : 'The AI could not make this photo. Try another garment photo.');
+      }
+      const url = body.images?.[0]?.url;
+      if (!url) throw new TryOnError('fal.ai finished without an image');
+      // fal's links expire, so the image is downloaded and stored by us.
+      const image = url.startsWith('data:') ? fromDataUri(url) : await download(this.o.fetch, url, signal);
+      return { image, costUsd: this.o.costPerImageUsd ?? FAL_PRICES[this.model] ?? 0.04 };
+    }
+    throw new TryOnError('fal.ai took too long', 'The image took too long. Try again.');
+  }
+}
+
+export type TryOnServiceName = 'fashn' | 'gemini' | 'fal';
+export const TRYON_SERVICES: TryOnServiceName[] = ['fashn', 'gemini', 'fal'];
 
 export interface TryOnConfig {
   provider: string;
@@ -230,9 +321,10 @@ export interface TryOnConfig {
 export function makeTryOn(c: TryOnConfig): TryOnProvider {
   const provider = c.provider.toLowerCase();
   const model = c.model || undefined;
+  if (provider === 'fal') return new FalTryOn({ apiKey: c.apiKey, model, costPerImageUsd: c.costPerImageUsd });
   if (provider === 'gemini') return new GeminiTryOn({ apiKey: c.apiKey, model, costPerImageUsd: c.costPerImageUsd });
   if (provider === 'fashn') return new FashnTryOn({ apiKey: c.apiKey, model, costPerImageUsd: c.costPerImageUsd, mode: (c.mode as FashnOptions['mode']) || undefined });
-  throw new Error(`TRYON_PROVIDER must be fashn or gemini, not ${provider}`);
+  throw new Error(`TRYON_PROVIDER must be fashn, gemini or fal, not ${provider}`);
 }
 
 /** Reads TRYON_* settings; undefined when no service is configured. */

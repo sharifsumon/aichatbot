@@ -8,7 +8,7 @@ export const TRYON_SERVICE_KEY = 'tryon.service';
 
 /** As stored: the API key only encrypted, plus its last 4 characters to show which key is in use. */
 export interface StoredTryOnService {
-  provider: 'fashn' | 'gemini';
+  provider: 'fashn' | 'gemini' | 'fal';
   model: string;
   mode: string;
   costPerImageUsd: number | null;
