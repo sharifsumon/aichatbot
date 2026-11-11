@@ -10,7 +10,22 @@ import { falDetail, TryOnError } from './tryon.ts';
 export const DEFAULT_VIDEO_MODEL = 'fal-ai/kling-video/ai-avatar/v2/standard';
 /** "Walk and talk": full motion and camera from a prompt, speech from the prompt (English or Chinese), 5 or 10 seconds. */
 export const DEFAULT_WALK_MODEL = 'fal-ai/kling-video/v2.6/pro/image-to-video';
-export const DEFAULT_VOICE_MODEL = 'fal-ai/minimax/speech-02-turbo';
+export const DEFAULT_VOICE_MODEL = 'fal-ai/minimax/speech-2.6-turbo';
+/**
+ * Voice models tried in order when none is set: fal closes older ones to some
+ * keys ("API key does not have access to model"), so the next one is tried.
+ */
+export const VOICE_MODELS = ['fal-ai/minimax/speech-2.6-turbo', 'fal-ai/minimax/preview/speech-2.5-turbo', 'fal-ai/minimax/speech-02-turbo'];
+
+/** The request body for a MiniMax voice model: 2.6 names the script `prompt`, older ones `text`. */
+function voiceInput(model: string, req: SpeakRequest) {
+  return {
+    [/speech-2\.6/.test(model) ? 'prompt' : 'text']: req.text,
+    voice_setting: { voice_id: req.voice ?? 'Wise_Woman', speed: 1, emotion: req.emotion ?? 'happy' },
+    language_boost: req.language ?? 'auto',
+    output_format: 'url',
+  };
+}
 
 /** US dollars per second of video, from fal's model pages. */
 const VIDEO_PRICES: Record<string, number> = {
@@ -19,7 +34,7 @@ const VIDEO_PRICES: Record<string, number> = {
   'fal-ai/kling-video/v2.6/pro/image-to-video': 0.14,
 };
 /** US dollars per 1,000 characters of script. */
-const VOICE_PRICE_PER_1000 = 0.06;
+const VOICE_PRICE_PER_1000 = 0.1;
 
 /** The voices the shop can pick (MiniMax system voices). */
 export const VIDEO_VOICES = {
@@ -66,7 +81,7 @@ export type VideoStyle = {
   camera?: keyof typeof VIDEO_STYLES.camera;
 };
 
-export function videoPrompt(style: VideoStyle = {}, note?: string, script?: string): string {
+export function videoPrompt(style: VideoStyle = {}, note?: string, script?: string, silent = false): string {
   const gesture = style.gesture && VIDEO_STYLES.gesture[style.gesture];
   const camera = style.camera && VIDEO_STYLES.camera[style.camera];
   return [
@@ -76,7 +91,11 @@ export function videoPrompt(style: VideoStyle = {}, note?: string, script?: stri
     camera ? `Camera: ${camera}.` : '',
     note ? note : '',
     // The walk model speaks what the prompt quotes; it reads English best in lowercase.
-    script ? `The model looks at the camera and says: "${script.replace(/"/g, "'").toLowerCase()}"` : 'Natural lip movement matched to the voice.',
+    silent
+      ? 'The model does not talk; no speech.'
+      : script
+        ? `The model looks at the camera and says: "${script.replace(/"/g, "'").toLowerCase()}"`
+        : 'Natural lip movement matched to the voice.',
   ]
     .filter(Boolean)
     .join(' ');
@@ -121,12 +140,15 @@ export class FalVideo {
   readonly model: string;
   readonly walkModel: string;
   readonly voiceModel: string;
+  private readonly voiceModels: string[];
   private readonly o: { apiKey: string; baseUrl: string; fetch: typeof fetch; pollMs: number };
 
   constructor(options: FalVideoOptions) {
     this.model = endpointId(options.model) || DEFAULT_VIDEO_MODEL;
     this.walkModel = endpointId(options.walkModel) || DEFAULT_WALK_MODEL;
-    this.voiceModel = options.voiceModel || DEFAULT_VOICE_MODEL;
+    const voice = endpointId(options.voiceModel);
+    this.voiceModels = voice ? [voice] : VOICE_MODELS;
+    this.voiceModel = this.voiceModels[0]!;
     this.o = {
       apiKey: options.apiKey,
       baseUrl: (options.baseUrl ?? 'https://queue.fal.run').replace(/\/+$/, ''),
@@ -142,35 +164,36 @@ export class FalVideo {
 
   /** Turns the script into speech. Returns a link to the audio on fal. */
   async speak(req: SpeakRequest, signal?: AbortSignal): Promise<{ audioUrl: string; durationSec: number }> {
-    const out = (await this.run(
-      this.voiceModel,
-      {
-        text: req.text,
-        voice_setting: { voice_id: req.voice ?? 'Wise_Woman', speed: 1, emotion: req.emotion ?? 'happy' },
-        language_boost: req.language ?? 'auto',
-        output_format: 'url',
-      },
-      'voice',
-      signal,
-    )) as { audio?: { url?: string }; duration_ms?: number };
-    const audioUrl = out.audio?.url;
+    let out: { audio?: { url?: string }; duration_ms?: number } | undefined;
+    for (const [i, model] of this.voiceModels.entries()) {
+      try {
+        out = (await this.run(model, voiceInput(model, req), 'voice', signal)) as typeof out;
+        break;
+      } catch (err) {
+        // A model this key can't use (or that fal removed): try the next one.
+        const closed = err instanceof TryOnError && /\b(401|403|404)\b|does not have access|no model called/i.test(`${err.message} ${err.userMessage}`);
+        if (!closed || i === this.voiceModels.length - 1 || /balance|locked/i.test(err instanceof TryOnError ? err.userMessage : '')) throw err;
+      }
+    }
+    const audioUrl = out?.audio?.url;
     if (!audioUrl) throw new TryOnError('fal.ai speech finished without audio', 'The voice could not be made. Try a shorter or simpler script.');
-    return { audioUrl, durationSec: (out.duration_ms ?? 0) / 1000 };
+    return { audioUrl, durationSec: (out?.duration_ms ?? 0) / 1000 };
   }
 
   /**
    * Walk and talk: one model makes the motion, the camera move and the speech
    * (from the script in the prompt). 5 or 10 seconds.
    */
-  async walk(req: { imageUrl: string; prompt: string; seconds: 5 | 10 }, signal?: AbortSignal): Promise<TalkResult> {
+  async walk(req: { imageUrl: string; prompt: string; seconds: 5 | 10; silent?: boolean }, signal?: AbortSignal): Promise<TalkResult> {
     const model = this.walkModel;
-    const out = (await this.run(model, { start_image_url: req.imageUrl, prompt: req.prompt, duration: String(req.seconds), generate_audio: true }, 'video', signal)) as {
+    const out = (await this.run(model, { start_image_url: req.imageUrl, prompt: req.prompt, duration: String(req.seconds), generate_audio: !req.silent }, 'video', signal)) as {
       video?: { url?: string; content_type?: string };
       duration?: number;
     };
     const video = await this.download(out.video, signal);
     const durationSec = out.duration ?? req.seconds;
-    return { video, durationSec, costUsd: durationSec * (VIDEO_PRICES[model] ?? 0.14) };
+    // Without sound, fal charges half for Kling.
+    return { video, durationSec, costUsd: durationSec * (VIDEO_PRICES[model] ?? 0.14) * (req.silent ? 0.5 : 1) };
   }
 
   /** Animates the photo to the voice and downloads the finished video. */

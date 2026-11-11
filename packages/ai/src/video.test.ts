@@ -11,7 +11,9 @@ test('talking: the script becomes a voice, then the photo is lip-synced and down
     pollMs: 0,
     fetch: (async (url: string, init: RequestInit = {}) => {
       calls.push({ url, body: init.body ? JSON.parse(init.body as string) : undefined });
-      if (url === 'https://queue.fal.run/fal-ai/minimax/speech-02-turbo') return json(200, { request_id: 's1' });
+      // The newest voice model is closed to this key, so the next one is used.
+      if (url === 'https://queue.fal.run/fal-ai/minimax/speech-2.6-turbo') return json(403, { detail: 'API key does not have access to model: fal-ai/minimax/speech-2.6-turbo' });
+      if (url === 'https://queue.fal.run/fal-ai/minimax/preview/speech-2.5-turbo') return json(200, { request_id: 's1' });
       if (url === 'https://queue.fal.run/fal-ai/kling-video/ai-avatar/v2/standard') return json(200, { request_id: 'v1' });
       if (url.endsWith('/status')) return json(200, { status: 'COMPLETED' });
       if (url.endsWith('/requests/s1')) return json(200, { audio: { url: 'https://fal.media/a.mp3' }, duration_ms: 4000 });
@@ -21,14 +23,16 @@ test('talking: the script becomes a voice, then the photo is lip-synced and down
   });
   const voice = await video.speak({ text: 'Hello', voice: 'Calm_Woman', language: 'English' });
   assert.equal(voice.audioUrl, 'https://fal.media/a.mp3');
-  assert.equal(calls[0]!.body.voice_setting.voice_id, 'Calm_Woman');
-  assert.equal(calls[0]!.body.output_format, 'url');
+  assert.equal(calls[0]!.body.prompt, 'Hello');
+  assert.equal(calls[1]!.body.text, 'Hello');
+  assert.equal(calls[1]!.body.voice_setting.voice_id, 'Calm_Woman');
+  assert.equal(calls[1]!.body.output_format, 'url');
   const r = await video.talk({ imageUrl: 'https://files.test/p.jpg', audioUrl: voice.audioUrl, prompt: 'p', scriptChars: 5 });
   const submit = calls.find((c) => c.url.endsWith('/ai-avatar/v2/standard'))!;
   assert.deepEqual(submit.body, { image_url: 'https://files.test/p.jpg', audio_url: 'https://fal.media/a.mp3', prompt: 'p' });
   assert.deepEqual([...r.video.bytes], [7, 7]);
   assert.equal(r.durationSec, 4.1);
-  assert.ok(Math.abs(r.costUsd - (4.1 * 0.0562 + 0.0003)) < 1e-9);
+  assert.ok(Math.abs(r.costUsd - (4.1 * 0.0562 + 0.0005)) < 1e-9);
 });
 
 test('walk and talk sends the start image, length and audio flag', async () => {
@@ -61,4 +65,16 @@ test('walk and talk sends the start image, length and audio flag', async () => {
 test('an empty fal balance on video says so', async () => {
   const video = new FalVideo({ apiKey: 'k', pollMs: 0, fetch: (async () => json(403, { detail: 'User is locked. Reason: Exhausted balance.' })) as typeof fetch });
   await assert.rejects(video.walk({ imageUrl: 'x', prompt: 'p', seconds: 5 }), (e: { userMessage: string }) => /out of balance/.test(e.userMessage));
+});
+
+test('a voice model set by the admin is the only one tried', async () => {
+  const urls: string[] = [];
+  const video = new FalVideo({
+    apiKey: 'k',
+    pollMs: 0,
+    voiceModel: 'fal-ai/minimax/speech-02-turbo',
+    fetch: (async (url: string) => (urls.push(url), json(403, { detail: 'API key does not have access to model' }))) as typeof fetch,
+  });
+  await assert.rejects(video.speak({ text: 'Hi' }), /does not have access/);
+  assert.deepEqual(urls, ['https://queue.fal.run/fal-ai/minimax/speech-02-turbo']);
 });
