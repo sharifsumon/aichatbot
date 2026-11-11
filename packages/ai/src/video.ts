@@ -232,9 +232,11 @@ export class FalVideo {
               : `fal.ai error ${start.status}${detail ? `: ${detail}` : ''}.`;
       throw new TryOnError(`fal.ai ${what} submit to ${model} failed (${start.status}): ${JSON.stringify(started.detail ?? started)}`, message);
     }
+    // fal addresses a queued request by owner/app only (fal-ai/kling-video/requests/<id>), never the full model path.
     const app = model.split('/').slice(0, 2).join('/');
-    const statusUrl = started.status_url ?? `${this.o.baseUrl}/${app}/requests/${started.request_id}/status`;
-    const responseUrl = started.response_url ?? `${this.o.baseUrl}/${app}/requests/${started.request_id}`;
+    const appUrl = `${this.o.baseUrl}/${app}/requests/${started.request_id}`;
+    const statusUrl = started.status_url ?? `${appUrl}/status`;
+    const responseUrl = started.response_url ?? appUrl;
     for (;;) {
       await new Promise<void>((resolve, reject) => {
         if (signal?.aborted) return reject(new TryOnError('Stopped waiting', 'The video took too long. Try again.'));
@@ -246,13 +248,15 @@ export class FalVideo {
       const st = (await res.json().catch(() => ({}))) as { status?: string; error?: string; error_type?: string };
       if (st.error) throw new TryOnError(`fal.ai ${what} ${st.error_type ?? 'error'}: ${st.error}`, `The AI could not make this ${what}: ${st.error}`);
       if (st.status !== 'COMPLETED') continue;
-      const out = await this.o.fetch(responseUrl, { headers, signal });
+      let out = await this.o.fetch(responseUrl, { headers, signal });
+      // fal has answered the full-path result link with 403/404/405 for some models; the owner/app link is the documented one.
+      if ([403, 404, 405].includes(out.status) && responseUrl !== appUrl) out = await this.o.fetch(appUrl, { headers, signal });
       const body = (await out.json().catch(() => ({}))) as { detail?: unknown };
       if (!out.ok) {
         const detail = falDetail(body.detail ?? body);
         const blocked = /content|safety|policy/i.test(detail);
         throw new TryOnError(
-          `fal.ai ${what} result ${out.status}: ${detail}`,
+          `fal.ai ${what} result ${out.status} from ${out.url || appUrl} (fal gave ${responseUrl}): ${detail}`,
           blocked ? 'The AI service’s content rules refused this. Try another photo or script.' : `The AI could not make this ${what}: ${detail}`,
         );
       }

@@ -78,3 +78,27 @@ test('a voice model set by the admin is the only one tried', async () => {
   await assert.rejects(video.speak({ text: 'Hi' }), /does not have access/);
   assert.deepEqual(urls, ['https://queue.fal.run/fal-ai/minimax/speech-02-turbo']);
 });
+
+test('a result link that fal refuses is fetched again by owner/app', async () => {
+  const fetched: string[] = [];
+  const video = new FalVideo({
+    apiKey: 'fk',
+    pollMs: 0,
+    fetch: (async (url: string) => {
+      fetched.push(url);
+      if (url === 'https://queue.fal.run/fal-ai/kling-video/v2.6/pro/image-to-video')
+        return json(200, {
+          request_id: 'w2',
+          status_url: 'https://queue.fal.run/fal-ai/kling-video/requests/w2/status',
+          response_url: 'https://queue.fal.run/fal-ai/kling-video/v2.6/pro/image-to-video/requests/w2',
+        });
+      if (url.endsWith('/status')) return json(200, { status: 'COMPLETED' });
+      if (url.includes('/image-to-video/requests/w2')) return json(403, { detail: 'API key does not have access to model: fal-ai/kling-video/v2.6/pro/image-to-video' });
+      if (url === 'https://queue.fal.run/fal-ai/kling-video/requests/w2') return json(200, { video: { url: 'https://fal.media/w.mp4' } });
+      return new Response(new Uint8Array([1]), { status: 200 });
+    }) as typeof fetch,
+  });
+  const r = await video.walk({ imageUrl: 'https://files.test/p.jpg', prompt: 'walk', seconds: 5 });
+  assert.equal(r.video.bytes.length, 1);
+  assert.ok(fetched.includes('https://queue.fal.run/fal-ai/kling-video/requests/w2'));
+});
