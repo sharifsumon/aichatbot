@@ -220,6 +220,7 @@ function Editor({
   const [videoUrl, setVideoUrl] = useState(product?.videoUrl ?? '');
   const [videoLink, setVideoLink] = useState('');
   const [videoUploading, setVideoUploading] = useState(false);
+  const [pickingVideo, setPickingVideo] = useState(false);
   const [title, setTitle] = useState(product?.title ?? '');
   const [code, setCode] = useState(product?.code ?? '');
   const [description, setDescription] = useState(product?.description ?? '');
@@ -448,7 +449,10 @@ function Editor({
           <>
             <div className="row" style={{ gap: 8, alignItems: 'center' }}>
               <button type="button" className="btn sm" onClick={() => videoFile.current?.click()} disabled={busy}>
-                {videoUploading ? 'Uploading video…' : '+ Add a video'}
+                {videoUploading ? 'Uploading video…' : 'Upload a video'}
+              </button>
+              <button type="button" className="btn sm" onClick={() => setPickingVideo(true)} disabled={busy}>
+                Add a video
               </button>
               <input ref={videoFile} type="file" accept="video/mp4,video/quicktime,video/webm" hidden onChange={(e) => pickVideo(e.target.files?.[0])} />
             </div>
@@ -459,6 +463,16 @@ function Editor({
               </button>
             </span>
           </>
+        )}
+        {pickingVideo && (
+          <GeneratedVideos
+            ws={ws}
+            onClose={() => setPickingVideo(false)}
+            onPick={(url) => {
+              setVideoUrl(url);
+              setPickingVideo(false);
+            }}
+          />
         )}
       </div>
       <div className="row">
@@ -561,5 +575,51 @@ function Editor({
         The bot quotes this price and stock to customers the moment you save.
       </p>
     </form>
+  );
+}
+
+/** A popup of the shop's finished videos with models, newest first; picking one makes it the product's video. */
+function GeneratedVideos({ ws, onClose, onPick }: { ws: string; onClose: () => void; onPick: (url: string) => void }) {
+  const api = useApi();
+  const [videos, setVideos] = useState<{ id: string; resultVideoUrl: string | null; status: string; mode: string; durationSec: number | null; createdAt: string }[]>();
+  const [error, setError] = useState<string>();
+  useEffect(() => {
+    api<{ videos: NonNullable<typeof videos> }>(`${ws}/videos`)
+      .then((r) => setVideos(r.videos.filter((v) => v.status === 'succeeded' && v.resultVideoUrl)))
+      .catch((e: Error) => setError(e.message));
+  }, [api, ws]);
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', esc);
+    return () => window.removeEventListener('keydown', esc);
+  }, [onClose]);
+  return (
+    <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="dialog wide" role="dialog" aria-modal="true" aria-label="Your generated videos">
+        <h2>Your generated videos</h2>
+        {error && <Notice tone="error">{error}</Notice>}
+        {!videos && !error && <Loading />}
+        {videos?.length === 0 && <Empty>No finished videos yet. Make one under Videos with models.</Empty>}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
+          {videos?.map((v) => (
+            <div key={v.id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <video src={v.resultVideoUrl!} controls preload="metadata" style={{ width: '100%', aspectRatio: '9 / 16', objectFit: 'cover', borderRadius: 10, background: '#000' }} />
+              <small className="muted">
+                {new Date(v.createdAt).toLocaleString()}
+                {v.durationSec ? ` · ${Math.round(v.durationSec)} s` : ''}
+              </small>
+              <button type="button" className="btn sm primary" onClick={() => onPick(v.resultVideoUrl!)}>
+                Use this video
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="buttons">
+          <button type="button" className="btn" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
