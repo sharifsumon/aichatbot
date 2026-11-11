@@ -258,6 +258,7 @@ test('videos refuse other photos, missing scripts, no credits, staff, and record
   assert.equal((await post({ sourceImageUrl: photo, script: 'hi', camera: 'drone' })).statusCode, 400);
   assert.equal((await post({ sourceImageUrl: photo, mode: 'walk', script: 'hi', seconds: 7 })).statusCode, 400);
   assert.equal((await post({ sourceImageUrl: photo, audioUrl: 'https://elsewhere.test/a.mp3' })).statusCode, 400);
+  assert.equal((await post({ sourceImageUrl: photo, mode: 'walk', script: 'আমাদের নতুন কালেকশন' })).statusCode, 400);
 
   const poor = await shop(10);
   const poorPhoto = await uploadPhoto(app, poor.ws.id, poor.auth);

@@ -51,7 +51,7 @@ const CAMERAS: { value: string; label: string; modes: Mode[] }[] = [
   { value: 'zoom-out', label: 'Slow zoom out to the full outfit', modes: ['talk', 'walk'] },
   { value: 'pan', label: 'Slow pan side to side', modes: ['talk', 'walk'] },
 ];
-const LANGUAGE_LABEL: Record<string, string> = { auto: 'Detect from the script' };
+const LANGUAGE_LABEL: Record<string, string> = { auto: 'Detect from the script', Bengali: 'Bangla (বাংলা)' };
 const CHARS_PER_SECOND = 14;
 const WALK_SECONDS = [5, 10, 15, 20, 30, 45, 60];
 /** About 60 seconds of speech. */
@@ -255,8 +255,8 @@ export default function ModelVideosPage() {
               {!speaks
                 ? 'The model moves and the camera follows, with no speech. Up to 60 seconds.'
                 : mode === 'walk'
-                ? 'The model moves and the camera follows. Up to 60 seconds. Speech is in English (other languages are translated).'
-                : 'The model talks to the camera with accurate lip-sync; little walking. Up to about 60 seconds. For Bangla, upload your own recording.'}
+                ? 'The model moves and the camera follows. Up to 60 seconds. Speech is in English; for Bangla choose Talking.'
+                : 'The model talks to the camera with accurate lip-sync; little walking. Up to about 60 seconds. Speaks Bangla, English and more.'}
             </small>
             <fieldset className="style">
               <legend>Movement and camera</legend>
@@ -360,7 +360,7 @@ export default function ModelVideosPage() {
                   <small className="muted">
                     {mode === 'walk'
                       ? `About 2 to 3 words a second fit, so ${seconds} seconds is roughly ${Math.round(seconds * 2.5)} words.${seconds > 10 ? ' Longer videos are made in 10-second clips joined together; the script is shared between them.' : ''}`
-                      : `Up to about 60 seconds (${script.length}/${MAX_TALK_SCRIPT} characters). Bangla is not available as an AI voice yet; upload your own recording for Bangla.`}
+                      : `Up to about 60 seconds (${script.length}/${MAX_TALK_SCRIPT} characters). For Bangla, write the script in Bangla letters (বাংলা).`}
                   </small>
                 </>
               ) : (
