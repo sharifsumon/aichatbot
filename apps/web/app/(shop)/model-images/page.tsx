@@ -194,13 +194,13 @@ export default function ModelImagesPage() {
   }
 
   async function generate() {
-    if (!model || !garment) return;
+    if (!ready || !garment) return;
     setStarting(true);
     setError(undefined);
     setDone(undefined);
     try {
       const r = await api<{ image: TryOnImage }>(`${ws}/try-on`, { method: 'POST', body: {
-          characterId: model.id,
+          ...(model && { characterId: model.id }),
           garmentImageUrl: garment,
           category,
           ...(styleOptions && {
@@ -245,6 +245,8 @@ export default function ModelImagesPage() {
   const models = (setup.data?.models ?? []).filter((m) => gender === 'all' || m.gender === gender);
   const credits = setup.data?.creditsPerImage ?? 0;
   const styleOptions = setup.data?.styleOptions !== false;
+  // Image models can create the model from the shop's description; FASHN needs a model photo.
+  const ready = !!garment && (!!model || (styleOptions && !!note.trim()));
 
   return (
     <>
@@ -275,7 +277,7 @@ export default function ModelImagesPage() {
             {setup.data && models.length === 0 && !newModel && <Empty>No models to choose from yet. Add your own below.</Empty>}
             <div className="pick">
               {models.map((m) => (
-                <button key={m.id} type="button" className={model?.id === m.id ? 'on' : ''} aria-pressed={model?.id === m.id} onClick={() => setModel(m)}>
+                <button key={m.id} type="button" className={model?.id === m.id ? 'on' : ''} aria-pressed={model?.id === m.id} onClick={() => setModel(model?.id === m.id ? undefined : m)}>
                   <img src={m.imageUrl} alt="" loading="lazy" />
                   <span>
                     {m.name}
@@ -284,6 +286,9 @@ export default function ModelImagesPage() {
                 </button>
               ))}
             </div>
+            {styleOptions && (
+              <small className="muted">Optional: skip this and describe the model in "Your own instructions" below, and the AI creates one. Tap a chosen model again to unselect it.</small>
+            )}
             {model?.own && (
               <button type="button" className="btn sm" style={{ alignSelf: 'flex-start' }} onClick={() => removeModel(model)}>
                 Remove {model.name} from your models
@@ -393,16 +398,24 @@ export default function ModelImagesPage() {
                     maxLength={MAX_NOTE}
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
-                    placeholder="e.g. holding a small golden clutch, soft evening light, wearing gold earrings"
+                    placeholder={
+                      model
+                        ? 'e.g. holding a small golden clutch, soft evening light, wearing gold earrings'
+                        : 'Describe the model, e.g. a young Bangladeshi woman with long hair, smiling, standing in a garden'
+                    }
                   />
                 </label>
                 <small className="muted">Write in English for best results. The garment is always copied as it is.</small>
               </fieldset>
             )}
-            <button type="button" className="btn primary" disabled={!model || !garment || starting || uploading || !setup.data?.enabled} onClick={generate}>
+            <button type="button" className="btn primary" disabled={!ready || starting || uploading || !setup.data?.enabled} onClick={generate}>
               {starting ? 'Starting…' : `Generate image${credits ? ` · ${credits} credits` : ''}`}
             </button>
-            {(!model || !garment) && <small className="muted">{!model ? 'Choose a model first.' : 'Upload the garment photo.'}</small>}
+            {!ready && (
+              <small className="muted">
+                {!garment ? 'Upload the garment photo.' : styleOptions ? 'Choose a model, or describe the model in your own instructions.' : 'Choose a model first.'}
+              </small>
+            )}
           </section>
         </div>
 
@@ -427,7 +440,7 @@ export default function ModelImagesPage() {
                     <div style={{ padding: 16 }}>{img.error ?? 'This image could not be made.'}</div>
                   )}
                   <div className="thumbs" aria-hidden="true">
-                    <img src={img.modelImageUrl} alt="" />
+                    {img.modelImageUrl && <img src={img.modelImageUrl} alt="" />}
                     <img src={img.garmentImageUrl} alt="" />
                   </div>
                 </div>

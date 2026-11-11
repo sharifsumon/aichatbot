@@ -73,7 +73,7 @@ const fakeTryOn = (fail = false): TryOnProvider & { seen: Seen } => {
     model: 'fake-tryon-1',
     seen,
     async tryOn(req) {
-      seen.model = [...req.model.bytes];
+      seen.model = req.model ? [...req.model.bytes] : undefined;
       seen.garment = [...req.garment.bytes];
       seen.category = req.category;
       seen.style = req.style;
@@ -329,4 +329,21 @@ test('a shop adds its own model from its photo; only that shop sees and uses it'
   assert.equal((await app.inject({ method: 'DELETE', url: `/api/workspaces/${ws.id}/try-on/models/${mine.id}`, ...auth })).statusCode, 200);
   const after = await app.inject({ method: 'GET', url: `/api/workspaces/${ws.id}/try-on/models`, ...auth });
   assert.ok(!after.json().models.some((m: { id: string }) => m.id === mine.id));
+});
+
+test('without a model the AI creates one from the instructions', { skip }, async () => {
+  const tryOn = fakeTryOn();
+  const { app } = server(tryOn);
+  const { ws, auth } = await shop(100);
+  const f = form({}, { name: 'dress.jpg', type: 'image/jpeg', body: Buffer.from([0xff, 0xd8, 0xff, 9]) });
+  const garmentImageUrl = (await app.inject({ method: 'POST', url: `/api/workspaces/${ws.id}/uploads/images`, ...auth, headers: { ...auth.headers, ...f.headers }, payload: f.payload })).json().url as string;
+
+  const noNote = await app.inject({ method: 'POST', url: `/api/workspaces/${ws.id}/try-on`, ...auth, payload: { garmentImageUrl } });
+  assert.equal(noNote.statusCode, 400);
+  const started = await app.inject({ method: 'POST', url: `/api/workspaces/${ws.id}/try-on`, ...auth, payload: { garmentImageUrl, note: 'a young woman smiling in a garden' } });
+  assert.equal(started.statusCode, 202, started.body);
+  const done = await waitFor(app, `/api/workspaces/${ws.id}/try-on/${started.json().image.id}`, auth);
+  assert.equal(done.status, 'succeeded');
+  assert.equal(tryOn.seen.model, undefined);
+  assert.equal(tryOn.seen.note, 'a young woman smiling in a garden');
 });

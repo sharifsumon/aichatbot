@@ -29,7 +29,8 @@ const STALE_MS = 5 * 60_000;
 const RUN_TIMEOUT_MS = 4 * 60_000;
 
 const generateBody = z.object({
-  characterId: z.string().uuid(),
+  /** Left out: the AI creates the model from `note`. */
+  characterId: z.string().uuid().optional(),
   /** A photo uploaded with POST /uploads/images. */
   garmentImageUrl: z.string().url(),
   category: z.enum(GARMENT_CATEGORIES as [string, ...string[]]).default('auto'),
@@ -167,8 +168,16 @@ export const tryOnRoutes: FastifyPluginAsync<TryOnDeps> = async (app, deps) => {
     if (!/^[A-Za-z0-9-]+\.(jpg|png|webp)$/.test(name)) return reply.code(400).send({ error: 'Upload the garment photo here first' });
     const garmentKey = workspaceKey(workspaceId, 'images', name);
 
-    const character = await db.query.modelCharacters.findFirst({ where: and(eq(modelCharacters.id, body.characterId), visibleTo(workspaceId)) });
-    if (!character?.imageKey) return reply.code(404).send({ error: 'That model is no longer available' });
+    let character: { id: string; imageUrl: string; imageKey: string } | undefined;
+    if (body.characterId) {
+      const found = await db.query.modelCharacters.findFirst({ where: and(eq(modelCharacters.id, body.characterId), visibleTo(workspaceId)) });
+      if (!found?.imageKey) return reply.code(404).send({ error: 'That model is no longer available' });
+      character = { id: found.id, imageUrl: found.imageUrl, imageKey: found.imageKey };
+    } else {
+      // Without a model, the AI creates one from the shop's description.
+      if (tryOn.name === 'fashn') return reply.code(400).send({ error: 'Choose a model: this try-on service needs one.' });
+      if (!body.note) return reply.code(400).send({ error: 'Choose a model, or describe the model you want in your own instructions.' });
+    }
 
     const cost = await creditsPerTryOn(db);
     if (cost > 0 && (await creditsRemaining(db, workspaceId)) < cost) {
@@ -185,8 +194,8 @@ export const tryOnRoutes: FastifyPluginAsync<TryOnDeps> = async (app, deps) => {
       .insert(tryOnImages)
       .values({
         workspaceId,
-        characterId: character.id,
-        modelImageUrl: character.imageUrl,
+        characterId: character?.id ?? null,
+        modelImageUrl: character?.imageUrl ?? '',
         garmentImageUrl: body.garmentImageUrl,
         category: body.category,
         provider: tryOn.name,
@@ -197,8 +206,8 @@ export const tryOnRoutes: FastifyPluginAsync<TryOnDeps> = async (app, deps) => {
 
     // In the background, so a slow AI never holds the request past the proxy's timeout.
     void run({ db, storage, publicFileUrl, tryOn, log: req.log }, image!.id, workspaceId, {
-      modelKey: character.imageKey,
-      modelUrl: character.imageUrl,
+      modelKey: character?.imageKey,
+      modelUrl: character?.imageUrl,
       garmentKey,
       garmentUrl: body.garmentImageUrl,
       category: body.category as (typeof GARMENT_CATEGORIES)[number],
@@ -227,15 +236,15 @@ export async function run(
   deps: { db: Db; storage: ObjectStore; publicFileUrl: (key: string) => string; tryOn: TryOnProvider; log: FastifyBaseLogger },
   imageId: string,
   workspaceId: string,
-  job: { modelKey: string; modelUrl?: string; garmentKey: string; garmentUrl?: string; category: (typeof GARMENT_CATEGORIES)[number]; style?: TryOnStyle; note?: string; credits: number },
+  job: { modelKey?: string; modelUrl?: string; garmentKey: string; garmentUrl?: string; category: (typeof GARMENT_CATEGORIES)[number]; style?: TryOnStyle; note?: string; credits: number },
 ): Promise<void> {
   const { db, storage, tryOn } = deps;
   const usageModel = `tryon:${tryOn.model}`;
   try {
-    const [modelBytes, garmentBytes] = await Promise.all([storage.get(job.modelKey), storage.get(job.garmentKey)]);
+    const [modelBytes, garmentBytes] = await Promise.all([job.modelKey ? storage.get(job.modelKey) : undefined, storage.get(job.garmentKey)]);
     const result = await tryOn.tryOn(
       {
-        model: { bytes: modelBytes, contentType: typeOf(job.modelKey), url: job.modelUrl },
+        model: modelBytes && job.modelKey ? { bytes: modelBytes, contentType: typeOf(job.modelKey), url: job.modelUrl } : undefined,
         garment: { bytes: garmentBytes, contentType: typeOf(job.garmentKey), url: job.garmentUrl },
         category: job.category,
         style: job.style,
