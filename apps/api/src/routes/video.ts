@@ -104,7 +104,14 @@ export async function videoCreditsPerSecond(db: Db): Promise<number> {
 /** The fal.ai key: the one saved for try-on under Platform settings when that is fal.ai, else the server's. */
 async function falKey(db: Db, deps: VideoDeps): Promise<string | undefined> {
   const s = await storedTryOnService(db);
-  if (s?.provider === 'fal' && s.apiKeyEncrypted) return decryptSecret(s.apiKeyEncrypted, deps.encryptionKey);
+  if (s?.provider === 'fal' && s.apiKeyEncrypted) {
+    try {
+      return decryptSecret(s.apiKeyEncrypted, deps.encryptionKey);
+    } catch (err) {
+      // A key saved under another encryption key can't be read; the server's own key still works.
+      if (!deps.falApiKey) throw err;
+    }
+  }
   return deps.falApiKey || undefined;
 }
 
