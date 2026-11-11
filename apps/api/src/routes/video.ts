@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, lt, sql } from 'drizzle-orm';
 import type { FastifyBaseLogger, FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import {
@@ -202,7 +202,7 @@ export const videoRoutes: FastifyPluginAsync<VideoDeps> = async (app, deps) => {
     const imagesPrefix = publicFileUrl(workspaceKey(workspaceId, 'images', ''));
     const ownImage = body.sourceImageUrl.startsWith(imagesPrefix) && /^[A-Za-z0-9-]+\.(jpg|png|webp)$/.test(body.sourceImageUrl.slice(imagesPrefix.length));
     if (!ownImage) {
-      const character = await db.query.modelCharacters.findFirst({ where: and(eq(modelCharacters.imageUrl, body.sourceImageUrl), eq(modelCharacters.active, true)) });
+      const character = await db.query.modelCharacters.findFirst({ where: and(eq(modelCharacters.imageUrl, body.sourceImageUrl), eq(modelCharacters.active, true), isNull(modelCharacters.workspaceId)) });
       if (!character) return reply.code(400).send({ error: 'Choose one of your images or upload a photo here first' });
     }
 

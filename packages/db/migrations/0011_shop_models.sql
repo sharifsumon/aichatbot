@@ -1,0 +1,3 @@
+ALTER TABLE "model_characters" ADD COLUMN "workspace_id" uuid;--> statement-breakpoint
+ALTER TABLE "model_characters" ADD CONSTRAINT "model_characters_workspace_id_workspaces_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "model_characters_workspace_id_index" ON "model_characters" USING btree ("workspace_id");

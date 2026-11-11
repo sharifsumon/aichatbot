@@ -16,6 +16,8 @@ interface Model {
   name: string;
   gender: Gender;
   imageUrl: string;
+  /** The shop's own model, added from its own photo. */
+  own?: boolean;
 }
 interface TryOnImage {
   id: string;
@@ -107,6 +109,8 @@ export default function ModelImagesPage() {
   const [done, setDone] = useState<string>();
   const [adding, setAdding] = useState<TryOnImage>();
   const file = useRef<HTMLInputElement>(null);
+  const modelFile = useRef<HTMLInputElement>(null);
+  const [newModel, setNewModel] = useState<{ imageUrl?: string; name: string; gender: Gender; busy?: boolean }>();
 
   const loadImages = useCallback(async () => {
     try {
@@ -143,6 +147,49 @@ export default function ModelImagesPage() {
     } finally {
       setUploading(false);
       if (file.current) file.current.value = '';
+    }
+  }
+
+  async function pickModelPhoto(f: File | undefined) {
+    if (!f || !newModel) return;
+    setNewModel({ ...newModel, busy: true });
+    setError(undefined);
+    try {
+      const small = await shrinkImage(f);
+      if (small.size > MAX_PHOTO_MB * 1024 * 1024) throw new Error(`The photo is larger than ${MAX_PHOTO_MB} MB. Use a smaller one.`);
+      const r = await upload<{ url: string }>(`${ws}/uploads/images`, small, 60_000);
+      setNewModel((m) => m && { ...m, imageUrl: r.url, busy: false });
+    } catch (e) {
+      setNewModel((m) => m && { ...m, busy: false });
+      setError((e as ApiError).status === 503 ? 'Photo uploads are not switched on yet.' : (e as Error).message);
+    } finally {
+      if (modelFile.current) modelFile.current.value = '';
+    }
+  }
+
+  async function saveModel() {
+    if (!newModel?.imageUrl || !newModel.name.trim()) return;
+    setNewModel({ ...newModel, busy: true });
+    setError(undefined);
+    try {
+      const r = await api<{ model: Model }>(`${ws}/try-on/models`, { method: 'POST', body: { name: newModel.name.trim(), gender: newModel.gender, imageUrl: newModel.imageUrl } });
+      setNewModel(undefined);
+      setModel(r.model);
+      setup.reload();
+    } catch (e) {
+      setNewModel((m) => m && { ...m, busy: false });
+      setError((e as Error).message);
+    }
+  }
+
+  async function removeModel(m: Model) {
+    if (!window.confirm(`Remove ${m.name} from your models? Images already made with this model stay.`)) return;
+    try {
+      await api(`${ws}/try-on/models/${m.id}`, { method: 'DELETE' });
+      if (model?.id === m.id) setModel(undefined);
+      setup.reload();
+    } catch (e) {
+      setError((e as Error).message);
     }
   }
 
@@ -225,15 +272,58 @@ export default function ModelImagesPage() {
               ]}
             />
             {setup.loading && !setup.data && <Loading />}
-            {setup.data && models.length === 0 && <Empty>No models to choose from yet.</Empty>}
+            {setup.data && models.length === 0 && !newModel && <Empty>No models to choose from yet. Add your own below.</Empty>}
             <div className="pick">
               {models.map((m) => (
                 <button key={m.id} type="button" className={model?.id === m.id ? 'on' : ''} aria-pressed={model?.id === m.id} onClick={() => setModel(m)}>
                   <img src={m.imageUrl} alt="" loading="lazy" />
-                  <span>{m.name}</span>
+                  <span>
+                    {m.name}
+                    {m.own && ' · Yours'}
+                  </span>
                 </button>
               ))}
             </div>
+            {model?.own && (
+              <button type="button" className="btn sm" style={{ alignSelf: 'flex-start' }} onClick={() => removeModel(model)}>
+                Remove {model.name} from your models
+              </button>
+            )}
+            {!newModel ? (
+              <button type="button" className="btn" style={{ alignSelf: 'flex-start' }} onClick={() => setNewModel({ name: '', gender: gender === 'male' ? 'male' : 'female' })}>
+                + Add your own model
+              </button>
+            ) : (
+              <fieldset className="style">
+                <legend>Your own model</legend>
+                <button type="button" className="garment" onClick={() => modelFile.current?.click()} disabled={newModel.busy}>
+                  {newModel.imageUrl ? <img src={newModel.imageUrl} alt="Your model" /> : newModel.busy ? 'Uploading…' : '+ Choose a photo of the model'}
+                </button>
+                <input ref={modelFile} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => pickModelPhoto(e.target.files?.[0])} />
+                <small className="muted">A clear, front-facing photo of one person, head to knees or full body, in good light. Use only photos you have permission to use.</small>
+                <label className="field">
+                  Name
+                  <input value={newModel.name} maxLength={60} onChange={(e) => setNewModel({ ...newModel, name: e.target.value })} placeholder="e.g. Nusrat" />
+                </label>
+                <Chips
+                  label="Model"
+                  value={newModel.gender}
+                  onChange={(g) => setNewModel({ ...newModel, gender: g })}
+                  options={[
+                    { value: 'female', label: 'Woman' },
+                    { value: 'male', label: 'Man' },
+                  ]}
+                />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button type="button" className="btn primary" disabled={!newModel.imageUrl || !newModel.name.trim() || newModel.busy} onClick={saveModel}>
+                    Save model
+                  </button>
+                  <button type="button" className="btn" onClick={() => setNewModel(undefined)}>
+                    Cancel
+                  </button>
+                </div>
+              </fieldset>
+            )}
           </section>
 
           <section className="card pad" aria-label="Upload your garment">

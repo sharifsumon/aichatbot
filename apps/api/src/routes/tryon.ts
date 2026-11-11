@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, lt, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, lt, or, sql } from 'drizzle-orm';
 import type { FastifyBaseLogger, FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { GARMENT_CATEGORIES, TRYON_STYLES, TryOnError, type TryOnProvider, type TryOnStyle } from '@agently/ai';
@@ -41,6 +41,18 @@ const generateBody = z.object({
   note: z.string().trim().max(500).optional(),
 });
 
+const ownModelBody = z.object({
+  name: z.string().trim().min(1).max(60),
+  gender: z.enum(['female', 'male']),
+  /** A photo uploaded with POST /uploads/images. */
+  imageUrl: z.string().url(),
+});
+/** How many of its own models a shop can keep. */
+const MAX_OWN_MODELS = 30;
+
+/** The platform's models plus this shop's own. */
+const visibleTo = (workspaceId: string) => and(eq(modelCharacters.active, true), or(isNull(modelCharacters.workspaceId), eq(modelCharacters.workspaceId, workspaceId)));
+
 const EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
 
 export async function creditsPerTryOn(db: Db): Promise<number> {
@@ -60,18 +72,53 @@ export const tryOnRoutes: FastifyPluginAsync<TryOnDeps> = async (app, deps) => {
   app.get<{ Params: { workspaceId: string } }>('/workspaces/:workspaceId/try-on/models', async (req, reply) => {
     if (!(await requireRole(db, req, reply, ALL_ROLES))) return reply;
     const models = await db
-      .select({ id: modelCharacters.id, name: modelCharacters.name, gender: modelCharacters.gender, imageUrl: modelCharacters.imageUrl })
+      .select({ id: modelCharacters.id, name: modelCharacters.name, gender: modelCharacters.gender, imageUrl: modelCharacters.imageUrl, workspaceId: modelCharacters.workspaceId })
       .from(modelCharacters)
-      .where(eq(modelCharacters.active, true))
-      .orderBy(asc(modelCharacters.sortOrder), desc(modelCharacters.createdAt));
+      .where(visibleTo(req.params.workspaceId))
+      // The shop's own models first, newest first.
+      .orderBy(sql`${modelCharacters.workspaceId} is null`, asc(modelCharacters.sortOrder), desc(modelCharacters.createdAt));
     const tryOn = await currentTryOn(db, deps.encryptionKey, deps.tryOn).catch(() => undefined);
     return {
-      models,
+      models: models.map(({ workspaceId, ...m }) => ({ ...m, own: !!workspaceId })),
       enabled: !!(tryOn && deps.storage && deps.publicFileUrl),
       creditsPerImage: await creditsPerTryOn(db),
       /** FASHN makes try-ons only; pose, expression, background and instructions need an image model (fal.ai, Gemini). */
       styleOptions: tryOn ? tryOn.name !== 'fashn' : true,
     };
+  });
+
+  /** Adds the shop's own model from a photo uploaded with POST /uploads/images. Only this shop sees it. */
+  app.post<{ Params: { workspaceId: string } }>('/workspaces/:workspaceId/try-on/models', async (req, reply) => {
+    if (!(await requireRole(db, req, reply, MANAGERS))) return reply;
+    if (!deps.publicFileUrl) return reply.code(503).send({ error: 'Photo uploads are not switched on yet' });
+    const body = await parseBody(ownModelBody, req.body, reply);
+    if (!body) return reply;
+    const { workspaceId } = req.params;
+    const prefix = deps.publicFileUrl(workspaceKey(workspaceId, 'images', ''));
+    const name = body.imageUrl.startsWith(prefix) ? body.imageUrl.slice(prefix.length) : '';
+    if (!/^[A-Za-z0-9-]+\.(jpg|png|webp)$/.test(name)) return reply.code(400).send({ error: 'Upload the model photo here first' });
+    const [count] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(modelCharacters)
+      .where(eq(modelCharacters.workspaceId, workspaceId));
+    if ((count?.n ?? 0) >= MAX_OWN_MODELS) return reply.code(400).send({ error: `You can keep up to ${MAX_OWN_MODELS} of your own models. Remove one first.` });
+    const [model] = await db
+      .insert(modelCharacters)
+      .values({ workspaceId, name: body.name, gender: body.gender, imageUrl: body.imageUrl, imageKey: workspaceKey(workspaceId, 'images', name) })
+      .returning({ id: modelCharacters.id, name: modelCharacters.name, gender: modelCharacters.gender, imageUrl: modelCharacters.imageUrl });
+    return reply.code(201).send({ model: { ...model, own: true } });
+  });
+
+  /** Removes one of the shop's own models. Images already made with it stay. */
+  app.delete<{ Params: { workspaceId: string; modelId: string } }>('/workspaces/:workspaceId/try-on/models/:modelId', async (req, reply) => {
+    if (!(await requireRole(db, req, reply, MANAGERS))) return reply;
+    if (!isUuid(req.params.modelId)) return reply.code(404).send({ error: 'Model not found' });
+    const [gone] = await db
+      .delete(modelCharacters)
+      .where(and(eq(modelCharacters.id, req.params.modelId), eq(modelCharacters.workspaceId, req.params.workspaceId)))
+      .returning({ id: modelCharacters.id });
+    if (!gone) return reply.code(404).send({ error: 'Model not found' });
+    return { ok: true };
   });
 
   /** The shop's recent images, newest first. */
@@ -120,7 +167,7 @@ export const tryOnRoutes: FastifyPluginAsync<TryOnDeps> = async (app, deps) => {
     if (!/^[A-Za-z0-9-]+\.(jpg|png|webp)$/.test(name)) return reply.code(400).send({ error: 'Upload the garment photo here first' });
     const garmentKey = workspaceKey(workspaceId, 'images', name);
 
-    const character = await db.query.modelCharacters.findFirst({ where: and(eq(modelCharacters.id, body.characterId), eq(modelCharacters.active, true)) });
+    const character = await db.query.modelCharacters.findFirst({ where: and(eq(modelCharacters.id, body.characterId), visibleTo(workspaceId)) });
     if (!character?.imageKey) return reply.code(404).send({ error: 'That model is no longer available' });
 
     const cost = await creditsPerTryOn(db);
@@ -198,20 +245,21 @@ export async function run(
     );
     const key = workspaceKey(workspaceId, 'images', `${randomUUID()}.${EXT[result.image.contentType] ?? 'png'}`);
     await storage.put(key, result.image.bytes, result.image.contentType);
+    // Usage is recorded before the status changes, so whoever sees the result also sees the charge.
+    await recordUsage(db, { workspaceId, model: usageModel, aiReplies: job.credits, inputTokens: 0, outputTokens: 0, costUsd: result.costUsd });
     await db
       .update(tryOnImages)
       .set({ status: 'succeeded', resultImageUrl: deps.publicFileUrl(key), costUsd: result.costUsd.toFixed(6), finishedAt: new Date() })
       .where(eq(tryOnImages.id, imageId));
-    await recordUsage(db, { workspaceId, model: usageModel, aiReplies: job.credits, inputTokens: 0, outputTokens: 0, costUsd: result.costUsd });
   } catch (err) {
     deps.log.warn({ err, imageId }, 'Try-on failed');
     const message = err instanceof TryOnError ? err.userMessage : 'Something went wrong making this image. Try again.';
+    await recordUsage(db, { workspaceId, model: usageModel, aiReplies: 0, inputTokens: 0, outputTokens: 0, costUsd: 0, failed: true }).catch(() => undefined);
     await db
       .update(tryOnImages)
       .set({ status: 'failed', error: message, finishedAt: new Date() })
       .where(eq(tryOnImages.id, imageId))
       .catch(() => undefined);
-    await recordUsage(db, { workspaceId, model: usageModel, aiReplies: 0, inputTokens: 0, outputTokens: 0, costUsd: 0, failed: true }).catch(() => undefined);
   }
 }
 

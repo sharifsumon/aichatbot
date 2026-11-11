@@ -176,8 +176,10 @@ export const modelCharacters = pgTable(
     active: boolean().notNull().default(true),
     sortOrder: integer().notNull().default(0),
     createdByPlatformUserId: uuid().references(() => platformUsers.id, { onDelete: 'set null' }),
+    /** Set for a shop's own model: only that shop sees it. Empty for the platform's models. */
+    workspaceId: uuid().references(() => workspaces.id, { onDelete: 'cascade' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [index().on(t.active, t.sortOrder)],
+  (t) => [index().on(t.active, t.sortOrder), index().on(t.workspaceId)],
 );

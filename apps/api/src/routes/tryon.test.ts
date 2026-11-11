@@ -289,3 +289,44 @@ test('a super admin sets the try-on service and key; the key never comes back', 
   const removed = await app.inject({ method: 'GET', url: '/admin/tryon-service', ...sa });
   assert.equal(removed.json().service.source, 'off');
 });
+
+test('a shop adds its own model from its photo; only that shop sees and uses it', { skip }, async () => {
+  const tryOn = fakeTryOn();
+  const { app } = server(tryOn);
+  const { ws, auth } = await shop(100);
+  const other = await shop(100);
+  const upload = async (w: string, a: typeof auth, bytes: number[]) => {
+    const f = form({}, { name: 'p.jpg', type: 'image/jpeg', body: Buffer.from(bytes) });
+    return (await app.inject({ method: 'POST', url: `/api/workspaces/${w}/uploads/images`, ...a, headers: { ...a.headers, ...f.headers }, payload: f.payload })).json().url as string;
+  };
+  const photo = await upload(ws.id, auth, [0xff, 0xd8, 0xff, 1]);
+
+  const bad = await app.inject({ method: 'POST', url: `/api/workspaces/${ws.id}/try-on/models`, ...auth, payload: { name: 'Mim', gender: 'female', imageUrl: 'https://elsewhere.test/a.jpg' } });
+  assert.equal(bad.statusCode, 400);
+  const added = await app.inject({ method: 'POST', url: `/api/workspaces/${ws.id}/try-on/models`, ...auth, payload: { name: 'Mim', gender: 'female', imageUrl: photo } });
+  assert.equal(added.statusCode, 201, added.body);
+  const mine = added.json().model as { id: string; own: boolean };
+  assert.equal(mine.own, true);
+
+  const list = await app.inject({ method: 'GET', url: `/api/workspaces/${ws.id}/try-on/models`, ...auth });
+  assert.equal(list.json().models[0].id, mine.id);
+  const theirs = await app.inject({ method: 'GET', url: `/api/workspaces/${other.ws.id}/try-on/models`, ...other.auth });
+  assert.ok(!theirs.json().models.some((m: { id: string }) => m.id === mine.id));
+
+  // Another shop can't use it or remove it.
+  const otherGarment = await upload(other.ws.id, other.auth, [0xff, 0xd8, 0xff, 2]);
+  const steal = await app.inject({ method: 'POST', url: `/api/workspaces/${other.ws.id}/try-on`, ...other.auth, payload: { characterId: mine.id, garmentImageUrl: otherGarment } });
+  assert.equal(steal.statusCode, 404);
+  assert.equal((await app.inject({ method: 'DELETE', url: `/api/workspaces/${other.ws.id}/try-on/models/${mine.id}`, ...other.auth })).statusCode, 404);
+
+  const garment = await upload(ws.id, auth, [0xff, 0xd8, 0xff, 3]);
+  const started = await app.inject({ method: 'POST', url: `/api/workspaces/${ws.id}/try-on`, ...auth, payload: { characterId: mine.id, garmentImageUrl: garment } });
+  assert.equal(started.statusCode, 202, started.body);
+  const done = await waitFor(app, `/api/workspaces/${ws.id}/try-on/${started.json().image.id}`, auth);
+  assert.equal(done.status, 'succeeded');
+  assert.deepEqual(tryOn.seen.model, [0xff, 0xd8, 0xff, 1]);
+
+  assert.equal((await app.inject({ method: 'DELETE', url: `/api/workspaces/${ws.id}/try-on/models/${mine.id}`, ...auth })).statusCode, 200);
+  const after = await app.inject({ method: 'GET', url: `/api/workspaces/${ws.id}/try-on/models`, ...auth });
+  assert.ok(!after.json().models.some((m: { id: string }) => m.id === mine.id));
+});
