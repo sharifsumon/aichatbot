@@ -19,6 +19,7 @@ interface Settings {
   'video.creditsPerSecond'?: number;
   'video.talkModel'?: string;
   'video.walkModel'?: string;
+  'video.voiceModel'?: string;
 }
 interface Flag {
   id: string;
@@ -38,7 +39,7 @@ export default function SettingsPage() {
   const [instruction, setInstruction] = useState('');
   const [topUp, setTopUp] = useState({ credits: '', priceBdt: '', priceUsd: '' });
   const [tryOnCredits, setTryOnCredits] = useState('');
-  const [video, setVideo] = useState({ credits: '', talk: '', walk: '' });
+  const [video, setVideo] = useState({ credits: '', talk: '', walk: '', voice: '' });
   const [saving, setSaving] = useState<string>();
   const [done, setDone] = useState<string>();
   const [error, setError] = useState<string>();
@@ -51,7 +52,7 @@ export default function SettingsPage() {
     setFallback(s['ai.fallbackModel'] ?? '');
     setInstruction(s['ai.defaultSystemInstruction'] ?? '');
     setTryOnCredits(String(s['tryon.creditsPerImage'] ?? 10));
-    setVideo({ credits: String(s['video.creditsPerSecond'] ?? 15), talk: s['video.talkModel'] ?? '', walk: s['video.walkModel'] ?? '' });
+    setVideo({ credits: String(s['video.creditsPerSecond'] ?? 15), talk: s['video.talkModel'] ?? '', walk: s['video.walkModel'] ?? '', voice: s['video.voiceModel'] ?? '' });
     const t = s['credits.topUp'];
     setTopUp({ credits: t ? String(t.credits) : '', priceBdt: t ? String(t.priceBdt) : '', priceUsd: t ? String(t.priceUsd) : '' });
   }, [settings.data]);
@@ -80,6 +81,7 @@ export default function SettingsPage() {
       await api(`/settings/${encodeURIComponent('video.creditsPerSecond')}`, { method: 'PUT', body: { value: Number.parseInt(video.credits, 10) } });
       await api(`/settings/${encodeURIComponent('video.talkModel')}`, { method: 'PUT', body: { value: video.talk.trim() } });
       await api(`/settings/${encodeURIComponent('video.walkModel')}`, { method: 'PUT', body: { value: video.walk.trim() } });
+      await api(`/settings/${encodeURIComponent('video.voiceModel')}`, { method: 'PUT', body: { value: video.voice.trim() } });
       setDone('Video settings saved.');
       settings.reload();
     } catch (err) {
@@ -187,7 +189,7 @@ export default function SettingsPage() {
             <form className="card pad" aria-label="Videos with models" onSubmit={saveVideo}>
               <h2>Videos with models</h2>
               <p className="sub" style={{ margin: 0 }}>
-                Shops turn model photos into short videos on fal.ai, using the fal.ai key saved under Try-on AI service. Leave a model empty for the default.
+                Shops turn model photos into short videos on fal.ai, using the fal.ai key saved under Try-on AI service. Leave a model box empty to use the default.
               </p>
               <label className="field">
                 Credits per second of video
@@ -218,6 +220,19 @@ export default function SettingsPage() {
                   data-1p-ignore
                   data-lpignore="true"
                 />
+              </label>
+              <label className="field">
+                Voice model (fal.ai)
+                <input
+                  value={video.voice}
+                  onChange={(e) => setVideo((v) => ({ ...v, voice: e.target.value }))}
+                  placeholder="Empty: tries MiniMax Speech 2.6, 2.5, then 02 Turbo"
+                  autoComplete="off"
+                  name="video-voice-model"
+                  data-1p-ignore
+                  data-lpignore="true"
+                />
+                <small>Turns the script into speech for talking videos. Leave empty unless fal.ai says the key has no access.</small>
               </label>
               <button className="btn primary" style={{ alignSelf: 'flex-start' }} disabled={saving === 'video'}>
                 Save

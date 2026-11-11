@@ -75,6 +75,7 @@ export default function ModelVideosPage() {
   const [move, setMove] = useState('walk');
   const [camera, setCamera] = useState('follow');
   const [note, setNote] = useState('');
+  const [speaks, setSpeaks] = useState(true);
   const [voiceSource, setVoiceSource] = useState<'script' | 'recording'>('script');
   const [script, setScript] = useState('');
   const [language, setLanguage] = useState('auto');
@@ -110,7 +111,9 @@ export default function ModelVideosPage() {
     if (!MOVES.find((m) => m.value === move)?.modes.includes(mode)) setMove('');
     if (!CAMERAS.find((c) => c.value === camera)?.modes.includes(mode)) setCamera('');
     if (mode === 'walk') setVoiceSource('script');
-  }, [mode, move, camera]);
+    // A silent video can only be a movement video.
+    if (!speaks && mode === 'talk') setMode('walk');
+  }, [mode, move, camera, speaks]);
 
   const photos: Photo[] = [
     ...uploaded,
@@ -152,7 +155,7 @@ export default function ModelVideosPage() {
 
   const perSecond = setup.data?.creditsPerSecond ?? 0;
   const estimateSec = mode === 'walk' ? seconds : voiceSource === 'recording' ? null : Math.max(3, Math.ceil(script.trim().length / CHARS_PER_SECOND));
-  const ready = !!photo && (voiceSource === 'recording' ? !!recording : !!script.trim());
+  const ready = !!photo && (!speaks || (voiceSource === 'recording' ? !!recording : !!script.trim()));
 
   async function generate() {
     if (!photo) return;
@@ -165,7 +168,7 @@ export default function ModelVideosPage() {
         body: {
           sourceImageUrl: photo,
           mode,
-          ...(voiceSource === 'recording' && mode === 'talk' ? { audioUrl: recording?.url } : { script: script.trim(), voice, language }),
+          ...(!speaks ? { speak: false } : voiceSource === 'recording' && mode === 'talk' ? { audioUrl: recording?.url } : { script: script.trim(), voice, language }),
           ...(move && { gesture: move }),
           ...(camera && { camera }),
           ...(note.trim() && { note: note.trim() }),
@@ -239,13 +242,19 @@ export default function ModelVideosPage() {
               label="Kind of video"
               value={mode}
               onChange={setMode}
-              options={[
-                { value: 'walk', label: 'Walk and talk' },
-                { value: 'talk', label: 'Talking' },
-              ]}
+              options={
+                speaks
+                  ? [
+                      { value: 'walk', label: 'Walk and talk' },
+                      { value: 'talk', label: 'Talking' },
+                    ]
+                  : [{ value: 'walk', label: 'Walk and move' }]
+              }
             />
             <small className="muted">
-              {mode === 'walk'
+              {!speaks
+                ? 'The model moves and the camera follows, with no speech. Up to 60 seconds.'
+                : mode === 'walk'
                 ? 'The model moves and the camera follows. Up to 60 seconds. Speech is in English (other languages are translated).'
                 : 'The model talks to the camera with accurate lip-sync; little walking. Up to about 60 seconds. For Bangla, upload your own recording.'}
             </small>
@@ -297,7 +306,11 @@ export default function ModelVideosPage() {
 
             <fieldset className="style">
               <legend>What the model says</legend>
-              {mode === 'talk' && (
+              <label className="check">
+                <input type="checkbox" checked={speaks} onChange={(e) => setSpeaks(e.target.checked)} /> The model speaks
+              </label>
+              {!speaks && <small className="muted">A silent video: the model only moves. Tick the box to add a script and voice.</small>}
+              {speaks && mode === 'talk' && (
                 <Chips
                   label="Voice"
                   value={voiceSource}
@@ -308,7 +321,7 @@ export default function ModelVideosPage() {
                   ]}
                 />
               )}
-              {voiceSource === 'script' ? (
+              {!speaks ? null : voiceSource === 'script' ? (
                 <>
                   <label className="field">
                     Script

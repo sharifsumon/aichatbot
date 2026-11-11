@@ -221,6 +221,31 @@ test('walk and talk puts the script in the prompt; a recording skips the voice s
   assert.equal((calls.talk[0] as { audioUrl: string }).audioUrl, up.json().url);
 });
 
+test('a silent walk video turns off sound and speech; talking needs a voice', { skip }, async () => {
+  const { video, calls } = fakeVideo();
+  const { app } = server(video);
+  const { ws, auth } = await shop(1000);
+  const photo = await uploadPhoto(app, ws.id, auth);
+
+  const walk = await app.inject({
+    method: 'POST',
+    url: `/api/workspaces/${ws.id}/videos`,
+    ...auth,
+    payload: { sourceImageUrl: photo, mode: 'walk', speak: false, script: 'ignored', seconds: 5 },
+  });
+  assert.equal(walk.statusCode, 202, walk.body);
+  const w = await waitFor(app, `/api/workspaces/${ws.id}/videos/${walk.json().video.id}`, auth);
+  assert.equal(w.status, 'succeeded');
+  const req = calls.walk[0] as { prompt: string; silent?: boolean };
+  assert.equal(req.silent, true);
+  assert.match(req.prompt, /does not talk/);
+  assert.doesNotMatch(req.prompt, /ignored/);
+  assert.equal(calls.speak.length, 0);
+
+  const talk = await app.inject({ method: 'POST', url: `/api/workspaces/${ws.id}/videos`, ...auth, payload: { sourceImageUrl: photo, mode: 'talk', speak: false } });
+  assert.equal(talk.statusCode, 400, talk.body);
+});
+
 test('videos refuse other photos, missing scripts, no credits, staff, and record failures', { skip }, async () => {
   const { video } = fakeVideo(true);
   const { app } = server(video);

@@ -55,6 +55,7 @@ const SETTINGS = {
   /** fal.ai endpoints for videos: talking (lip-sync) and walk-and-talk. Empty uses the default. */
   'video.talkModel': z.string().trim().max(200).regex(/^[A-Za-z0-9._~:/-]*$/),
   'video.walkModel': z.string().trim().max(200).regex(/^[A-Za-z0-9._~:/-]*$/),
+  'video.voiceModel': z.string().trim().max(200).regex(/^[A-Za-z0-9._~:/-]*$/),
 } as const;
 
 /** Plans, the Agently team, the audit log, platform settings and feature flags. */

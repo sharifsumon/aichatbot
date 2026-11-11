@@ -34,7 +34,7 @@ export interface VideoDeps {
   /** A fal.ai key from the server's .env, used when Platform settings hold none. */
   falApiKey?: string;
   /** For tests: replaces the real fal.ai client. */
-  makeVideo?: (opts: { apiKey: string; model?: string; walkModel?: string }) => Pick<FalVideo, 'speak' | 'talk' | 'walk' | 'model' | 'walkModel'>;
+  makeVideo?: (opts: { apiKey: string; model?: string; walkModel?: string; voiceModel?: string }) => Pick<FalVideo, 'speak' | 'talk' | 'walk' | 'model' | 'walkModel'>;
   /** For tests: replaces ffmpeg for joining walk-and-talk clips. */
   media?: Media;
 }
@@ -73,6 +73,8 @@ const createBody = z
   .object({
     sourceImageUrl: z.string().url(),
     mode: z.enum(['talk', 'walk']).default('talk'),
+    /** false: a silent movement video (walk mode only), no script or voice. */
+    speak: z.boolean().default(true),
     script: z.string().trim().max(1500).optional(),
     audioUrl: z.string().url().optional(),
     voice: z.enum(keys(VIDEO_VOICES)).default('Wise_Woman'),
@@ -102,14 +104,23 @@ export async function videoCreditsPerSecond(db: Db): Promise<number> {
 /** The fal.ai key: the one saved for try-on under Platform settings when that is fal.ai, else the server's. */
 async function falKey(db: Db, deps: VideoDeps): Promise<string | undefined> {
   const s = await storedTryOnService(db);
-  if (s?.provider === 'fal' && s.apiKeyEncrypted) return decryptSecret(s.apiKeyEncrypted, deps.encryptionKey);
+  if (s?.provider === 'fal' && s.apiKeyEncrypted) {
+    try {
+      return decryptSecret(s.apiKeyEncrypted, deps.encryptionKey);
+    } catch (err) {
+      // A key saved under another encryption key can't be read; the server's own key still works.
+      if (!deps.falApiKey) throw err;
+    }
+  }
   return deps.falApiKey || undefined;
 }
 
 async function currentVideo(db: Db, deps: VideoDeps) {
   const apiKey = await falKey(db, deps);
   if (!apiKey) return undefined;
-  const opts = { apiKey, model: (await setting<string>(db, 'video.talkModel')) || undefined, walkModel: (await setting<string>(db, 'video.walkModel')) || undefined };
+  const opts = { apiKey, model: (await setting<string>(db, 'video.talkModel')) || undefined, walkModel: (await setting<string>(db, 'video.walkModel')) || undefined,
+    voiceModel: (await setting<string>(db, 'video.voiceModel')) || undefined,
+  };
   return deps.makeVideo ? deps.makeVideo(opts) : new FalVideo(opts);
 }
 
@@ -198,6 +209,10 @@ export const videoRoutes: FastifyPluginAsync<VideoDeps> = async (app, deps) => {
     if (body.audioUrl && !(body.audioUrl.startsWith(audioPrefix) && /^[A-Za-z0-9-]+\.\w+$/.test(body.audioUrl.slice(audioPrefix.length)))) {
       return reply.code(400).send({ error: 'Upload the voice recording here first' });
     }
+    if (!body.speak) {
+      if (body.mode === 'talk') return reply.code(400).send({ error: 'A talking video needs a voice. Choose Walk and talk for a silent video.' });
+      body.script = undefined;
+    }
     if (body.mode === 'walk' && body.audioUrl) return reply.code(400).send({ error: 'Walk and talk makes its own voice from the script. Use Talking for a recording.' });
     if (body.mode === 'talk' && !body.script && !body.audioUrl) return reply.code(400).send({ error: 'Write a script or upload a voice recording' });
     if (body.mode === 'talk' && !body.audioUrl && body.script!.length > MAX_TALK_SCRIPT) {
@@ -217,7 +232,7 @@ export const videoRoutes: FastifyPluginAsync<VideoDeps> = async (app, deps) => {
       .where(and(eq(modelVideos.workspaceId, workspaceId), eq(modelVideos.status, 'pending')));
     if ((running?.n ?? 0) >= MAX_RUNNING) return reply.code(429).send({ error: `${MAX_RUNNING} videos are already being made. Wait for one to finish.` });
 
-    const options = { gesture: body.gesture, camera: body.camera, note: body.note, emotion: body.emotion, seconds: body.mode === 'walk' ? body.seconds : undefined };
+    const options = { gesture: body.gesture, camera: body.camera, note: body.note, emotion: body.emotion, seconds: body.mode === 'walk' ? body.seconds : undefined, silent: !body.speak };
     const [row] = await db
       .insert(modelVideos)
       .values({
@@ -226,8 +241,8 @@ export const videoRoutes: FastifyPluginAsync<VideoDeps> = async (app, deps) => {
         mode: body.mode,
         script: body.script || null,
         audioUrl: body.audioUrl ?? null,
-        voice: body.audioUrl ? null : body.voice,
-        language: body.language,
+        voice: body.audioUrl || !body.speak ? null : body.voice,
+        language: body.speak ? body.language : null,
         options,
         provider: 'fal',
         model: body.mode === 'walk' ? video.walkModel : video.model,
@@ -247,6 +262,7 @@ export const videoRoutes: FastifyPluginAsync<VideoDeps> = async (app, deps) => {
       style: { gesture: body.gesture, camera: body.camera } as VideoStyle,
       note: body.note || undefined,
       seconds: body.seconds,
+      silent: !body.speak,
       creditsPerSecond: perSecond,
       options,
     });
@@ -288,6 +304,7 @@ export async function runVideo(
     style: VideoStyle;
     note?: string;
     seconds: number;
+    silent?: boolean;
     options?: Record<string, unknown>;
     creditsPerSecond: number;
   },
@@ -340,7 +357,7 @@ async function walkLong(
 ) {
   const lengths = clipLengths(job.seconds);
   if (lengths.length === 1) {
-    return deps.video.walk({ imageUrl: job.imageUrl, prompt: videoPrompt(job.style, job.note, job.script), seconds: lengths[0]! }, signal);
+    return deps.video.walk({ imageUrl: job.imageUrl, prompt: videoPrompt(job.style, job.note, job.script, job.silent), seconds: lengths[0]!, silent: job.silent }, signal);
   }
   const lines = splitScript(job.script ?? '', lengths.length);
   const clips: Uint8Array[] = [];
@@ -354,7 +371,7 @@ async function walkLong(
       .where(eq(modelVideos.id, videoId));
     // Later clips carry on from where the last one ended.
     const note = [job.note, i > 0 ? 'Continue smoothly from this exact frame: same person, outfit, place and lighting.' : ''].filter(Boolean).join(' ');
-    const clip = await deps.video.walk({ imageUrl, prompt: videoPrompt(job.style, note || undefined, lines[i] || undefined), seconds: lengths[i]! }, signal);
+    const clip = await deps.video.walk({ imageUrl, prompt: videoPrompt(job.style, note || undefined, lines[i] || undefined, job.silent), seconds: lengths[i]!, silent: job.silent }, signal);
     clips.push(clip.video.bytes);
     durationSec += clip.durationSec;
     costUsd += clip.costUsd;
