@@ -9,6 +9,7 @@ import {
   TryOnError,
   VIDEO_EMOTIONS,
   VIDEO_LANGUAGES,
+  isBangla,
   VIDEO_STYLES,
   VIDEO_VOICES,
   videoPrompt,
@@ -212,6 +213,9 @@ export const videoRoutes: FastifyPluginAsync<VideoDeps> = async (app, deps) => {
     if (!body.speak) {
       if (body.mode === 'talk') return reply.code(400).send({ error: 'A talking video needs a voice. Choose Walk and talk for a silent video.' });
       body.script = undefined;
+    }
+    if (body.mode === 'walk' && body.script && isBangla(body.script)) {
+      return reply.code(400).send({ error: 'Walk and talk can only speak English. For a Bangla voice choose Talking, or untick "The model speaks".' });
     }
     if (body.mode === 'walk' && body.audioUrl) return reply.code(400).send({ error: 'Walk and talk makes its own voice from the script. Use Talking for a recording.' });
     if (body.mode === 'talk' && !body.script && !body.audioUrl) return reply.code(400).send({ error: 'Write a script or upload a voice recording' });

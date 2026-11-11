@@ -16,6 +16,25 @@ export const DEFAULT_VOICE_MODEL = 'fal-ai/minimax/speech-2.6-turbo';
  * keys ("API key does not have access to model"), so the next one is tried.
  */
 export const VOICE_MODELS = ['fal-ai/minimax/speech-2.6-turbo', 'fal-ai/minimax/preview/speech-2.5-turbo', 'fal-ai/minimax/speech-02-turbo'];
+/** A chosen language (and any Bangla script) is spoken by ElevenLabs v3 on fal, same key: MiniMax has no Bangla. */
+export const ELEVENLABS_VOICE_MODEL = 'fal-ai/elevenlabs/tts/eleven-v3';
+
+/** True when the script is written in Bangla letters. */
+export function isBangla(text: string): boolean {
+  return /[\u0980-\u09FF]/.test(text);
+}
+
+/** The closest ElevenLabs voice to each MiniMax voice the shop can pick. */
+const ELEVENLABS_VOICES: Record<string, string> = {
+  Wise_Woman: 'Sarah',
+  Calm_Woman: 'Laura',
+  Lively_Girl: 'Jessica',
+  Friendly_Person: 'River',
+  Deep_Voice_Man: 'George',
+  Casual_Guy: 'Chris',
+  Elegant_Man: 'Daniel',
+  Patient_Man: 'Bill',
+};
 
 /** The request body for a MiniMax voice model: 2.6 names the script `prompt`, older ones `text`. */
 function voiceInput(model: string, req: SpeakRequest) {
@@ -49,9 +68,25 @@ export const VIDEO_VOICES = {
 } as const;
 export type VideoVoice = keyof typeof VIDEO_VOICES;
 
-/** Language hints for the voice. "auto" lets the AI decide. */
-export const VIDEO_LANGUAGES = ['auto', 'English', 'Hindi', 'Arabic', 'Malay', 'Indonesian'] as const;
-export type VideoLanguage = (typeof VIDEO_LANGUAGES)[number];
+/**
+ * Languages ElevenLabs v3 speaks, with their ISO 639-1 codes. Choosing one
+ * makes the voice with ElevenLabs in that language; "auto" uses MiniMax
+ * (or ElevenLabs Bangla when the script is in Bangla letters).
+ */
+export const LANGUAGE_CODES = {
+  Bengali: 'bn', English: 'en', Hindi: 'hi', Urdu: 'ur', Arabic: 'ar', Malay: 'ms', Indonesian: 'id',
+  Afrikaans: 'af', Armenian: 'hy', Assamese: 'as', Azerbaijani: 'az', Belarusian: 'be', Bosnian: 'bs', Bulgarian: 'bg',
+  Catalan: 'ca', Chichewa: 'ny', Chinese: 'zh', Croatian: 'hr', Czech: 'cs', Danish: 'da', Dutch: 'nl', Estonian: 'et',
+  Filipino: 'tl', Finnish: 'fi', French: 'fr', Galician: 'gl', Georgian: 'ka', German: 'de', Greek: 'el', Gujarati: 'gu',
+  Hausa: 'ha', Hebrew: 'he', Hungarian: 'hu', Icelandic: 'is', Irish: 'ga', Italian: 'it', Japanese: 'ja', Javanese: 'jv',
+  Kannada: 'kn', Kazakh: 'kk', Kyrgyz: 'ky', Korean: 'ko', Latvian: 'lv', Lingala: 'ln', Lithuanian: 'lt',
+  Luxembourgish: 'lb', Macedonian: 'mk', Malayalam: 'ml', Marathi: 'mr', Nepali: 'ne', Norwegian: 'no', Pashto: 'ps',
+  Persian: 'fa', Polish: 'pl', Portuguese: 'pt', Punjabi: 'pa', Romanian: 'ro', Russian: 'ru', Serbian: 'sr', Sindhi: 'sd',
+  Slovak: 'sk', Slovenian: 'sl', Somali: 'so', Spanish: 'es', Swahili: 'sw', Swedish: 'sv', Tamil: 'ta', Telugu: 'te',
+  Thai: 'th', Turkish: 'tr', Ukrainian: 'uk', Vietnamese: 'vi', Welsh: 'cy',
+} as const;
+export const VIDEO_LANGUAGES = ['auto', ...(Object.keys(LANGUAGE_CODES) as (keyof typeof LANGUAGE_CODES)[])] as const;
+export type VideoLanguage = 'auto' | keyof typeof LANGUAGE_CODES;
 
 export const VIDEO_EMOTIONS = ['happy', 'neutral', 'surprised'] as const;
 export type VideoEmotion = (typeof VIDEO_EMOTIONS)[number];
@@ -165,7 +200,16 @@ export class FalVideo {
   /** Turns the script into speech. Returns a link to the audio on fal. */
   async speak(req: SpeakRequest, signal?: AbortSignal): Promise<{ audioUrl: string; durationSec: number }> {
     let out: { audio?: { url?: string }; duration_ms?: number } | undefined;
-    for (const [i, model] of this.voiceModels.entries()) {
+    const language = req.language && req.language !== 'auto' ? LANGUAGE_CODES[req.language] : isBangla(req.text) ? 'bn' : undefined;
+    if (language) {
+      out = (await this.run(
+        ELEVENLABS_VOICE_MODEL,
+        { text: req.text, voice: ELEVENLABS_VOICES[req.voice ?? 'Wise_Woman'] ?? 'Sarah', language_code: language, stability: 0.5 },
+        'voice',
+        signal,
+      )) as typeof out;
+    }
+    for (const [i, model] of out ? [] : [...this.voiceModels.entries()]) {
       try {
         out = (await this.run(model, voiceInput(model, req), 'voice', signal)) as typeof out;
         break;
