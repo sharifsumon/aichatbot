@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull } from 'drizzle-orm';
 import { TRYON_SERVICES, type TryOnProvider } from '@agently/ai';
 import { encryptSecret } from '@agently/shared';
 import type { FastifyPluginAsync } from 'fastify';
@@ -60,7 +60,7 @@ export const adminModelRoutes: FastifyPluginAsync<AdminModelDeps> = async (app, 
   const { db } = deps;
 
   app.get('/models', async () => ({
-    models: await db.select().from(modelCharacters).orderBy(asc(modelCharacters.sortOrder), desc(modelCharacters.createdAt)),
+    models: await db.select().from(modelCharacters).where(isNull(modelCharacters.workspaceId)).orderBy(asc(modelCharacters.sortOrder), desc(modelCharacters.createdAt)),
   }));
 
   /** Which try-on AI the shops use. The API key itself is never sent back. */
@@ -145,7 +145,7 @@ export const adminModelRoutes: FastifyPluginAsync<AdminModelDeps> = async (app, 
     if (!isUuid(req.params.modelId)) return reply.code(404).send({ error: 'Model not found' });
     const body = await parseBody(patchBody, req.body, reply);
     if (!body) return reply;
-    const [model] = await db.update(modelCharacters).set(body).where(eq(modelCharacters.id, req.params.modelId)).returning();
+    const [model] = await db.update(modelCharacters).set(body).where(and(eq(modelCharacters.id, req.params.modelId), isNull(modelCharacters.workspaceId))).returning();
     if (!model) return reply.code(404).send({ error: 'Model not found' });
     await audit(db, req, 'model.updated', { targetType: 'model_character', targetId: model.id, data: body });
     return { model };
@@ -155,7 +155,7 @@ export const adminModelRoutes: FastifyPluginAsync<AdminModelDeps> = async (app, 
   app.delete<{ Params: { modelId: string } }>('/models/:modelId', async (req, reply) => {
     if (!(await requirePerm(req, reply, 'settings.manage'))) return reply;
     if (!isUuid(req.params.modelId)) return reply.code(404).send({ error: 'Model not found' });
-    const [model] = await db.delete(modelCharacters).where(eq(modelCharacters.id, req.params.modelId)).returning();
+    const [model] = await db.delete(modelCharacters).where(and(eq(modelCharacters.id, req.params.modelId), isNull(modelCharacters.workspaceId))).returning();
     if (!model) return reply.code(404).send({ error: 'Model not found' });
     if (model.imageKey && deps.storage) await deps.storage.delete(model.imageKey).catch((err: unknown) => req.log.warn({ err }, 'Model photo delete failed'));
     await audit(db, req, 'model.deleted', { targetType: 'model_character', targetId: model.id, data: { name: model.name } });

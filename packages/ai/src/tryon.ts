@@ -15,7 +15,8 @@ export interface TryOnImage {
 }
 
 export interface TryOnRequest {
-  model: TryOnImage;
+  /** Left out: the AI creates a model from the shop's description (image models only, not FASHN). */
+  model?: TryOnImage;
   garment: TryOnImage;
   category: GarmentCategory;
   /** How the shop wants the photo: pose, expression and background presets (keys of TRYON_STYLES). */
@@ -146,6 +147,7 @@ export class FashnTryOn implements TryOnProvider {
   }
 
   async tryOn(req: TryOnRequest, signal?: AbortSignal): Promise<TryOnResult> {
+    if (!req.model) throw new TryOnError('FASHN needs a model photo', 'Choose a model: this try-on service needs one.');
     const headers = { authorization: `Bearer ${this.o.apiKey}`, 'content-type': 'application/json' };
     const start = await this.o.fetch(`${this.o.baseUrl}/run`, {
       method: 'POST',
@@ -216,6 +218,22 @@ export function tryOnPrompt(req: TryOnRequest): string {
   const face = req.style?.expression && TRYON_STYLES.expression[req.style.expression];
   const background = req.style?.background && TRYON_STYLES.background[req.style.background];
   const camera = req.style?.camera && TRYON_STYLES.camera[req.style.camera];
+  if (!req.model) {
+    // No model photo: the AI creates the model from the shop's description.
+    return [
+      `The image shows ${what} a shop sells.`,
+      `Make a realistic e-commerce product photo of a fashion model wearing exactly ${what} from the image.`,
+      req.note ? `The shop describes the photo it wants: ${req.note}` : 'The model is an attractive South Asian adult.',
+      pose ? `Pose: ${pose}.` : 'Pose: standing naturally, facing the camera.',
+      face ? `Expression: ${face}.` : '',
+      camera ? `Camera: ${camera}.` : 'Camera: full body, at eye level.',
+      background ? `Background: ${background}.` : req.note ? '' : 'Background: a clean light studio background.',
+      'Copy the garment faithfully: colour, print, embroidery, fabric texture, neckline, sleeves and length.',
+      'Do not add text, logos or watermarks.',
+    ]
+      .filter(Boolean)
+      .join(' ');
+  }
   return [
     `The first image is a fashion model. The second image shows ${what} a shop sells.`,
     `Make a realistic e-commerce product photo of the same model wearing exactly ${what} from the second image.`,
@@ -256,7 +274,7 @@ export class GeminiTryOn implements TryOnProvider {
       signal,
       headers: { 'x-goog-api-key': this.o.apiKey, 'content-type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }, inline(req.model), inline(req.garment)] }],
+        contents: [{ role: 'user', parts: [{ text: prompt }, ...(req.model ? [inline(req.model)] : []), inline(req.garment)] }],
         generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: '3:4' } },
       }),
     });
@@ -349,7 +367,7 @@ export class FalTryOn implements TryOnProvider {
       body: JSON.stringify({
         prompt: tryOnPrompt(req),
         // Public links when we have them (smaller requests); otherwise the photos inline.
-        image_urls: [req.model.url ?? dataUri(req.model), req.garment.url ?? dataUri(req.garment)],
+        image_urls: [...(req.model ? [req.model.url ?? dataUri(req.model)] : []), req.garment.url ?? dataUri(req.garment)],
         num_images: 1,
         aspect_ratio: '3:4',
         output_format: 'jpeg',

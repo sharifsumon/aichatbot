@@ -90,6 +90,14 @@ test('fal.ai submits to the queue with public links, polls, and downloads the im
   assert.equal(calls.at(-1)!.url, 'https://fal.media/out.jpg');
   assert.deepEqual([...r.image.bytes], [5, 6]);
   assert.equal(r.costUsd, 0.0398);
+
+  // Without a model photo, only the garment is sent and the prompt asks for a new model.
+  calls.length = 0;
+  polls = 0;
+  await provider.tryOn({ ...req, model: undefined, note: 'a young woman in a garden' });
+  assert.equal(calls[0]!.body.image_urls.length, 1);
+  assert.match(calls[0]!.body.prompt, /fashion model wearing exactly/);
+  assert.match(calls[0]!.body.prompt, /a young woman in a garden/);
 });
 
 test('fal.ai refused key and failed runs carry readable messages', async () => {

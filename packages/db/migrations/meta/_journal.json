@@ -78,6 +78,13 @@
       "when": 1794332626203,
       "tag": "0010_model_videos",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794421724283,
+      "tag": "0011_shop_models",
+      "breakpoints": true
     }
   ]
 }

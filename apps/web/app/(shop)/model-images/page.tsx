@@ -16,6 +16,8 @@ interface Model {
   name: string;
   gender: Gender;
   imageUrl: string;
+  /** The shop's own model, added from its own photo. */
+  own?: boolean;
 }
 interface TryOnImage {
   id: string;
@@ -107,6 +109,8 @@ export default function ModelImagesPage() {
   const [done, setDone] = useState<string>();
   const [adding, setAdding] = useState<TryOnImage>();
   const file = useRef<HTMLInputElement>(null);
+  const modelFile = useRef<HTMLInputElement>(null);
+  const [newModel, setNewModel] = useState<{ imageUrl?: string; name: string; gender: Gender; busy?: boolean }>();
 
   const loadImages = useCallback(async () => {
     try {
@@ -146,14 +150,57 @@ export default function ModelImagesPage() {
     }
   }
 
+  async function pickModelPhoto(f: File | undefined) {
+    if (!f || !newModel) return;
+    setNewModel({ ...newModel, busy: true });
+    setError(undefined);
+    try {
+      const small = await shrinkImage(f);
+      if (small.size > MAX_PHOTO_MB * 1024 * 1024) throw new Error(`The photo is larger than ${MAX_PHOTO_MB} MB. Use a smaller one.`);
+      const r = await upload<{ url: string }>(`${ws}/uploads/images`, small, 60_000);
+      setNewModel((m) => m && { ...m, imageUrl: r.url, busy: false });
+    } catch (e) {
+      setNewModel((m) => m && { ...m, busy: false });
+      setError((e as ApiError).status === 503 ? 'Photo uploads are not switched on yet.' : (e as Error).message);
+    } finally {
+      if (modelFile.current) modelFile.current.value = '';
+    }
+  }
+
+  async function saveModel() {
+    if (!newModel?.imageUrl || !newModel.name.trim()) return;
+    setNewModel({ ...newModel, busy: true });
+    setError(undefined);
+    try {
+      const r = await api<{ model: Model }>(`${ws}/try-on/models`, { method: 'POST', body: { name: newModel.name.trim(), gender: newModel.gender, imageUrl: newModel.imageUrl } });
+      setNewModel(undefined);
+      setModel(r.model);
+      setup.reload();
+    } catch (e) {
+      setNewModel((m) => m && { ...m, busy: false });
+      setError((e as Error).message);
+    }
+  }
+
+  async function removeModel(m: Model) {
+    if (!window.confirm(`Remove ${m.name} from your models? Images already made with this model stay.`)) return;
+    try {
+      await api(`${ws}/try-on/models/${m.id}`, { method: 'DELETE' });
+      if (model?.id === m.id) setModel(undefined);
+      setup.reload();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
   async function generate() {
-    if (!model || !garment) return;
+    if (!ready || !garment) return;
     setStarting(true);
     setError(undefined);
     setDone(undefined);
     try {
       const r = await api<{ image: TryOnImage }>(`${ws}/try-on`, { method: 'POST', body: {
-          characterId: model.id,
+          ...(model && { characterId: model.id }),
           garmentImageUrl: garment,
           category,
           ...(styleOptions && {
@@ -198,6 +245,8 @@ export default function ModelImagesPage() {
   const models = (setup.data?.models ?? []).filter((m) => gender === 'all' || m.gender === gender);
   const credits = setup.data?.creditsPerImage ?? 0;
   const styleOptions = setup.data?.styleOptions !== false;
+  // Image models can create the model from the shop's description; FASHN needs a model photo.
+  const ready = !!garment && (!!model || (styleOptions && !!note.trim()));
 
   return (
     <>
@@ -225,15 +274,61 @@ export default function ModelImagesPage() {
               ]}
             />
             {setup.loading && !setup.data && <Loading />}
-            {setup.data && models.length === 0 && <Empty>No models to choose from yet.</Empty>}
+            {setup.data && models.length === 0 && !newModel && <Empty>No models to choose from yet. Add your own below.</Empty>}
             <div className="pick">
               {models.map((m) => (
-                <button key={m.id} type="button" className={model?.id === m.id ? 'on' : ''} aria-pressed={model?.id === m.id} onClick={() => setModel(m)}>
+                <button key={m.id} type="button" className={model?.id === m.id ? 'on' : ''} aria-pressed={model?.id === m.id} onClick={() => setModel(model?.id === m.id ? undefined : m)}>
                   <img src={m.imageUrl} alt="" loading="lazy" />
-                  <span>{m.name}</span>
+                  <span>
+                    {m.name}
+                    {m.own && ' · Yours'}
+                  </span>
                 </button>
               ))}
             </div>
+            {styleOptions && (
+              <small className="muted">Optional: skip this and describe the model in "Your own instructions" below, and the AI creates one. Tap a chosen model again to unselect it.</small>
+            )}
+            {model?.own && (
+              <button type="button" className="btn sm" style={{ alignSelf: 'flex-start' }} onClick={() => removeModel(model)}>
+                Remove {model.name} from your models
+              </button>
+            )}
+            {!newModel ? (
+              <button type="button" className="btn" style={{ alignSelf: 'flex-start' }} onClick={() => setNewModel({ name: '', gender: gender === 'male' ? 'male' : 'female' })}>
+                + Add your own model
+              </button>
+            ) : (
+              <fieldset className="style">
+                <legend>Your own model</legend>
+                <button type="button" className="garment" onClick={() => modelFile.current?.click()} disabled={newModel.busy}>
+                  {newModel.imageUrl ? <img src={newModel.imageUrl} alt="Your model" /> : newModel.busy ? 'Uploading…' : '+ Choose a photo of the model'}
+                </button>
+                <input ref={modelFile} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => pickModelPhoto(e.target.files?.[0])} />
+                <small className="muted">A clear, front-facing photo of one person, head to knees or full body, in good light. Use only photos you have permission to use.</small>
+                <label className="field">
+                  Name
+                  <input value={newModel.name} maxLength={60} onChange={(e) => setNewModel({ ...newModel, name: e.target.value })} placeholder="e.g. Nusrat" />
+                </label>
+                <Chips
+                  label="Model"
+                  value={newModel.gender}
+                  onChange={(g) => setNewModel({ ...newModel, gender: g })}
+                  options={[
+                    { value: 'female', label: 'Woman' },
+                    { value: 'male', label: 'Man' },
+                  ]}
+                />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button type="button" className="btn primary" disabled={!newModel.imageUrl || !newModel.name.trim() || newModel.busy} onClick={saveModel}>
+                    Save model
+                  </button>
+                  <button type="button" className="btn" onClick={() => setNewModel(undefined)}>
+                    Cancel
+                  </button>
+                </div>
+              </fieldset>
+            )}
           </section>
 
           <section className="card pad" aria-label="Upload your garment">
@@ -303,16 +398,24 @@ export default function ModelImagesPage() {
                     maxLength={MAX_NOTE}
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
-                    placeholder="e.g. holding a small golden clutch, soft evening light, wearing gold earrings"
+                    placeholder={
+                      model
+                        ? 'e.g. holding a small golden clutch, soft evening light, wearing gold earrings'
+                        : 'Describe the model, e.g. a young Bangladeshi woman with long hair, smiling, standing in a garden'
+                    }
                   />
                 </label>
                 <small className="muted">Write in English for best results. The garment is always copied as it is.</small>
               </fieldset>
             )}
-            <button type="button" className="btn primary" disabled={!model || !garment || starting || uploading || !setup.data?.enabled} onClick={generate}>
+            <button type="button" className="btn primary" disabled={!ready || starting || uploading || !setup.data?.enabled} onClick={generate}>
               {starting ? 'Starting…' : `Generate image${credits ? ` · ${credits} credits` : ''}`}
             </button>
-            {(!model || !garment) && <small className="muted">{!model ? 'Choose a model first.' : 'Upload the garment photo.'}</small>}
+            {!ready && (
+              <small className="muted">
+                {!garment ? 'Upload the garment photo.' : styleOptions ? 'Choose a model, or describe the model in your own instructions.' : 'Choose a model first.'}
+              </small>
+            )}
           </section>
         </div>
 
@@ -337,7 +440,7 @@ export default function ModelImagesPage() {
                     <div style={{ padding: 16 }}>{img.error ?? 'This image could not be made.'}</div>
                   )}
                   <div className="thumbs" aria-hidden="true">
-                    <img src={img.modelImageUrl} alt="" />
+                    {img.modelImageUrl && <img src={img.modelImageUrl} alt="" />}
                     <img src={img.garmentImageUrl} alt="" />
                   </div>
                 </div>
