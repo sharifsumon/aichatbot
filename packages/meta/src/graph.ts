@@ -136,6 +136,15 @@ export class GraphClient {
     return res.id;
   }
 
+  /**
+   * Posts a video on the page. Facebook downloads `fileUrl` itself and keeps
+   * processing it after this returns. Returns the video's id.
+   */
+  async publishVideo(pageToken: string, pageId: string, video: { fileUrl: string; description: string }): Promise<string> {
+    const res = await this.post<{ id: string }>(`/${pageId}/videos`, pageToken, { file_url: video.fileUrl, description: video.description }, 5 * 60_000);
+    return res.id;
+  }
+
   private async post<T>(path: string, token: string, body: unknown, timeoutMs = 15_000): Promise<T> {
     const res = await this.fetchImpl(`${this.base}${path}`, {
       method: 'POST',

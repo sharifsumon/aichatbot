@@ -154,3 +154,16 @@ test('publishPost posts a link with a call_to_action button', async () => {
     { message: 'Hi', link: 'https://shop.test/p', call_to_action: { type: 'ORDER_NOW', value: { link: 'https://m.me/page1?ref=order_x' } } },
   ]);
 });
+
+test('publishVideo posts the file URL for Facebook to download', async () => {
+  const calls: { url: string; body: unknown }[] = [];
+  const graph = new GraphClient({
+    version: 'v23.0',
+    fetch: (async (url: string, init: RequestInit) => {
+      calls.push({ url, body: JSON.parse(String(init.body)) });
+      return new Response(JSON.stringify({ id: 'vid1' }), { status: 200 });
+    }) as typeof fetch,
+  });
+  assert.equal(await graph.publishVideo('tok', 'page1', { fileUrl: 'https://files.test/v.mp4', description: 'Hi' }), 'vid1');
+  assert.deepEqual(calls, [{ url: 'https://graph.facebook.com/v23.0/page1/videos', body: { file_url: 'https://files.test/v.mp4', description: 'Hi' } }]);
+});

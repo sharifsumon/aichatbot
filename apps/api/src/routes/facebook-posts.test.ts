@@ -41,6 +41,7 @@ function server(fail?: GraphApiError) {
         published.push({ token, pageId, message: post.message, ...(post.button ? { button: post.button } : { photoUrls: post.photoUrls }) });
         return `${pageId}_${++posts}`;
       },
+      publishVideo: async () => 'unused',
     },
     encryptionKey: key,
     urls: { web: WEB, api: 'https://api.agently.test' },

@@ -22,7 +22,7 @@ export type ServerDeps = HealthDeps &
       FacebookApp,
       'loginUrl' | 'exchangeCode' | 'me' | 'pages' | 'subscribePage' | 'unsubscribePage' | 'parseSignedRequest'
     >;
-    graph: Pick<GraphClient, 'sendText' | 'replyToComment' | 'publishPost'>;
+    graph: Pick<GraphClient, 'sendText' | 'replyToComment' | 'publishPost' | 'publishVideo'>;
     encryptionKey: string;
     /** `admin` is the super admin panel's address; without it /admin is not served. */
     urls: { web: string; api: string; admin?: string };

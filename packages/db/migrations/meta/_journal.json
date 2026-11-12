@@ -85,6 +85,13 @@
       "when": 1794421724283,
       "tag": "0011_shop_models",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794455535376,
+      "tag": "0012_page_posts",
+      "breakpoints": true
     }
   ]
 }
