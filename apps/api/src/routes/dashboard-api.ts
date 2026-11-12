@@ -21,6 +21,7 @@ import { inboxRoutes, type InboxDeps } from './inbox.ts';
 import { ordersRoutes } from './orders.ts';
 import { catalogRoutes, type CatalogDeps } from './catalog.ts';
 import { facebookPostRoutes, type FacebookPostDeps } from './facebook-posts.ts';
+import { pagePostRoutes, type PagePostDeps } from './page-posts.ts';
 import { knowledgeRoutes, type KnowledgeDeps } from './knowledge.ts';
 import { settingsRoutes } from './settings.ts';
 import { teamRoutes } from './team.ts';
@@ -30,7 +31,7 @@ import { tryOnRoutes, type TryOnDeps } from './tryon.ts';
 import { videoRoutes, type VideoDeps } from './video.ts';
 import { limitsFor, pagesInUse } from '@agently/billing';
 
-export type DashboardDeps = InboxDeps & CatalogDeps & KnowledgeDeps & FacebookPostDeps & TryOnDeps & VideoDeps & {
+export type DashboardDeps = InboxDeps & CatalogDeps & KnowledgeDeps & FacebookPostDeps & PagePostDeps & TryOnDeps & VideoDeps & {
   db: Db;
   facebook: Pick<FacebookApp, 'pages' | 'subscribePage' | 'unsubscribePage'>;
   encryptionKey: string;
@@ -74,6 +75,7 @@ export const dashboardApiRoutes: FastifyPluginAsync<DashboardDeps> = async (app,
   app.register(ordersRoutes, childDeps);
   app.register(catalogRoutes, childDeps);
   app.register(facebookPostRoutes, childDeps);
+  app.register(pagePostRoutes, childDeps);
   app.register(knowledgeRoutes, childDeps);
   app.register(settingsRoutes, childDeps);
   app.register(teamRoutes, childDeps);

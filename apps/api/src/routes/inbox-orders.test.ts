@@ -54,7 +54,7 @@ function server() {
     graph: {
       sendText: async (_t, psid, text) => (take(), sent.push({ to: psid, text }), ['mid-staff']),
       replyToComment: async (_t, commentId, text) => (take(), sent.push({ to: commentId, text }), 'c-staff'),
-      publishPost: async () => 'unused',
+      publishPost: async () => 'unused', publishVideo: async () => 'unused',
     },
     encryptionKey: key,
     urls: { web: WEB, api: 'https://api.agently.test' },

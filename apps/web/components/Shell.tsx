@@ -53,6 +53,7 @@ const NAV: { href: string; label: string; icon: keyof typeof Icon; managers?: bo
   { href: '/inbox', label: 'Inbox', icon: 'inbox', badge: (h) => h.stats.needsYou },
   { href: '/orders', label: 'Orders', icon: 'orders', badge: (h) => h.stats.awaitingPayment },
   { href: '/catalog', label: 'Product Catalog', icon: 'catalog' },
+  { href: '/page-posts', label: 'Page posts', icon: 'post', managers: true },
   { href: '/model-images', label: 'Images with models', icon: 'models', managers: true },
   { href: '/model-videos', label: 'Videos with models', icon: 'video', managers: true },
   { href: '/comments', label: 'Comments', icon: 'comments' },

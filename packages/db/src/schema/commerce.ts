@@ -113,6 +113,24 @@ export const productPosts = pgTable(
   (t) => [uniqueIndex().on(t.channelId, t.postId), index().on(t.productId, t.createdAt)],
 );
 
+/** Free-form posts on the shop's Facebook page ("What's on your mind?"): text, photos or one video. */
+export const pagePosts = pgTable(
+  'page_posts',
+  {
+    id: id(),
+    workspaceId: uuid().notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    channelId: uuid().notNull().references(() => channels.id, { onDelete: 'cascade' }),
+    /** Facebook's id: "{pageId}_{postId}" for text and photo posts, the video's id for a video. */
+    postId: text().notNull(),
+    message: text().notNull().default(''),
+    photoUrls: jsonb().$type<string[]>().notNull().default([]),
+    videoUrl: text(),
+    createdByUserId: uuid().references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex().on(t.channelId, t.postId), index().on(t.workspaceId, t.createdAt)],
+);
+
 export const orders = pgTable(
   'orders',
   {
