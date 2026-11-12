@@ -118,7 +118,7 @@ export default function MediaLibraryPage() {
     <>
       <TopBar title="Media library">
         {tab === 'images' ? (
-          <Link href="/model-images" className="btn primary">
+          <Link href="/generate-image" className="btn primary">
             <Icon.sparkle /> Generate with a model
           </Link>
         ) : (
@@ -174,7 +174,7 @@ export default function MediaLibraryPage() {
         {tab === 'images' && images.data && shownImages.length === 0 && (
           <Empty>
             {source === 'own' ? 'No images made with your own models yet.' : 'No images yet.'}{' '}
-            <Link href={source === 'own' ? '/model-images?add=model' : '/model-images'}>{source === 'own' ? 'Add your model' : 'Make your first one'}</Link>.
+            <Link href={source === 'own' ? '/model-images?add=model' : '/generate-image'}>{source === 'own' ? 'Add your model' : 'Make your first one'}</Link>.
           </Empty>
         )}
         {tab === 'videos' && videos.data && readyVideos.length === 0 && (
