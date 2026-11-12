@@ -408,3 +408,21 @@ a.stat:hover { border-color: #c7d2fe; color: inherit; }
   .lib-bar strong { flex-basis: 100%; }
   .lib-bar .lib-open { display: none; }
 }
+
+/* Images with models: "Your images" sits under "1. Choose a model" */
+.tryon-col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.btn.light { background: var(--blue-bg); border-color: #b9e6fe; color: var(--blue); }
+.btn.light:hover { background: #cdeafd; color: var(--blue); }
+.results.compact { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.results.compact .result { border-radius: 12px; }
+.results.compact .result .ph { font-size: 11px; }
+.results.compact .result .ph .thumbs img { width: 22px; height: 30px; border-width: 1.5px; }
+.results.compact .result .ph .thumbs { left: 6px; bottom: 6px; gap: 3px; }
+.results.compact .spinner { width: 20px; height: 20px; border-width: 2px; }
+.results.compact .info { padding: 8px; gap: 4px; }
+.results.compact .info .btn.sm { height: 26px; padding: 0 8px; font-size: 11.5px; border-radius: 7px; }
+/* Every button on the Images with models page is light blue. */
+.tryon-page .btn:not(.link), .tryon-page .btn.primary { background: var(--blue-bg); border-color: #b9e6fe; color: var(--blue); }
+.tryon-page .btn:not(.link):hover:not(:disabled) { background: #cdeafd; border-color: #7cd4fd; color: var(--blue); }
+.tryon-page .btn.link { color: var(--blue); }

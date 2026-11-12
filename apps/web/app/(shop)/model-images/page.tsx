@@ -262,7 +262,7 @@ export default function ModelImagesPage() {
   return (
     <>
       <TopBar title="Product images with models" back={{ href: "/media", label: "Media library" }} />
-      <div className="content">
+      <div className="content tryon-page">
         <p className="sub" style={{ margin: 0, fontSize: 14 }}>
           Pick a model, upload a photo of your dress, and the AI makes a photo of the model wearing it. Add the result to a product in your catalog.
         </p>
@@ -272,8 +272,16 @@ export default function ModelImagesPage() {
         {setup.error && <Notice tone="error">{setup.error}</Notice>}
 
         <div className="tryon">
+          <div className="tryon-col">
           <section className="card pad" aria-label="Choose a model">
-            <h2>1. Choose a model</h2>
+            <div className="card-head">
+              <h2>1. Choose a model</h2>
+              {!newModel && (
+                <button type="button" className="btn sm light" onClick={() => setNewModel({ name: '', gender: gender === 'male' ? 'male' : 'female' })}>
+                  + Add your own model
+                </button>
+              )}
+            </div>
             <Chips
               label="Show"
               value={gender}
@@ -285,7 +293,7 @@ export default function ModelImagesPage() {
               ]}
             />
             {setup.loading && !setup.data && <Loading />}
-            {setup.data && models.length === 0 && !newModel && <Empty>No models to choose from yet. Add your own below.</Empty>}
+            {setup.data && models.length === 0 && !newModel && <Empty>No models to choose from yet. Add your own with the button above.</Empty>}
             <div className="pick">
               {models.map((m) => (
                 <button key={m.id} type="button" className={model?.id === m.id ? 'on' : ''} aria-pressed={model?.id === m.id} onClick={() => setModel(model?.id === m.id ? undefined : m)}>
@@ -305,11 +313,7 @@ export default function ModelImagesPage() {
                 Remove {model.name} from your models
               </button>
             )}
-            {!newModel ? (
-              <button type="button" className="btn" style={{ alignSelf: 'flex-start' }} onClick={() => setNewModel({ name: '', gender: gender === 'male' ? 'male' : 'female' })}>
-                + Add your own model
-              </button>
-            ) : (
+            {newModel && (
               <fieldset className="style">
                 <legend>Your own model</legend>
                 <button type="button" className="garment" onClick={() => modelFile.current?.click()} disabled={newModel.busy}>
@@ -341,6 +345,55 @@ export default function ModelImagesPage() {
               </fieldset>
             )}
           </section>
+
+          <section aria-label="Your images" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <h2 style={{ fontSize: 16 }}>Your images</h2>
+            {!images && <Loading />}
+            {images?.length === 0 && <Empty>Images you make show up here. It takes about half a minute.</Empty>}
+            <div className="results compact">
+              {images?.map((img) => (
+                <div key={img.id} className="result">
+                  <div className="ph">
+                    {img.status === 'succeeded' && img.resultImageUrl ? (
+                      <a href={img.resultImageUrl} target="_blank" rel="noreferrer">
+                        <img src={img.resultImageUrl} alt="Model wearing your garment" />
+                      </a>
+                    ) : img.status === 'pending' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                        <div className="spinner" aria-hidden="true" />
+                        Making your image…
+                      </div>
+                    ) : (
+                      <div style={{ padding: 16 }}>{img.error ?? 'This image could not be made.'}</div>
+                    )}
+                    <div className="thumbs" aria-hidden="true">
+                      {img.modelImageUrl && <img src={img.modelImageUrl} alt="" />}
+                      <img src={img.garmentImageUrl} alt="" />
+                    </div>
+                  </div>
+                  <div className="info">
+                    {img.status === 'succeeded' && img.resultImageUrl && (
+                      <>
+                        <button type="button" className="btn sm primary" onClick={() => setAdding(img)}>
+                          Add to a product
+                        </button>
+                        <button type="button" className="btn sm" onClick={() => router.push(`/catalog${qs({ newPhoto: img.resultImageUrl })}`)}>
+                          New product
+                        </button>
+                      </>
+                    )}
+                    {img.status === 'failed' && <Pill tone="red">Failed</Pill>}
+                    {img.status !== 'pending' && (
+                      <button type="button" className="btn sm link" style={{ marginLeft: 'auto' }} onClick={() => remove(img)}>
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+          </div>
 
           <section className="card pad" aria-label="Upload your garment">
             <h2>2. Upload your dress</h2>
@@ -430,53 +483,6 @@ export default function ModelImagesPage() {
           </section>
         </div>
 
-        <section aria-label="Your images" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <h2 style={{ fontSize: 16 }}>Your images</h2>
-          {!images && <Loading />}
-          {images?.length === 0 && <Empty>Images you make show up here. It takes about half a minute.</Empty>}
-          <div className="results">
-            {images?.map((img) => (
-              <div key={img.id} className="result">
-                <div className="ph">
-                  {img.status === 'succeeded' && img.resultImageUrl ? (
-                    <a href={img.resultImageUrl} target="_blank" rel="noreferrer">
-                      <img src={img.resultImageUrl} alt="Model wearing your garment" />
-                    </a>
-                  ) : img.status === 'pending' ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-                      <div className="spinner" aria-hidden="true" />
-                      Making your image…
-                    </div>
-                  ) : (
-                    <div style={{ padding: 16 }}>{img.error ?? 'This image could not be made.'}</div>
-                  )}
-                  <div className="thumbs" aria-hidden="true">
-                    {img.modelImageUrl && <img src={img.modelImageUrl} alt="" />}
-                    <img src={img.garmentImageUrl} alt="" />
-                  </div>
-                </div>
-                <div className="info">
-                  {img.status === 'succeeded' && img.resultImageUrl && (
-                    <>
-                      <button type="button" className="btn sm primary" onClick={() => setAdding(img)}>
-                        Add to a product
-                      </button>
-                      <button type="button" className="btn sm" onClick={() => router.push(`/catalog${qs({ newPhoto: img.resultImageUrl })}`)}>
-                        New product
-                      </button>
-                    </>
-                  )}
-                  {img.status === 'failed' && <Pill tone="red">Failed</Pill>}
-                  {img.status !== 'pending' && (
-                    <button type="button" className="btn sm link" style={{ marginLeft: 'auto' }} onClick={() => remove(img)}>
-                      Remove
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
       </div>
       {adding?.resultImageUrl && (
         <AddToProduct
