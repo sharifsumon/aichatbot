@@ -56,6 +56,7 @@ const NAV: { href: string; label: string; icon: keyof typeof Icon; managers?: bo
   { href: '/page-posts', label: 'Page posts', icon: 'post', managers: true },
   // Making images and videos with models opens from the Media library, so it stays highlighted there.
   { href: '/media', label: 'Media library', icon: 'images', managers: true, also: ['/model-images', '/model-videos'] },
+  { href: '/generate-image', label: 'Generate image', icon: 'sparkle', managers: true },
   { href: '/comments', label: 'Comments', icon: 'comments' },
   { href: '/agent', label: 'Chat Agent', icon: 'agent', managers: true },
   { href: '/knowledge', label: 'Knowledge base', icon: 'knowledge', managers: true },
