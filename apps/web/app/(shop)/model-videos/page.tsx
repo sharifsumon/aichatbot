@@ -198,7 +198,7 @@ export default function ModelVideosPage() {
   if (!manager) {
     return (
       <>
-        <TopBar title="Videos with models" />
+        <TopBar title="Videos with models" back={{ href: "/media?tab=videos", label: "Media library" }} />
         <div className="content">
           <Notice tone="info">Only the shop owner and admins can make videos with models.</Notice>
         </div>
@@ -208,7 +208,7 @@ export default function ModelVideosPage() {
 
   return (
     <>
-      <TopBar title="Videos with models" />
+      <TopBar title="Videos with models" back={{ href: "/media?tab=videos", label: "Media library" }} />
       <div className="content">
         <p className="sub" style={{ margin: 0, fontSize: 14 }}>
           Turn a model photo into a short product video. The model can walk and talk with the camera following, or talk to the camera from your script or your own voice.

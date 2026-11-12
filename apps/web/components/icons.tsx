@@ -53,27 +53,11 @@ export const Icon = {
       <path d="M8 21l1.5-9L7 9.5 9.5 8h5L17 9.5 14.5 12 16 21z" />
     </Svg>
   ),
-  pagePost: () => (
-    <Svg>
-      <rect x="4" y="3" width="16" height="18" rx="2" />
-      <path d="M8 8h8M8 12h8M8 16h5" />
-    </Svg>
-  ),
   images: () => (
     <Svg>
       <rect x="3" y="4" width="18" height="16" rx="2" />
       <circle cx="9" cy="10" r="2" />
       <path d="M21 16l-5-5-9 9" />
-    </Svg>
-  ),
-  close: () => (
-    <Svg>
-      <path d="M6 6l12 12M18 6L6 18" />
-    </Svg>
-  ),
-  chevron: () => (
-    <Svg size={14}>
-      <path d="M9 6l6 6-6 6" />
     </Svg>
   ),
   sparkle: () => (

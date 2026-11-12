@@ -245,7 +245,7 @@ export default function ModelImagesPage() {
   if (!manager) {
     return (
       <>
-        <TopBar title="Product images with models" />
+        <TopBar title="Product images with models" back={{ href: "/media", label: "Media library" }} />
         <div className="content">
           <Notice tone="info">Only the shop owner and admins can make product images with models.</Notice>
         </div>
@@ -261,7 +261,7 @@ export default function ModelImagesPage() {
 
   return (
     <>
-      <TopBar title="Product images with models" />
+      <TopBar title="Product images with models" back={{ href: "/media", label: "Media library" }} />
       <div className="content">
         <p className="sub" style={{ margin: 0, fontSize: 14 }}>
           Pick a model, upload a photo of your dress, and the AI makes a photo of the model wearing it. Add the result to a product in your catalog.
