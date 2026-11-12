@@ -112,6 +112,17 @@ export default function ModelImagesPage() {
   const modelFile = useRef<HTMLInputElement>(null);
   const [newModel, setNewModel] = useState<{ imageUrl?: string; name: string; gender: Gender; busy?: boolean }>();
 
+  // Opened from the Images panel: ?model=<id> picks that model, ?add=model opens "Add your own model".
+  const models0 = setup.data?.models;
+  useEffect(() => {
+    if (!models0) return;
+    const q = new URLSearchParams(window.location.search);
+    const want = q.get('model');
+    if (want) setModel(models0.find((m) => m.id === want));
+    if (q.get('add') === 'model') setNewModel((m) => m ?? { name: '', gender: 'female' });
+    if (want || q.get('add')) window.history.replaceState(null, '', window.location.pathname);
+  }, [models0]);
+
   const loadImages = useCallback(async () => {
     try {
       const r = await api<{ images: TryOnImage[] }>(`${ws}/try-on`);
