@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
-import { useShop } from '@/components/Shell';
+import { useMediaTarget, useShop, type MediaTarget } from '@/components/Shell';
 import { Empty, Loading, Notice, TopBar } from '@/components/ui';
 import { ApiError, useApi, useLoad, useUpload } from '@/lib/api';
 import { dateTime } from '@/lib/format';
@@ -25,7 +25,7 @@ interface PagePost {
 
 /** "What's on your mind?" for the shop's Facebook page: text with photos or a video, posted straight to the page. */
 export default function PagePostsPage() {
-  const { ws, home, manager } = useShop();
+  const { ws, home, manager, openMedia } = useShop();
   const api = useApi();
   const upload = useUpload();
   const past = useLoad<{ posts: PagePost[] }>(`${ws}/page-posts`);
@@ -42,6 +42,41 @@ export default function PagePostsPage() {
   const photoInput = useRef<HTMLInputElement>(null);
   const videoInput = useRef<HTMLInputElement>(null);
   const busy = posting || !!uploading;
+
+  // Photos and videos picked in the Images or Videos panel land in this post.
+  const target = useMemo<MediaTarget | null>(
+    () =>
+      manager
+        ? {
+            label: 'Add to post',
+            addPhotos: (urls) => {
+              setError(undefined);
+              setVideo((v) => {
+                if (v) {
+                  setError("Facebook doesn't allow photos and a video in the same post. Remove the video first.");
+                  return v;
+                }
+                setPhotos((cur) => {
+                  const next = [...cur, ...urls.filter((u) => !cur.includes(u))];
+                  if (next.length > MAX_PHOTOS) setError(`Only ${MAX_PHOTOS} photos fit in one post.`);
+                  return next.slice(0, MAX_PHOTOS);
+                });
+                return v;
+              });
+            },
+            addVideo: (url) => {
+              setError(undefined);
+              setPhotos((cur) => {
+                if (cur.length) setError("Facebook doesn't allow photos and a video in the same post. Remove the photos first.");
+                else setVideo(url);
+                return cur;
+              });
+            },
+          }
+        : null,
+    [manager],
+  );
+  useMediaTarget(target);
 
   async function addPhotos(files: File[]) {
     const room = MAX_PHOTOS - photos.length;
@@ -158,6 +193,12 @@ export default function PagePostsPage() {
               </button>
               <button type="button" className="btn sm" onClick={() => videoInput.current?.click()} disabled={busy || !!video || photos.length > 0}>
                 + Video
+              </button>
+              <button type="button" className="btn sm" onClick={() => openMedia('images')} disabled={busy || !!video || photos.length >= MAX_PHOTOS}>
+                From Images
+              </button>
+              <button type="button" className="btn sm" onClick={() => openMedia('videos')} disabled={busy || !!video || photos.length > 0}>
+                From Videos
               </button>
               <input ref={photoInput} type="file" multiple accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => addPhotos([...(e.target.files ?? [])])} />
               <input ref={videoInput} type="file" accept="video/mp4,video/quicktime,video/webm" hidden onChange={(e) => addVideo(e.target.files?.[0])} />

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Icon } from '@/components/icons';
+import { MediaPanel, type MediaKind } from '@/components/MediaPanel';
 import { Avatar, Loading, Notice } from '@/components/ui';
 import { useApi, useLoad } from '@/lib/api';
 import { daysLeft } from '@/lib/format';
@@ -21,6 +22,18 @@ interface ShopContext {
   home: Home | undefined;
   reloadHome: () => void;
   reloadMe: () => void;
+  /** Opens the Images or Videos panel next to the menu. */
+  openMedia: (kind: MediaKind) => void;
+  /** Where the panel's "Add to post" sends picked media, if the open page takes any. */
+  mediaTarget: MediaTarget | null;
+  setMediaTarget: (t: MediaTarget | null) => void;
+}
+
+/** A page that can take photos or a video picked in the media panel. */
+export interface MediaTarget {
+  label: string;
+  addPhotos?: (urls: string[]) => void;
+  addVideo?: (url: string) => void;
 }
 
 const Ctx = createContext<ShopContext | null>(null);
@@ -29,6 +42,15 @@ export function useShop(): ShopContext {
   const c = useContext(Ctx);
   if (!c) throw new Error('useShop outside Shell');
   return c;
+}
+
+/** Lets the open page receive media picked in the Images or Videos panel while it is mounted. */
+export function useMediaTarget(target: MediaTarget | null) {
+  const { setMediaTarget } = useShop();
+  useEffect(() => {
+    setMediaTarget(target);
+    return () => setMediaTarget(null);
+  }, [target, setMediaTarget]);
 }
 
 /** Remembers which shop a person with several shops last opened. */
@@ -48,18 +70,24 @@ function savedShop(): string | null {
   }
 }
 
-const NAV: { href: string; label: string; icon: keyof typeof Icon; managers?: boolean; badge?: (h: Home) => number }[] = [
+type NavItem = { label: string; icon: keyof typeof Icon; managers?: boolean; badge?: (h: Home) => number } & (
+  | { href: string; panel?: undefined; also?: string }
+  | { panel: MediaKind; href: string; also?: undefined }
+);
+
+/** The always-collapsed menu. Images and Videos open a panel next to it; the rest open their page. */
+const NAV: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
   { href: '/inbox', label: 'Inbox', icon: 'inbox', badge: (h) => h.stats.needsYou },
   { href: '/orders', label: 'Orders', icon: 'orders', badge: (h) => h.stats.awaitingPayment },
-  { href: '/catalog', label: 'Product Catalog', icon: 'catalog' },
-  { href: '/page-posts', label: 'Page posts', icon: 'post', managers: true },
-  { href: '/model-images', label: 'Images with models', icon: 'models', managers: true },
-  { href: '/model-videos', label: 'Videos with models', icon: 'video', managers: true },
+  { href: '/catalog', label: 'Catalog', icon: 'catalog' },
+  { href: '/page-posts', label: 'Page posts', icon: 'pagePost', managers: true },
+  { panel: 'images', href: '/model-images', label: 'Images', icon: 'images', managers: true },
+  { panel: 'videos', href: '/model-videos', label: 'Videos', icon: 'video', managers: true },
   { href: '/comments', label: 'Comments', icon: 'comments' },
   { href: '/agent', label: 'Chat Agent', icon: 'agent', managers: true },
-  { href: '/knowledge', label: 'Knowledge base', icon: 'knowledge', managers: true },
-  { href: '/activity', label: 'Recent Activity', icon: 'activity' },
+  { href: '/knowledge', label: 'Knowledge', icon: 'knowledge', managers: true },
+  { href: '/activity', label: 'Activity', icon: 'activity' },
 ];
 
 export function Shell({ children }: { children: ReactNode }) {
@@ -68,6 +96,8 @@ export function Shell({ children }: { children: ReactNode }) {
   const path = usePathname();
   const meLoad = useLoad<Me>('/me');
   const [open, setOpen] = useState(false);
+  const [panel, setPanel] = useState<MediaKind | null>(null);
+  const [mediaTarget, setMediaTarget] = useState<MediaTarget | null>(null);
   const me = meLoad.data;
 
   const shop = useMemo(() => {
@@ -88,6 +118,17 @@ export function Shell({ children }: { children: ReactNode }) {
     return () => clearInterval(t);
   }, [reloadHome]);
   useEffect(() => setOpen(false), [path]);
+  const openMedia = useCallback((kind: MediaKind) => {
+    setPanel(kind);
+    setOpen(false);
+  }, []);
+  // Escape closes the panel.
+  useEffect(() => {
+    if (!panel) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setPanel(null);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [panel]);
 
   const signOut = useCallback(async () => {
     await api('/logout', { method: 'POST' }).catch(() => undefined);
@@ -100,86 +141,111 @@ export function Shell({ children }: { children: ReactNode }) {
 
   const manager = MANAGERS.includes(shop.role);
   const h = homeLoad.data;
-  const ctx: ShopContext = { me, shop, manager, ws: `/workspaces/${shop.id}`, home: h, reloadHome, reloadMe: meLoad.reload };
+  const ctx: ShopContext = { me, shop, manager, ws: `/workspaces/${shop.id}`, home: h, reloadHome, reloadMe: meLoad.reload, openMedia, mediaTarget, setMediaTarget };
   const trialLeft = h?.shop.status === 'trial' ? daysLeft(h.shop.trialEndsAt) : null;
+  const items = NAV.filter((n) => !n.managers || manager);
 
   return (
     <Ctx.Provider value={ctx}>
       <div className="app">
-        <nav className={`side${open ? ' open' : ''}`} aria-label="Main">
-          <div className="side-in">
+        <header className="appbar">
+          <button type="button" className="icon-btn menu-btn" aria-expanded={open} aria-controls="main-menu" aria-label="Menu" onClick={() => setOpen((o) => !o)}>
+            <Icon.menu />
+          </button>
           <Link className="brand" href="/dashboard">
             <Icon.logo />
             Agently
           </Link>
-          <button type="button" className="icon-btn menu-btn" aria-expanded={open} aria-label="Menu" onClick={() => setOpen((o) => !o)}>
-            <Icon.menu />
-          </button>
-          <div className="navs">
-            {me.workspaces.length > 1 ? (
-              <select
-                className="shop-pick"
-                aria-label="Shop"
-                value={shop.id}
-                onChange={(e) => {
-                  rememberShop(e.target.value);
-                  window.location.href = '/dashboard';
-                }}
-              >
-                {me.workspaces.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.name}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <div className="shop-name">{shop.name}</div>
+          {me.workspaces.length > 1 ? (
+            <select
+              className="shop-pick"
+              aria-label="Shop"
+              value={shop.id}
+              onChange={(e) => {
+                rememberShop(e.target.value);
+                window.location.href = '/dashboard';
+              }}
+            >
+              {me.workspaces.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div className="shop-name">{shop.name}</div>
+          )}
+          <div className="appbar-right">
+            {h?.agent && (
+              <Link className="bot-line" href={manager ? '/agent' : '/dashboard'} title="Your bot">
+                <span className={`dot ${h.agent.status === 'live' ? 'on' : ''}`} aria-hidden="true" />
+                <span>
+                  {h.agent.name} · {h.agent.status === 'live' ? 'On' : h.agent.status === 'paused' ? 'Paused' : 'Off'}
+                </span>
+              </Link>
             )}
-            <div className="grp">MAIN</div>
-            {NAV.filter((n) => !n.managers || manager).map((n) => {
+            <div className="me" title={me.user.email ?? undefined}>
+              <Avatar name={me.user.name} size={32} />
+              <strong>{me.user.name}</strong>
+            </div>
+            <button type="button" className="icon-btn" aria-label="Sign out" title="Sign out" onClick={signOut}>
+              <Icon.logout />
+            </button>
+          </div>
+        </header>
+        <div className="frame">
+          <nav id="main-menu" className={`rail${open ? ' open' : ''}`} aria-label="Main">
+            {items.map((n) => {
               const I = Icon[n.icon];
               const count = h && n.badge ? n.badge(h) : 0;
-              const on = path === n.href || path.startsWith(`${n.href}/`);
+              const here = path === n.href || path.startsWith(`${n.href}/`);
+              const badge = count > 0 && <span className="badge">{count > 99 ? '99+' : count}</span>;
+              if (n.panel) {
+                const on = panel === n.panel || (!panel && here);
+                return (
+                  <button
+                    key={n.label}
+                    type="button"
+                    className={`ri${on ? ' on' : ''}`}
+                    aria-expanded={panel === n.panel}
+                    aria-controls="media-panel"
+                    onClick={() => (panel === n.panel ? setPanel(null) : openMedia(n.panel))}
+                  >
+                    <I />
+                    <span>{n.label}</span>
+                  </button>
+                );
+              }
               return (
-                <Link key={n.href} className={`nav${on ? ' on' : ''}`} href={n.href} aria-current={on ? 'page' : undefined}>
+                <Link
+                  key={n.href}
+                  className={`ri${here ? (panel ? ' cur' : ' on') : ''}`}
+                  href={n.href}
+                  aria-current={here ? 'page' : undefined}
+                  onClick={() => setPanel(null)}
+                >
                   <I />
                   <span>{n.label}</span>
-                  {count > 0 && <span className="badge">{count > 99 ? '99+' : count}</span>}
+                  {badge}
                 </Link>
               );
             })}
             {manager && (
               <>
-                <div className="grp">SYSTEM</div>
-                <Link className={`nav${path.startsWith('/settings') ? ' on' : ''}`} href="/settings">
+                <div className="rail-grp">SYSTEM</div>
+                <Link
+                  className={`ri${path.startsWith('/settings') ? (panel ? ' cur' : ' on') : ''}`}
+                  href="/settings"
+                  aria-current={path.startsWith('/settings') ? 'page' : undefined}
+                  onClick={() => setPanel(null)}
+                >
                   <Icon.settings />
                   <span>Settings</span>
                 </Link>
               </>
             )}
-          </div>
-          <div className="side-foot">
-            {h?.agent && (
-              <Link className="bot-line" href={manager ? '/agent' : '/dashboard'}>
-                <Icon.bot />
-                <span>
-                  {h.agent.name} (your bot) · {h.agent.status === 'live' ? 'On' : h.agent.status === 'paused' ? 'Paused' : 'Off'}
-                </span>
-              </Link>
-            )}
-            <div className="me">
-              <Avatar name={me.user.name} size={36} />
-              <div>
-                <strong>{me.user.name}</strong>
-                <span className="sub">{me.user.email ?? `${shop.role[0]!.toUpperCase()}${shop.role.slice(1)}`}</span>
-              </div>
-              <button type="button" className="icon-btn" aria-label="Sign out" title="Sign out" onClick={signOut}>
-                <Icon.logout />
-              </button>
-            </div>
-          </div>
-          </div>
-        </nav>
+          </nav>
+          {panel && <MediaPanel kind={panel} onClose={() => setPanel(null)} />}
         <div className="main">
           {h?.shop.status === 'suspended' && (
             <div className="banner red" role="alert">
@@ -199,6 +265,7 @@ export function Shell({ children }: { children: ReactNode }) {
             </div>
           )}
           {children}
+        </div>
         </div>
       </div>
     </Ctx.Provider>
