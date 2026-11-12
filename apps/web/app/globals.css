@@ -1,6 +1,6 @@
 /* Agently shop dashboard. Colors, type and spacing follow the approved screen designs. */
 :root {
-  --bg: #f5f6fa;
+  --bg: #f5f5fb;
   --surface: #ffffff;
   --ink: #0f172a;
   --text: #344054;
@@ -11,7 +11,11 @@
   --input: #d0d5dd;
   --brand: #4f46e5;
   --brand-dark: #4338ca;
-  --brand-soft: #eef2ff;
+  --brand-soft: #eef0ff;
+  --brand-2: #7c3aed;
+  --grad: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  --grad-soft: linear-gradient(135deg, #eef0ff 0%, #f5efff 100%);
+  --glow: 0 8px 20px rgba(91, 61, 230, .28);
   --nav: #0f172a;
   --nav-active: #1e293b;
   --nav-text: #cbd5e1;
@@ -426,3 +430,73 @@ a.stat:hover { border-color: #c7d2fe; color: inherit; }
 .tryon-page .btn:not(.link), .tryon-page .btn.primary { background: var(--blue-bg); border-color: #b9e6fe; color: var(--blue); }
 .tryon-page .btn:not(.link):hover:not(:disabled) { background: #cdeafd; border-color: #7cd4fd; color: var(--blue); }
 .tryon-page .btn.link { color: var(--blue); }
+
+
+/* ---------- Purple gradient theme (approved onboarding look) ---------- */
+h1, h2, h3 { color: var(--ink); }
+.logo-mark { width: 32px; height: 32px; border-radius: 10px; background: var(--grad); display: inline-flex; align-items: center; justify-content: center; flex: none; box-shadow: 0 4px 10px rgba(91, 61, 230, .3); }
+.logo-mark.light { width: 44px; height: 44px; border-radius: 12px; background: #fff; box-shadow: 0 6px 16px rgba(30, 20, 90, .25); }
+.brand { gap: 10px; }
+.btn.primary { background: var(--grad); border-color: transparent; box-shadow: var(--glow); }
+.btn.primary:hover { background: linear-gradient(135deg, #4338ca 0%, #6d28d9 100%); box-shadow: 0 10px 24px rgba(91, 61, 230, .35); }
+.btn.primary:disabled { box-shadow: none; }
+.btn { border-radius: 12px; }
+.btn.sm { border-radius: 9px; }
+.chip.on { background: var(--grad); border-color: transparent; }
+.nav { border-radius: 12px; }
+.nav.on { background: var(--grad-soft); color: var(--brand-dark); box-shadow: inset 3px 0 0 var(--brand); }
+.nav:hover { color: var(--brand-2); }
+.tab.on { background: var(--grad-soft); }
+.card, .stat, .table-wrap, .product, .result, .post, .editor { border-radius: 18px; border-color: #e9e7f5; }
+.card { box-shadow: 0 1px 2px rgba(30, 20, 90, .04); }
+.stat { box-shadow: 0 1px 2px rgba(30, 20, 90, .04); }
+.top { border-bottom-color: #ecebf5; }
+.top h1 { font-weight: 800; letter-spacing: -0.03em; }
+.side { border-right-color: #ecebf5; }
+.pill.brand { background: var(--grad-soft); }
+.bar > div { background: var(--grad); }
+.chart > div { background: var(--grad); }
+.progress > div { height: 6px; }
+.progress > div.on { background: var(--grad); }
+.toggle input:checked + .track { background: var(--grad); }
+.msg.ai { background: var(--grad); }
+.send { background: var(--grad); box-shadow: var(--glow); }
+.step.done .dot { background: var(--grad); border-color: transparent; }
+.notice.info { background: var(--grad-soft); border: 1px solid #dcd8fb; }
+.pick button.on, .product.on, .plist button.on { border-color: var(--brand); box-shadow: 0 0 0 3px #e4e0ff; }
+.wizard { background: radial-gradient(1200px 500px at 80% -10%, #ece8ff 0%, transparent 60%), var(--bg); }
+.wizard .card, .auth .card { border-radius: 22px; box-shadow: 0 10px 30px rgba(30, 20, 90, .06); }
+.wizard h1 { font-size: 28px; letter-spacing: -0.03em; }
+.auth { background: radial-gradient(900px 400px at 50% -10%, #ece8ff 0%, transparent 60%), var(--bg); }
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid #a5a1f8; outline-offset: 1px; border-color: var(--brand); }
+
+/* Home: split screen sign-in */
+.home { min-height: 100vh; display: flex; background: #fff; }
+.home-hero { flex: 1 1 52%; position: relative; overflow: hidden; color: #fff; padding: 56px 48px; display: flex; flex-direction: column;
+  background: radial-gradient(600px 420px at 85% 10%, rgba(129, 140, 248, .55) 0%, transparent 60%), radial-gradient(520px 420px at 0% 100%, rgba(168, 85, 247, .55) 0%, transparent 60%), linear-gradient(160deg, #3730a3 0%, #4f46e5 45%, #6d28d9 100%); }
+.home-brand { display: flex; align-items: center; gap: 12px; font-size: 24px; font-weight: 800; letter-spacing: -0.02em; }
+.home-brand.mobile { display: none; color: var(--ink); font-size: 20px; }
+.home-pitch { margin: auto 0; max-width: 620px; display: flex; flex-direction: column; gap: 20px; }
+.home-pitch h1 { color: #fff; font-size: clamp(30px, 3.4vw, 46px); line-height: 1.15; font-weight: 800; letter-spacing: -0.03em; }
+.home-pitch h1 em { font-style: normal; color: #c7d2fe; }
+.home-pitch p { margin: 0; font-size: 17px; line-height: 1.6; color: rgba(255, 255, 255, .85); max-width: 560px; }
+.home-stats { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 12px; }
+.home-stats > div { min-width: 150px; padding: 16px 20px; border-radius: 16px; background: rgba(255, 255, 255, .12); border: 1px solid rgba(255, 255, 255, .25); backdrop-filter: blur(6px); display: flex; flex-direction: column; gap: 4px; }
+.home-stats strong { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
+.home-stats span { font-size: 13px; color: rgba(255, 255, 255, .85); }
+.home-sign { flex: 1 1 48%; display: flex; align-items: center; justify-content: center; padding: 48px 24px; }
+.home-box { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 16px; }
+.home-box h2 { font-size: 30px; font-weight: 800; letter-spacing: -0.03em; }
+.home-box > p.muted { margin: -8px 0 8px; font-size: 15px; }
+.home-fb { height: 54px; gap: 12px; font-size: 15px; color: #1877f2; border-color: #e4e7ec; border-radius: 14px; box-shadow: 0 2px 6px rgba(16, 24, 40, .06); }
+.home-fb:hover { color: #1567d3; background: #f8faff; border-color: #c7d7fe; }
+.home-tip { padding: 14px 16px; border-radius: 14px; background: var(--grad-soft); border: 1px solid #dcd8fb; color: #3730a3; font-size: 14px; line-height: 1.55; }
+.home-tip strong { color: #312e81; }
+.home-legal { margin: 8px 0 0; text-align: center; font-size: 13px; color: var(--subtle); }
+.home-legal a { color: var(--subtle); }
+@media (max-width: 860px) {
+  .home { flex-direction: column; }
+  .home-hero { padding: 32px 20px; flex: none; }
+  .home-pitch { margin: 28px 0 0; }
+  .home-sign { padding: 32px 16px 48px; }
+}

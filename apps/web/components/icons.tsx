@@ -10,9 +10,26 @@ function Svg({ children, size = 18 }: { children: ReactNode; size?: number }) {
 }
 
 export const Icon = {
+  /** The Agently mark: a white sparkle on the purple gradient tile. */
   logo: () => (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" strokeWidth="2" strokeLinejoin="round" aria-hidden="true">
-      <path d="M12 2l2.4 7.6L22 12l-7.6 2.4L12 22l-2.4-7.6L2 12l7.6-2.4z" />
+    <span className="logo-mark" aria-hidden="true">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinejoin="round">
+        <path d="M12 2l2.4 7.6L22 12l-7.6 2.4L12 22l-2.4-7.6L2 12l7.6-2.4z" />
+      </svg>
+    </span>
+  ),
+  /** The mark on a white tile, for dark or gradient backgrounds. */
+  logoLight: () => (
+    <span className="logo-mark light" aria-hidden="true">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" strokeWidth="2.2" strokeLinejoin="round">
+        <path d="M12 2l2.4 7.6L22 12l-7.6 2.4L12 22l-2.4-7.6L2 12l7.6-2.4z" />
+      </svg>
+    </span>
+  ),
+  facebook: () => (
+    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="12" fill="#1877F2" />
+      <path d="M15.1 12.9l.4-2.8h-2.7V8.3c0-.8.4-1.5 1.6-1.5h1.2V4.4s-1.1-.2-2.2-.2c-2.2 0-3.7 1.4-3.7 3.9v2h-2.5v2.8h2.5V20h3.1v-7.1z" fill="#fff" />
     </svg>
   ),
   dashboard: () => (
