@@ -65,11 +65,13 @@ export function Shell({ children }: { children: ReactNode }) {
             Agently
           </a>
           <span className="pill role">{ROLE_LABEL[admin.role]}</span>
-          {NAV.filter((n) => !n.perm || can(admin.role, n.perm)).map((n) => (
-            <a key={n.href} href={n.href} className={`nav${active(n.href) ? ' on' : ''}`} aria-current={active(n.href) ? 'page' : undefined}>
-              {n.label}
-            </a>
-          ))}
+          <div className="nav-list">
+            {NAV.filter((n) => !n.perm || can(admin.role, n.perm)).map((n) => (
+              <a key={n.href} href={n.href} className={`nav${active(n.href) ? ' on' : ''}`} aria-current={active(n.href) ? 'page' : undefined}>
+                {n.label}
+              </a>
+            ))}
+          </div>
           <div className="side-foot">
             <strong>{admin.name}</strong>
             <span>

@@ -674,3 +674,38 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
   .catalog.editing { grid-template-columns: minmax(0, 1fr); }
   .catalog.editing .editor { order: -1; position: static; max-height: none; }
 }
+
+/* Phones: one column, no sideways scroll, 44px touch targets, 16px inputs (no iOS zoom),
+   full-screen popups and a sticky Generate bar. */
+.field { min-width: 0; }
+.field select, .field input, .field textarea, .input { min-width: 0; max-width: 100%; }
+@media (max-width: 720px) {
+  .content { padding-left: 16px; padding-right: 16px; }
+  .field input, .field select, .field textarea, .input, .search input { font-size: 16px; }
+  .btn { min-height: 44px; }
+  .btn.sm { min-height: 40px; }
+  .chip { min-height: 40px; }
+  .card.pad { padding: 18px; }
+  .tryon, .tryon.tryon-one, .catalog.editing { grid-template-columns: minmax(0, 1fr); }
+  .row > .field { flex-basis: 100%; }
+  /* Popups fill the screen. */
+  .overlay { padding: 0; align-items: stretch; }
+  .dialog, .dialog.wide { max-width: none; max-height: none; height: 100%; border-radius: 0; padding: 20px 16px; }
+  .dialog .buttons { position: sticky; bottom: -20px; background: var(--surface); padding: 12px 0; margin-top: auto; }
+  .dialog .buttons .btn { flex: 1 1 auto; }
+  /* Media library tabs side by side. */
+  .lib-tabs { align-self: stretch; flex-wrap: nowrap; }
+  .lib-tabs .tab { flex: 1 1 0; justify-content: center; padding: 0 10px; font-size: 14px; height: 44px; }
+  /* Generate image: the Generate button stays at the bottom of the screen. */
+  .gen-page { padding-bottom: 96px; }
+  .gen-actions { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; background: var(--surface); border-top: 1px solid var(--line); padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); box-shadow: 0 -8px 20px rgba(15, 23, 42, .08); flex-wrap: nowrap; }
+  .gen-actions > .btn { display: none; }
+  .gen-go { flex: 1 1 auto; flex-wrap: nowrap; gap: 10px; }
+  .gen-go small { display: none; }
+  .gen-hero h1 { font-size: 24px; }
+  .gen-hero p { font-size: 15px; }
+  .gen-page .gen-types { grid-template-columns: minmax(0, 1fr); }
+  .gen-upload .garment { flex-basis: 100%; }
+  /* Catalog editor: Save stays reachable. */
+  .editor .save-bar { position: sticky; bottom: 0; background: var(--surface); padding: 10px 0; z-index: 2; }
+}

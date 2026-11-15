@@ -66,7 +66,13 @@ button, input, select, textarea { font: inherit; }
 .top .right { margin-left: auto; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .content { padding: 24px 32px 48px; display: flex; flex-direction: column; gap: 20px; }
 .crumb { font-size: 13px; color: var(--subtle); text-decoration: none; }
+.nav-list { display: contents; }
 @media (max-width: 720px) {
+  .nav-list { display: flex; gap: 4px; width: calc(100% + 24px); overflow-x: auto; scrollbar-width: none; margin: 0 -12px; padding: 0 12px; }
+  .nav-list::-webkit-scrollbar { display: none; }
+  .nav-list .nav { flex: none; height: 40px; }
+  .side { min-width: 0; width: 100%; }
+  .field input, .field select, .field textarea, .input { font-size: 16px; }
   .side { max-width: none; flex-basis: 100%; flex-direction: row; flex-wrap: wrap; padding: 12px; }
   .side .role { display: none; }
   .side-foot { width: 100%; margin-top: 6px; padding: 8px 8px 0; flex-direction: row; align-items: center; gap: 8px; }
