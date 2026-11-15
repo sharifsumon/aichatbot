@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { FalTryOn, falModelId, FashnTryOn, GeminiTryOn, TryOnError, tryOnFromEnv, tryOnPrompt } from './tryon.ts';
+import { FalTryOn, falModelId, FashnTryOn, GeminiTryOn, TryOnError, tidyNote, tryOnFromEnv, tryOnPrompt } from './tryon.ts';
 
 const img = (b: number[]) => ({ bytes: new Uint8Array(b), contentType: 'image/jpeg' });
 const req = { model: img([1, 2]), garment: img([3, 4]), category: 'one-pieces' as const };
@@ -94,10 +94,10 @@ test('fal.ai submits to the queue with public links, polls, and downloads the im
   // Without a model photo, only the garment is sent and the prompt asks for a new model.
   calls.length = 0;
   polls = 0;
-  await provider.tryOn({ ...req, model: undefined, note: 'a young woman in a garden' });
+  await provider.tryOn({ ...req, model: undefined, note: 'a woman in a garden' });
   assert.equal(calls[0]!.body.image_urls.length, 1);
-  assert.match(calls[0]!.body.prompt, /fashion model wearing exactly/);
-  assert.match(calls[0]!.body.prompt, /a young woman in a garden/);
+  assert.match(calls[0]!.body.prompt, /adult model wearing exactly/);
+  assert.match(calls[0]!.body.prompt, /a woman in a garden/);
 });
 
 test('fal.ai refused key and failed runs carry readable messages', async () => {
@@ -154,4 +154,18 @@ test('the prompt carries the chosen pose, expression, background and the shop no
   assert.match(styled, /Background: a clean plain white studio background/);
   assert.match(styled, /holding a red clutch/);
   assert.doesNotMatch(styled, /Keep the (pose|background)/);
+});
+
+test('any product: the model wears, holds or uses it, and the product keeps its own label', () => {
+  const p = tryOnPrompt({ garment: req.garment, category: 'auto', note: 'by a pool, taking a sip' });
+  assert.match(p, /holds, uses or presents it/);
+  assert.match(p, /label, packaging and its own logo/);
+  assert.doesNotMatch(p, /garment/);
+  assert.match(tryOnPrompt({ ...req, category: 'auto' }), /same model with exactly the product from the second image/);
+});
+
+test('words that trip the safety filter are tidied, keeping what the shop asked for', () => {
+  assert.equal(tidyNote('In swimming pool a sexy girl taking a long sip'), 'In swimming pool a woman taking a long sip');
+  assert.equal(tidyNote('two young boys playing football, hot summer day'), 'two men playing football, hot summer day');
+  assert.match(tryOnPrompt({ ...req, note: 'a sexy girl' }), /The shop also asks: a woman/);
 });

@@ -248,7 +248,7 @@ export default function GenerateImagePage() {
       <TopBar title="Generate image" back={{ href: '/media', label: 'Media library' }} />
       <div className="content tryon-page">
         <p className="sub" style={{ margin: 0, fontSize: 14 }}>
-          Upload a photo of your product and the AI makes a photo of a model with it. Every image is also saved in your Media library.
+          Upload a photo of any product and the AI makes an advertising photo of a model wearing, holding or using it. Every image is also saved in your Media library.
         </p>
         {setup.data && !setup.data.enabled && <Notice tone="warn">Making images with models is not switched on for Agently yet. It will be soon.</Notice>}
         {done && <Notice tone="ok">{done}</Notice>}
@@ -263,7 +263,7 @@ export default function GenerateImagePage() {
                 {garment ? <img src={garment} alt="Your product" /> : uploading ? 'Uploading…' : '+ Choose a photo of the product'}
               </button>
               <input ref={file} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => pickGarment(e.target.files?.[0])} />
-              <small className="muted">Best results: the whole product, flat or on a hanger or mannequin, in good light, nothing covering it.</small>
+              <small className="muted">Any product works: clothes, shoes, bags, drinks, food, cosmetics, gadgets. Best results: the whole product in good light, on a plain background, nothing covering it.</small>
             </section>
 
             <section className="card pad" aria-label="Use a model">
@@ -329,12 +329,12 @@ export default function GenerateImagePage() {
                       onChange={(e) => setNote(e.target.value)}
                       placeholder={
                         chosen
-                          ? 'e.g. holding a small golden clutch, soft evening light, wearing gold earrings'
-                          : 'Describe the model, e.g. a young Bangladeshi woman with long hair, smiling, standing in a garden'
+                          ? 'e.g. smiling, holding the product near her face, soft evening light'
+                          : 'Describe the photo, e.g. a Bangladeshi woman relaxing by a pool, taking a sip from the can, sunny day'
                       }
                     />
                   </label>
-                  <small className="muted">Write in English for best results. The product is always copied as it is.</small>
+                  <small className="muted">Write in English for best results. The product is always copied as it is. Keep it tasteful: the AI refuses suggestive photos.</small>
                 </fieldset>
               )}
               <button type="button" className="btn primary" disabled={!ready || starting || uploading || !setup.data?.enabled} onClick={generate}>

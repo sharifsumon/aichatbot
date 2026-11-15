@@ -87,7 +87,7 @@ export interface TryOnProvider {
 export class TryOnError extends Error {
   /** A message safe to show the shop, e.g. "We couldn't find a person in the model photo". */
   readonly userMessage: string;
-  constructor(message: string, userMessage = 'The AI could not make this photo. Try another garment photo.') {
+  constructor(message: string, userMessage = 'The AI could not make this photo. Try another product photo.') {
     super(message);
     this.name = 'TryOnError';
     this.userMessage = userMessage;
@@ -189,10 +189,10 @@ export class FashnTryOn implements TryOnProvider {
 }
 
 function fashnMessage(name?: string): string {
-  if (name === 'PoseError') return 'The AI could not find a clear person in the model photo, or a clear garment in yours. Try a straight, well-lit garment photo.';
-  if (name === 'ImageLoadError') return 'The AI could not open one of the photos. Upload the garment photo again as JPEG or PNG.';
+  if (name === 'PoseError') return 'The AI could not find a clear person in the model photo, or a clear product in yours. Try a straight, well-lit product photo.';
+  if (name === 'ImageLoadError') return 'The AI could not open one of the photos. Upload the product photo again as JPEG or PNG.';
   if (name === 'ContentModerationError') return 'The photo was refused by the AI service’s content rules.';
-  return 'The AI could not make this photo. Try another garment photo.';
+  return 'The AI could not make this photo. Try another product photo.';
 }
 
 export interface GeminiOptions {
@@ -212,8 +212,36 @@ const CATEGORY_WORDS: Record<GarmentCategory, string> = {
 };
 
 /** The instruction for general image models (Gemini, fal.ai Nano Banana): photo 1 is the model, photo 2 the garment. */
+/**
+ * Words that make the image AI's safety filter refuse an ordinary product
+ * photo: "girl" can read as a child, and "sexy" or "hot" make it sexual. The
+ * shop's intent stays; the people are always adults and the tone stays tasteful.
+ */
+export function tidyNote(note: string): string {
+  return note
+    .replace(/\b(little |young )?girls\b/gi, 'women')
+    .replace(/\b(little |young )?girl\b/gi, 'woman')
+    .replace(/\b(little |young )?boys\b/gi, 'men')
+    .replace(/\b(little |young )?boy\b/gi, 'man')
+    .replace(/\b(sexy|seductive|sensual|naughty)\s+/gi, '')
+    .replace(/\b(sexy|seductive|sensual|naughty)\b/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 export function tryOnPrompt(req: TryOnRequest): string {
-  const what = CATEGORY_WORDS[req.category];
+  const tidy = req.note ? tidyNote(req.note) : '';
+  // Ends with a full stop, so the next instruction reads as a new sentence.
+  const note = tidy ? (/[.!?]$/.test(tidy) ? tidy : `${tidy}.`) : undefined;
+  // 'auto' is any product, not only clothes: a drink, a bag, cosmetics, a phone, a saree.
+  const any = req.category === 'auto';
+  const what = any ? 'the product' : CATEGORY_WORDS[req.category];
+  const show = any
+    ? 'with exactly the product from the image. If it is something to wear (clothing, shoes, jewellery, a watch, a bag), the model wears or carries it. Otherwise the model holds, uses or presents it naturally, as in an advert, with the product clearly visible'
+    : `wearing exactly ${what} from the image`;
+  const copy = any
+    ? 'Copy the product faithfully: shape, colour, print, label, packaging and its own logo or brand text, at a realistic size.'
+    : 'Copy the garment faithfully: colour, print, embroidery, fabric texture, neckline, sleeves and length.';
   const pose = req.style?.pose && TRYON_STYLES.pose[req.style.pose];
   const face = req.style?.expression && TRYON_STYLES.expression[req.style.expression];
   const background = req.style?.background && TRYON_STYLES.background[req.style.background];
@@ -222,29 +250,29 @@ export function tryOnPrompt(req: TryOnRequest): string {
     // No model photo: the AI creates the model from the shop's description.
     return [
       `The image shows ${what} a shop sells.`,
-      `Make a realistic e-commerce product photo of a fashion model wearing exactly ${what} from the image.`,
-      req.note ? `The shop describes the photo it wants: ${req.note}` : 'The model is an attractive South Asian adult.',
-      pose ? `Pose: ${pose}.` : 'Pose: standing naturally, facing the camera.',
+      `Make a realistic, tasteful advertising photo of an adult model ${show}.`,
+      note ? `The shop describes the photo it wants: ${note}` : 'The model is an attractive South Asian adult.',
+      pose ? `Pose: ${pose}.` : note ? '' : 'Pose: standing naturally, facing the camera.',
       face ? `Expression: ${face}.` : '',
-      camera ? `Camera: ${camera}.` : 'Camera: full body, at eye level.',
-      background ? `Background: ${background}.` : req.note ? '' : 'Background: a clean light studio background.',
-      'Copy the garment faithfully: colour, print, embroidery, fabric texture, neckline, sleeves and length.',
-      'Do not add text, logos or watermarks.',
+      camera ? `Camera: ${camera}.` : note ? '' : any ? '' : 'Camera: full body, at eye level.',
+      background ? `Background: ${background}.` : note ? '' : 'Background: a clean light studio background.',
+      copy,
+      'Do not add any other text, logos or watermarks.',
     ]
       .filter(Boolean)
       .join(' ');
   }
   return [
     `The first image is a fashion model. The second image shows ${what} a shop sells.`,
-    `Make a realistic e-commerce product photo of the same model wearing exactly ${what} from the second image.`,
+    `Make a realistic advertising photo of the same model ${show.replace('from the image', 'from the second image')}.`,
     'Keep the model’s face, identity, body, skin tone and hair unchanged.',
-    pose ? `Pose: ${pose}.` : 'Keep the pose.',
+    pose ? `Pose: ${pose}.` : any ? '' : 'Keep the pose.',
     face ? `Expression: ${face}.` : '',
     camera ? `Camera: ${camera}.` : '',
     background ? `Background: ${background}.` : 'Keep the background.',
-    'Copy the garment faithfully: colour, print, embroidery, fabric texture, neckline, sleeves and length.',
-    'Do not add text, logos or watermarks.',
-    req.note ? `The shop also asks: ${req.note}` : '',
+    copy,
+    'Do not add any other text, logos or watermarks.',
+    note ? `The shop also asks: ${note}` : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -405,7 +433,7 @@ export class FalTryOn implements TryOnProvider {
       const body = (await out.json().catch(() => ({}))) as { images?: { url?: string }[]; detail?: unknown };
       if (!out.ok) {
         const blocked = JSON.stringify(body.detail ?? '').toLowerCase().includes('content');
-        throw new TryOnError(`fal.ai result ${out.status}: ${JSON.stringify(body.detail ?? body)}`, blocked ? 'The photo was refused by the AI service’s content rules.' : 'The AI could not make this photo. Try another garment photo.');
+        throw new TryOnError(`fal.ai result ${out.status}: ${JSON.stringify(body.detail ?? body)}`, blocked ? 'The photo was refused by the AI service’s content rules.' : 'The AI could not make this photo. Try another product photo.');
       }
       const url = body.images?.[0]?.url;
       if (!url) throw new TryOnError('fal.ai finished without an image');
