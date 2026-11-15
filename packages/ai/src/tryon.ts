@@ -23,6 +23,8 @@ export interface TryOnRequest {
   style?: TryOnStyle;
   /** The shop's own instructions, e.g. "holding a small handbag, soft evening light". */
   note?: string;
+  /** What the product is, in a few words, e.g. "iced coffee bottle". */
+  productName?: string;
 }
 
 /**
@@ -51,6 +53,10 @@ export const TRYON_STYLES = {
     'three-quarter': 'shot from a three-quarter angle, slightly to the side',
     low: 'shot from a slightly low camera angle, making the model look tall and elegant',
     high: 'shot from a slightly high camera angle',
+    front: 'front view at eye level',
+    shallow: 'at eye level with a shallow depth of field and a softly blurred background',
+    top: 'top-down flat-lay view from directly above',
+    macro: 'close-up showing the fine detail of the product',
   },
   background: {
     white: 'a clean plain white studio background',
@@ -61,14 +67,62 @@ export const TRYON_STYLES = {
     indoor: 'an elegant, bright living room interior, softly blurred',
     beach: 'a sunny beach, softly blurred',
     festive: 'a festive Eid or wedding decorated setting with warm lights, softly blurred',
+    dark: 'a plain dark background',
+    gradient: 'a soft colour gradient background',
+    sunset: 'a warm sunset over mountains and calm water, framed softly in the distance',
+    kitchen: 'a bright modern kitchen, softly blurred',
+    cafe: 'a cosy café, softly blurred',
+  },
+  /** Where the product stands in a product-only or lifestyle photo. */
+  surface: {
+    podium: 'a wet, dark textured stone cylinder podium',
+    marble: 'a polished marble surface',
+    wood: 'a warm wooden table',
+    glass: 'a glossy black glass surface',
+    sand: 'smooth sand',
+    water: 'a calm water surface with gentle ripples',
+    fabric: 'softly draped fabric',
+    floating: 'nothing: the product floats in the air',
+  },
+  lighting: {
+    studio: 'soft, even studio lighting',
+    daylight: 'bright natural daylight',
+    golden: 'dramatic golden-hour backlighting with a warm, glowing rim light',
+    evening: 'warm evening light',
+    rim: 'dark, moody lighting with a crisp rim light',
+    neon: 'colourful neon lighting',
+  },
+  effects: {
+    splash: 'a dynamic, high-speed liquid splash wrapping around the product',
+    condensation: 'fine condensation droplets on the product',
+    drops: 'fresh water droplets',
+    ice: 'ice cubes around the product',
+    smoke: 'soft smoke and mist',
+    fruit: 'fresh fruit slices around the product',
+    petals: 'scattered flower petals',
+    sparkles: 'subtle sparkles and warm bokeh lights',
   },
 } as const;
+
+/** product: the product alone, no person. model: a model with it. lifestyle: an adult using it in a real moment. */
+export type TryOnShot = 'product' | 'model' | 'lifestyle';
+export const TRYON_SHOTS: TryOnShot[] = ['product', 'model', 'lifestyle'];
+/** The frame sizes offered, all supported by the image models. */
+export const TRYON_ASPECTS = ['1:1', '4:5', '3:4', '9:16', '16:9'] as const;
+export type TryOnAspect = (typeof TRYON_ASPECTS)[number];
 
 export type TryOnStyle = {
   pose?: keyof typeof TRYON_STYLES.pose;
   expression?: keyof typeof TRYON_STYLES.expression;
   camera?: keyof typeof TRYON_STYLES.camera;
   background?: keyof typeof TRYON_STYLES.background;
+  surface?: keyof typeof TRYON_STYLES.surface;
+  lighting?: keyof typeof TRYON_STYLES.lighting;
+  effects?: (keyof typeof TRYON_STYLES.effects)[];
+  /** Left out: a model photo (the try-on flow). */
+  shot?: TryOnShot;
+  /** Left out: 3:4 portrait. */
+  aspect?: TryOnAspect;
 };
 
 export interface TryOnResult {
@@ -235,7 +289,7 @@ export function tryOnPrompt(req: TryOnRequest): string {
   const note = tidy ? (/[.!?]$/.test(tidy) ? tidy : `${tidy}.`) : undefined;
   // 'auto' is any product, not only clothes: a drink, a bag, cosmetics, a phone, a saree.
   const any = req.category === 'auto';
-  const what = any ? 'the product' : CATEGORY_WORDS[req.category];
+  const what = any ? (req.productName ? `the product (${tidyNote(req.productName)})` : 'the product') : CATEGORY_WORDS[req.category];
   const show = any
     ? 'with exactly the product from the image. If it is something to wear (clothing, shoes, jewellery, a watch, a bag), the model wears or carries it. Otherwise the model holds, uses or presents it naturally, as in an advert, with the product clearly visible'
     : `wearing exactly ${what} from the image`;
@@ -246,6 +300,46 @@ export function tryOnPrompt(req: TryOnRequest): string {
   const face = req.style?.expression && TRYON_STYLES.expression[req.style.expression];
   const background = req.style?.background && TRYON_STYLES.background[req.style.background];
   const camera = req.style?.camera && TRYON_STYLES.camera[req.style.camera];
+  const surface = req.style?.surface && TRYON_STYLES.surface[req.style.surface];
+  const lighting = req.style?.lighting && TRYON_STYLES.lighting[req.style.lighting];
+  const effects = (req.style?.effects ?? []).map((e) => TRYON_STYLES.effects[e]).filter(Boolean);
+  const name = req.productName ? tidyNote(req.productName) : '';
+  const product = name ? `the product (${name})` : 'the product';
+  const frame = req.style?.aspect ? `Frame: ${req.style.aspect}.` : '';
+  const scene = [
+    surface ? (req.style?.surface === 'floating' ? 'The product floats in the air.' : `The product rests on ${surface}.`) : '',
+    effects.length ? `Effects: ${effects.join(', ')}.` : '',
+    background ? `Background: ${background}.` : '',
+    lighting ? `Lighting: ${lighting}.` : '',
+    camera ? `Camera: ${camera}.` : '',
+  ];
+  const finish = ['Copy the product faithfully: shape, colour, print, label, packaging and its own logo or brand text, at a realistic size.', 'Photorealistic advertising style, sharp focus on the product.', frame, 'Do not add any other text, logos or watermarks.'];
+
+  if (req.style?.shot === 'product') {
+    // The product alone: a commercial product shot, like a drinks or cosmetics advert.
+    return [
+      `The image shows ${product} a shop sells.`,
+      `Make a commercial product photograph of exactly ${product} from the image, with no people in the photo.`,
+      ...scene,
+      surface || background || lighting ? '' : 'Setting: a clean studio with soft light.',
+      ...finish,
+      note ? `The shop also asks: ${note}` : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+  }
+  if (req.style?.shot === 'lifestyle' && !req.model) {
+    return [
+      `The image shows ${product} a shop sells.`,
+      `Make a tasteful lifestyle advertising photo of an adult using or enjoying exactly ${product} from the image in a natural, real moment. If it is something to wear, they wear it; otherwise they hold or use it, with the product clearly visible.`,
+      note ? `The shop describes the moment: ${note}` : 'The person is a South Asian adult.',
+      ...scene,
+      face ? `Expression: ${face}.` : '',
+      ...finish,
+    ]
+      .filter(Boolean)
+      .join(' ');
+  }
   if (!req.model) {
     // No model photo: the AI creates the model from the shop's description.
     return [
@@ -256,7 +350,10 @@ export function tryOnPrompt(req: TryOnRequest): string {
       face ? `Expression: ${face}.` : '',
       camera ? `Camera: ${camera}.` : note ? '' : any ? '' : 'Camera: full body, at eye level.',
       background ? `Background: ${background}.` : note ? '' : 'Background: a clean light studio background.',
+      lighting ? `Lighting: ${lighting}.` : '',
+      effects.length ? `Effects: ${effects.join(', ')}.` : '',
       copy,
+      frame,
       'Do not add any other text, logos or watermarks.',
     ]
       .filter(Boolean)
@@ -270,7 +367,10 @@ export function tryOnPrompt(req: TryOnRequest): string {
     face ? `Expression: ${face}.` : '',
     camera ? `Camera: ${camera}.` : '',
     background ? `Background: ${background}.` : 'Keep the background.',
+    lighting ? `Lighting: ${lighting}.` : '',
+    effects.length ? `Effects: ${effects.join(', ')}.` : '',
     copy,
+    frame,
     'Do not add any other text, logos or watermarks.',
     note ? `The shop also asks: ${note}` : '',
   ]
@@ -303,7 +403,7 @@ export class GeminiTryOn implements TryOnProvider {
       headers: { 'x-goog-api-key': this.o.apiKey, 'content-type': 'application/json' },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: prompt }, ...(req.model ? [inline(req.model)] : []), inline(req.garment)] }],
-        generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: '3:4' } },
+        generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: req.style?.aspect ?? '3:4' } },
       }),
     });
     type Part = { inlineData?: { mimeType: string; data: string }; inline_data?: { mime_type: string; data: string }; text?: string };
@@ -397,7 +497,7 @@ export class FalTryOn implements TryOnProvider {
         // Public links when we have them (smaller requests); otherwise the photos inline.
         image_urls: [...(req.model ? [req.model.url ?? dataUri(req.model)] : []), req.garment.url ?? dataUri(req.garment)],
         num_images: 1,
-        aspect_ratio: '3:4',
+        aspect_ratio: req.style?.aspect ?? '3:4',
         output_format: 'jpeg',
       }),
     });

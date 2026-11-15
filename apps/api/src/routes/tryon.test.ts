@@ -183,7 +183,7 @@ test('a shop makes a product image with a model and pays in credits', { skip }, 
   assert.deepEqual(tryOn.seen.model, [...JPEG]);
   assert.deepEqual(tryOn.seen.garment, [0xff, 0xd8, 0xff, 7]);
   assert.equal(tryOn.seen.category, 'one-pieces');
-  assert.deepEqual(tryOn.seen.style, { pose: 'sitting', expression: undefined, camera: undefined, background: 'garden' });
+  assert.deepEqual(tryOn.seen.style, { pose: 'sitting', background: 'garden' });
   assert.equal(tryOn.seen.note, 'smiling, holding a clutch');
   assert.equal(models.json().styleOptions, true);
   const badPose = await app.inject({ method: 'POST', url: `/api/workspaces/${ws.id}/try-on`, ...auth, payload: { characterId: model.id, garmentImageUrl, pose: 'flying' } });
@@ -348,4 +348,24 @@ test('without a model the AI creates one from the instructions', { skip }, async
   assert.equal(done.status, 'succeeded');
   assert.equal(tryOn.seen.model, undefined);
   assert.equal(tryOn.seen.note, 'a young woman smiling in a garden');
+});
+
+test('a product-only photo needs no model or instructions, and the prompt preview shows the words sent', { skip }, async () => {
+  const tryOn = fakeTryOn();
+  const { app } = server(tryOn);
+  const { ws, auth } = await shop(100);
+  const f = form({}, { name: 'bottle.jpg', type: 'image/jpeg', body: Buffer.from([0xff, 0xd8, 0xff, 9]) });
+  const garmentImageUrl = (await app.inject({ method: 'POST', url: `/api/workspaces/${ws.id}/uploads/images`, ...auth, headers: { ...auth.headers, ...f.headers }, payload: f.payload })).json().url as string;
+  const choices = { shot: 'product', surface: 'podium', effects: ['splash'], lighting: 'golden', aspect: '16:9', productName: 'iced coffee bottle' };
+
+  const preview = await app.inject({ method: 'POST', url: `/api/workspaces/${ws.id}/try-on/prompt`, ...auth, payload: choices });
+  assert.equal(preview.statusCode, 200, preview.body);
+  assert.match(preview.json().prompt, /iced coffee bottle.*no people/);
+
+  const started = await app.inject({ method: 'POST', url: `/api/workspaces/${ws.id}/try-on`, ...auth, payload: { garmentImageUrl, ...choices } });
+  assert.equal(started.statusCode, 202, started.body);
+  const done = await waitFor(app, `/api/workspaces/${ws.id}/try-on/${started.json().image.id}`, auth);
+  assert.equal(done.status, 'succeeded');
+  assert.equal(tryOn.seen.model, undefined);
+  assert.deepEqual(tryOn.seen.style, { shot: 'product', surface: 'podium', effects: ['splash'], lighting: 'golden', aspect: '16:9' });
 });

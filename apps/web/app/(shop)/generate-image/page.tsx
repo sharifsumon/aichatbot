@@ -5,15 +5,13 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useShop } from '@/components/Shell';
 import { AddToProduct } from '@/components/AddToProduct';
-import { Chips, Empty, Loading, Notice, Pill, TopBar } from '@/components/ui';
+import { Empty, Loading, Notice, Pill, TopBar } from '@/components/ui';
 import { ApiError, qs, useApi, useLoad, useUpload } from '@/lib/api';
 import { shrinkImage } from '@/lib/image';
 
-type Gender = 'female' | 'male';
 interface Model {
   id: string;
   name: string;
-  gender: Gender | null;
   imageUrl: string;
   own?: boolean;
 }
@@ -28,57 +26,163 @@ interface TryOnImage {
   createdAt: string;
 }
 
-type Pose = '' | 'standing' | 'walking' | 'sitting' | 'hand-on-hip' | 'side' | 'back';
-type Expression = '' | 'smile' | 'laughing' | 'neutral' | 'confident';
-type Camera = '' | 'closeup' | 'half' | 'full' | 'three-quarter' | 'low' | 'high';
-type Background = '' | 'white' | 'grey' | 'pastel' | 'street' | 'garden' | 'indoor' | 'beach' | 'festive';
+type Shot = 'product' | 'model' | 'lifestyle';
+type Aspect = '1:1' | '4:5' | '9:16' | '16:9';
+type Surface = '' | 'podium' | 'marble' | 'wood' | 'glass' | 'sand' | 'water' | 'fabric' | 'floating';
+type Background = '' | 'white' | 'dark' | 'gradient' | 'sunset' | 'beach' | 'garden' | 'kitchen' | 'cafe' | 'street' | 'festive';
+type Lighting = '' | 'studio' | 'daylight' | 'golden' | 'evening' | 'rim' | 'neon';
+type Camera = '' | 'front' | 'shallow' | 'three-quarter' | 'top' | 'low' | 'macro' | 'full';
+type Effect = 'splash' | 'condensation' | 'drops' | 'ice' | 'smoke' | 'fruit' | 'petals' | 'sparkles';
 
-const POSES: { value: Pose; label: string }[] = [
-  { value: '', label: 'Same as the model photo' },
-  { value: 'standing', label: 'Standing, full length' },
-  { value: 'walking', label: 'Walking' },
-  { value: 'sitting', label: 'Sitting' },
-  { value: 'hand-on-hip', label: 'Hand on hip' },
-  { value: 'side', label: 'Turned to the side' },
-  { value: 'back', label: 'Showing the back' },
+const SHOTS: { value: Shot; label: string; hint: string }[] = [
+  { value: 'product', label: 'Product only', hint: 'A studio ad of the product, no person' },
+  { value: 'model', label: 'With a model', hint: 'A model wears, holds or uses it' },
+  { value: 'lifestyle', label: 'Lifestyle scene', hint: 'The product in a real moment, by a pool or at a table' },
 ];
-const EXPRESSIONS: { value: Expression; label: string }[] = [
-  { value: '', label: 'Same as the model photo' },
-  { value: 'smile', label: 'Smiling' },
-  { value: 'laughing', label: 'Laughing' },
-  { value: 'neutral', label: 'Calm' },
-  { value: 'confident', label: 'Confident, serious' },
+
+interface Look {
+  id: string;
+  label: string;
+  swatch: string;
+  surface: Surface;
+  background: Background;
+  lighting: Lighting;
+  camera: Camera;
+  effects: Effect[];
+}
+const LOOKS: Look[] = [
+  {
+    id: 'splash',
+    label: 'Premium splash',
+    swatch: 'linear-gradient(160deg,#3b2410,#c27a2c 60%,#f3c06b)',
+    surface: 'podium',
+    background: 'sunset',
+    lighting: 'golden',
+    camera: 'shallow',
+    effects: ['splash', 'condensation'],
+  },
+  {
+    id: 'white',
+    label: 'Clean white',
+    swatch: 'linear-gradient(160deg,#ffffff,#d0d5dd)',
+    surface: 'floating',
+    background: 'white',
+    lighting: 'studio',
+    camera: 'front',
+    effects: [],
+  },
+  {
+    id: 'outdoor',
+    label: 'Golden outdoor',
+    swatch: 'linear-gradient(160deg,#f6d38a,#e08a3c 55%,#6b8f4e)',
+    surface: 'wood',
+    background: 'garden',
+    lighting: 'golden',
+    camera: 'three-quarter',
+    effects: ['petals'],
+  },
+  {
+    id: 'eid',
+    label: 'Festive Eid',
+    swatch: 'linear-gradient(160deg,#0f3d3a,#1f6f5c 55%,#d4a640)',
+    surface: 'marble',
+    background: 'festive',
+    lighting: 'evening',
+    camera: 'front',
+    effects: ['sparkles'],
+  },
+  {
+    id: 'luxury',
+    label: 'Dark luxury',
+    swatch: 'linear-gradient(160deg,#0b0b12,#2a2340 60%,#8a7650)',
+    surface: 'glass',
+    background: 'dark',
+    lighting: 'rim',
+    camera: 'low',
+    effects: ['smoke'],
+  },
+  {
+    id: 'fresh',
+    label: 'Fresh and natural',
+    swatch: 'linear-gradient(160deg,#e9f7ef,#9ed8b6 55%,#4aa37a)',
+    surface: 'sand',
+    background: 'beach',
+    lighting: 'daylight',
+    camera: 'top',
+    effects: ['drops', 'fruit'],
+  },
 ];
-const CAMERAS: { value: Camera; label: string }[] = [
-  { value: '', label: 'Same as the model photo' },
-  { value: 'closeup', label: 'Close-up (chest up)' },
-  { value: 'half', label: 'Waist up' },
-  { value: 'full', label: 'Full body' },
-  { value: 'three-quarter', label: 'Three-quarter angle' },
-  { value: 'low', label: 'Low angle' },
-  { value: 'high', label: 'High angle' },
+
+const SURFACES: { value: Surface; label: string }[] = [
+  { value: '', label: 'Let the AI choose' },
+  { value: 'podium', label: 'Dark stone podium' },
+  { value: 'marble', label: 'Marble' },
+  { value: 'wood', label: 'Wooden table' },
+  { value: 'glass', label: 'Black glass' },
+  { value: 'sand', label: 'Sand' },
+  { value: 'water', label: 'Water surface' },
+  { value: 'fabric', label: 'Fabric' },
+  { value: 'floating', label: 'None, floating' },
 ];
 const BACKGROUNDS: { value: Background; label: string }[] = [
-  { value: '', label: 'Same as the model photo' },
+  { value: '', label: 'Let the AI choose' },
   { value: 'white', label: 'Plain white studio' },
-  { value: 'grey', label: 'Light grey studio' },
-  { value: 'pastel', label: 'Soft pastel colour' },
-  { value: 'street', label: 'City street' },
-  { value: 'garden', label: 'Garden' },
-  { value: 'indoor', label: 'Living room' },
+  { value: 'dark', label: 'Plain dark colour' },
+  { value: 'gradient', label: 'Soft gradient' },
+  { value: 'sunset', label: 'Sunset over mountains and water' },
   { value: 'beach', label: 'Beach' },
-  { value: 'festive', label: 'Eid / wedding decor' },
+  { value: 'garden', label: 'Garden and greenery' },
+  { value: 'kitchen', label: 'Kitchen' },
+  { value: 'cafe', label: 'Café' },
+  { value: 'street', label: 'City street' },
+  { value: 'festive', label: 'Eid lights and decor' },
 ];
-const MAX_NOTE = 500;
+const LIGHTINGS: { value: Lighting; label: string }[] = [
+  { value: '', label: 'Let the AI choose' },
+  { value: 'studio', label: 'Soft studio light' },
+  { value: 'daylight', label: 'Bright daylight' },
+  { value: 'golden', label: 'Golden-hour backlight' },
+  { value: 'evening', label: 'Warm evening light' },
+  { value: 'rim', label: 'Dramatic rim light' },
+  { value: 'neon', label: 'Neon' },
+];
+const CAMERAS: { value: Camera; label: string }[] = [
+  { value: '', label: 'Let the AI choose' },
+  { value: 'front', label: 'Front, eye level' },
+  { value: 'shallow', label: 'Eye level, blurred background' },
+  { value: 'three-quarter', label: 'Three-quarter angle' },
+  { value: 'top', label: 'Top-down' },
+  { value: 'low', label: 'Low angle' },
+  { value: 'macro', label: 'Close-up' },
+  { value: 'full', label: 'Full body (with a person)' },
+];
+const EFFECTS: { value: Effect; label: string }[] = [
+  { value: 'splash', label: 'Liquid splash' },
+  { value: 'condensation', label: 'Condensation drops' },
+  { value: 'drops', label: 'Water drops' },
+  { value: 'ice', label: 'Ice' },
+  { value: 'smoke', label: 'Smoke and mist' },
+  { value: 'fruit', label: 'Fruit slices' },
+  { value: 'petals', label: 'Petals' },
+  { value: 'sparkles', label: 'Sparkles' },
+];
+const SIZES: { value: Aspect; label: string; use: string; w: number; h: number }[] = [
+  { value: '1:1', label: 'Square 1:1', use: 'Facebook post', w: 22, h: 22 },
+  { value: '4:5', label: 'Portrait 4:5', use: 'Feed post', w: 20, h: 25 },
+  { value: '9:16', label: 'Story 9:16', use: 'Story, reel', w: 14, h: 25 },
+  { value: '16:9', label: 'Wide 16:9', use: 'Cover, banner', w: 28, h: 16 },
+];
 
+const MAX_NOTE = 500;
 /** Same limit as the API: product photos are at most 5 MB after shrinking. */
 const MAX_PHOTO_MB = 5;
 
-/** Every model, shown under "Use a model" to pick from. Tapping the chosen one again unselects it. */
+/** Every model in one list. Tapping the chosen one again unselects it. */
 function ModelGrid({ models, current, onPick }: { models: Model[]; current?: Model; onPick: (m: Model | undefined) => void }) {
   return (
     <>
-      <div className="card-head" style={{ justifyContent: 'flex-end' }}>
+      <div className="card-head">
+        <strong style={{ fontSize: 13 }}>Choose a model</strong>
         <Link href="/model-images?add=model" className="btn sm light">
           + Add your own model
         </Link>
@@ -101,33 +205,61 @@ function ModelGrid({ models, current, onPick }: { models: Model[]; current?: Mod
           </button>
         ))}
       </div>
+      <small className="muted">No model picked? The AI creates one, from your instructions if you write any.</small>
     </>
   );
 }
 
+function Select<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+}) {
+  return (
+    <label className="field">
+      {label}
+      <select value={value} onChange={(e) => onChange(e.target.value as T)}>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 /**
- * Generate image: upload a photo of the product, optionally pick a model, and
- * the AI makes a photo of the model with it. The AI decides what kind of product it is.
+ * Generate image: upload any product, choose the kind of photo and a look,
+ * and the AI makes advertising photos of it.
  */
 export default function GenerateImagePage() {
   const { ws, manager, reloadHome } = useShop();
   const api = useApi();
   const upload = useUpload();
   const router = useRouter();
-  const setup = useLoad<{
-    models: Model[];
-    enabled: boolean;
-    creditsPerImage: number;
-    styleOptions?: boolean;
-  }>(manager ? `${ws}/try-on/models` : null);
-  const [useModel, setUseModel] = useState(false);
-  const [model, setModel] = useState<Model>();
+  const setup = useLoad<{ models: Model[]; enabled: boolean; creditsPerImage: number; styleOptions?: boolean }>(manager ? `${ws}/try-on/models` : null);
   const [garment, setGarment] = useState<string>();
-  const [pose, setPose] = useState<Pose>('');
-  const [expression, setExpression] = useState<Expression>('');
-  const [camera, setCamera] = useState<Camera>('');
+  const [productName, setProductName] = useState('');
+  const [shot, setShot] = useState<Shot>('product');
+  const [model, setModel] = useState<Model>();
+  const [look, setLook] = useState<string>('');
+  const [surface, setSurface] = useState<Surface>('');
   const [background, setBackground] = useState<Background>('');
+  const [lighting, setLighting] = useState<Lighting>('');
+  const [camera, setCamera] = useState<Camera>('');
+  const [effects, setEffects] = useState<Effect[]>([]);
+  const [aspect, setAspect] = useState<Aspect>('1:1');
   const [note, setNote] = useState('');
+  const [count, setCount] = useState(1);
+  const [prompt, setPrompt] = useState<string>();
+  const [showPrompt, setShowPrompt] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string>();
@@ -145,11 +277,47 @@ export default function GenerateImagePage() {
     if (!want) return;
     const m = models0.find((x) => x.id === want);
     if (m) {
-      setUseModel(true);
+      setShot('model');
       setModel(m);
     }
     window.history.replaceState(null, '', window.location.pathname);
   }, [models0]);
+
+  // FASHN (styleOptions off) only dresses a model photo: none of the scene choices apply.
+  const styleOptions = setup.data?.styleOptions !== false;
+  const kind: Shot = styleOptions ? shot : 'model';
+  const chosen = kind === 'product' ? undefined : model;
+
+  const body = {
+    ...(chosen && { characterId: chosen.id }),
+    category: 'auto',
+    ...(styleOptions && {
+      shot: kind,
+      aspect,
+      ...(surface && kind !== 'model' && { surface }),
+      ...(background && { background }),
+      ...(lighting && { lighting }),
+      ...(camera && { camera }),
+      ...(effects.length && { effects }),
+      ...(productName.trim() && { productName: productName.trim() }),
+      ...(note.trim() && { note: note.trim() }),
+    }),
+  };
+  const bodyKey = JSON.stringify(body);
+
+  // The words the AI will get, refreshed shortly after each change while the box is open.
+  useEffect(() => {
+    if (!showPrompt || !styleOptions) return;
+    const t = setTimeout(async () => {
+      try {
+        const r = await api<{ prompt: string }>(`${ws}/try-on/prompt`, { method: 'POST', body: JSON.parse(bodyKey) });
+        setPrompt(r.prompt);
+      } catch {
+        setPrompt(undefined);
+      }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [api, ws, bodyKey, showPrompt, styleOptions]);
 
   // While an image is being made, check every few seconds.
   const pending = made.some((i) => i.status === 'pending');
@@ -184,6 +352,22 @@ export default function GenerateImagePage() {
     }
   }
 
+  function pickLook(l: Look) {
+    setLook(l.id);
+    setSurface(l.surface);
+    setBackground(l.background);
+    setLighting(l.lighting);
+    setCamera(l.camera);
+    setEffects(l.effects);
+  }
+  // Changing one field by hand makes it a custom look.
+  const custom =
+    <T,>(set: (v: T) => void) =>
+    (v: T) => {
+      set(v);
+      setLook('');
+    };
+
   if (!manager) {
     return (
       <>
@@ -196,10 +380,9 @@ export default function GenerateImagePage() {
   }
 
   const credits = setup.data?.creditsPerImage ?? 0;
-  const styleOptions = setup.data?.styleOptions !== false;
-  const chosen = useModel ? model : undefined;
-  // Image models can create the model from the shop's description; FASHN needs a model photo.
-  const ready = !!garment && (!!chosen || (styleOptions && !!note.trim()));
+  // FASHN needs a model photo; the image models make everything else themselves.
+  const ready = !!garment && (styleOptions || !!chosen);
+  const size = SIZES.find((s) => s.value === aspect)!;
 
   async function generate() {
     if (!ready || !garment) return;
@@ -207,22 +390,10 @@ export default function GenerateImagePage() {
     setError(undefined);
     setDone(undefined);
     try {
-      const r = await api<{ image: TryOnImage }>(`${ws}/try-on`, {
-        method: 'POST',
-        body: {
-          ...(chosen && { characterId: chosen.id }),
-          garmentImageUrl: garment,
-          category: 'auto',
-          ...(styleOptions && {
-            ...(pose && { pose }),
-            ...(expression && { expression }),
-            ...(camera && { camera }),
-            ...(background && { background }),
-            ...(note.trim() && { note: note.trim() }),
-          }),
-        },
-      });
-      setMade((cur) => [r.image, ...cur]);
+      for (let i = 0; i < count; i++) {
+        const r = await api<{ image: TryOnImage }>(`${ws}/try-on`, { method: 'POST', body: { ...body, garmentImageUrl: garment } });
+        setMade((cur) => [r.image, ...cur]);
+      }
       reloadHome();
     } catch (e) {
       setError((e as Error).message);
@@ -236,10 +407,9 @@ export default function GenerateImagePage() {
       <TopBar title="Generate image" back={{ href: '/media', label: 'Media library' }} />
       <div className="content tryon-page">
         <p className="sub" style={{ margin: 0, fontSize: 14 }}>
-          Upload a photo of any product and the AI makes an advertising photo of a model wearing, holding or using it. Every image is also saved in your Media
-          library.
+          Upload any product, pick a look, and the AI makes an advertising photo of it. Every image is also saved in your Media library.
         </p>
-        {setup.data && !setup.data.enabled && <Notice tone="warn">Making images with models is not switched on for Agently yet. It will be soon.</Notice>}
+        {setup.data && !setup.data.enabled && <Notice tone="warn">Making images is not switched on for Agently yet. It will be soon.</Notice>}
         {done && <Notice tone="ok">{done}</Notice>}
         {error && <Notice tone="error">{error}</Notice>}
         {setup.error && <Notice tone="error">{setup.error}</Notice>}
@@ -247,104 +417,165 @@ export default function GenerateImagePage() {
         <div className="tryon">
           <div className="tryon-col">
             <section className="card pad" aria-label="Upload your product">
-              <h2>Upload your product</h2>
-              <button type="button" className="garment" onClick={() => file.current?.click()} disabled={uploading}>
-                {garment ? <img src={garment} alt="Your product" /> : uploading ? 'Uploading…' : '+ Choose a photo of the product'}
-              </button>
-              <input ref={file} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => pickGarment(e.target.files?.[0])} />
-              <small className="muted">
-                Any product works: clothes, shoes, bags, drinks, food, cosmetics, gadgets. Best results: the whole product in good light, on a plain background,
-                nothing covering it.
-              </small>
-            </section>
-
-            <section className="card pad" aria-label="Use a model">
-              <label className="gen-check">
-                <input type="checkbox" checked={useModel} onChange={(e) => setUseModel(e.target.checked)} />
-                <h2 style={{ margin: 0 }}>Use a model</h2>
-              </label>
-              {useModel && setup.data && <ModelGrid models={setup.data.models} current={model} onPick={setModel} />}
-              {useModel && !setup.data && <Loading />}
-              {!useModel && styleOptions && <small className="muted">No model? Describe one in "Your own instructions" below and the AI creates one.</small>}
-            </section>
-
-            <section className="card pad" aria-label="Style and generate">
-              {styleOptions && (
-                <fieldset className="style">
-                  <legend>Style (optional)</legend>
-                  <label className="field">
-                    Pose
-                    <select value={pose} onChange={(e) => setPose(e.target.value as Pose)}>
-                      {POSES.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="field">
-                    Expression
-                    <select value={expression} onChange={(e) => setExpression(e.target.value as Expression)}>
-                      {EXPRESSIONS.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="field">
-                    Camera
-                    <select value={camera} onChange={(e) => setCamera(e.target.value as Camera)}>
-                      {CAMERAS.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="field">
-                    Background
-                    <select value={background} onChange={(e) => setBackground(e.target.value as Background)}>
-                      {BACKGROUNDS.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="field">
-                    Your own instructions
-                    <textarea
-                      rows={3}
-                      maxLength={MAX_NOTE}
-                      value={note}
-                      onChange={(e) => setNote(e.target.value)}
-                      placeholder={
-                        chosen
-                          ? 'e.g. smiling, holding the product near her face, soft evening light'
-                          : 'Describe the photo, e.g. a Bangladeshi woman relaxing by a pool, taking a sip from the can, sunny day'
-                      }
-                    />
-                  </label>
+              <h2>1. Upload your product</h2>
+              <div className="gen-upload">
+                <button type="button" className="garment" onClick={() => file.current?.click()} disabled={uploading}>
+                  {garment ? <img src={garment} alt="Your product" /> : uploading ? 'Uploading…' : '+ Choose a photo'}
+                </button>
+                <input ref={file} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => pickGarment(e.target.files?.[0])} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: '1 1 220px', minWidth: 0 }}>
+                  {styleOptions && (
+                    <label className="field">
+                      What is it? (optional)
+                      <input
+                        value={productName}
+                        maxLength={80}
+                        onChange={(e) => setProductName(e.target.value)}
+                        placeholder="e.g. iced coffee bottle, leather handbag"
+                      />
+                    </label>
+                  )}
                   <small className="muted">
-                    Write in English for best results. The product is always copied as it is. Keep it tasteful: the AI refuses suggestive photos.
+                    Any product works: clothes, shoes, bags, drinks, food, cosmetics, gadgets. The product is always kept as it is, with its own label and
+                    colours. Best results: the whole product in good light, on a plain background.
                   </small>
-                </fieldset>
+                </div>
+              </div>
+            </section>
+
+            <section className="card pad" aria-label="Photo type">
+              <h2>2. Photo type</h2>
+              {styleOptions && (
+                <div className="gen-types">
+                  {SHOTS.map((s) => (
+                    <button
+                      key={s.value}
+                      type="button"
+                      className={kind === s.value ? 'on' : ''}
+                      aria-pressed={kind === s.value}
+                      onClick={() => setShot(s.value)}
+                    >
+                      <strong>{s.label}</strong>
+                      <span>{s.hint}</span>
+                    </button>
+                  ))}
+                </div>
               )}
-              <button type="button" className="btn primary" disabled={!ready || starting || uploading || !setup.data?.enabled} onClick={generate}>
-                {starting ? 'Starting…' : `Generate image${credits ? ` · ${credits} credits` : ''}`}
-              </button>
-              {!ready && (
-                <small className="muted">
-                  {!garment
-                    ? 'Upload the product photo.'
-                    : useModel && !model
-                      ? 'Choose a model above.'
-                      : styleOptions
-                        ? 'Use a model, or describe the model in your own instructions.'
-                        : 'Use a model first.'}
-                </small>
+              {kind !== 'product' && setup.data && <ModelGrid models={setup.data.models} current={model} onPick={setModel} />}
+              {kind !== 'product' && !setup.data && <Loading />}
+            </section>
+
+            {styleOptions && (
+              <section className="card pad" aria-label="Pick a look">
+                <div className="card-head">
+                  <h2>3. Pick a look</h2>
+                  <small className="muted">One tap fills the scene below. Change anything after.</small>
+                </div>
+                <div className="gen-looks">
+                  {LOOKS.map((l) => (
+                    <button key={l.id} type="button" className={look === l.id ? 'on' : ''} aria-pressed={look === l.id} onClick={() => pickLook(l)}>
+                      <span className="sw" style={{ background: l.swatch }} />
+                      <span className="lb">{l.label}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="gen-grid">
+                  {kind !== 'model' && <Select label="Surface" value={surface} options={SURFACES} onChange={custom(setSurface)} />}
+                  <Select label="Background" value={background} options={BACKGROUNDS} onChange={custom(setBackground)} />
+                  <Select label="Lighting" value={lighting} options={LIGHTINGS} onChange={custom(setLighting)} />
+                  <Select label="Camera" value={camera} options={CAMERAS} onChange={custom(setCamera)} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <strong style={{ fontSize: 13 }}>Effects (pick any)</strong>
+                  <div className="chips" role="group" aria-label="Effects">
+                    {EFFECTS.map((e) => {
+                      const on = effects.includes(e.value);
+                      return (
+                        <button
+                          key={e.value}
+                          type="button"
+                          className={`chip${on ? ' on' : ''}`}
+                          aria-pressed={on}
+                          onClick={() => custom(setEffects)(on ? effects.filter((x) => x !== e.value) : [...effects, e.value])}
+                        >
+                          {e.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </section>
+            )}
+
+            <section className="card pad" aria-label="Size and details">
+              <h2>{styleOptions ? '4. Size and details' : '3. Details'}</h2>
+              {styleOptions && (
+                <div className="gen-sizes">
+                  {SIZES.map((s) => (
+                    <button
+                      key={s.value}
+                      type="button"
+                      className={aspect === s.value ? 'on' : ''}
+                      aria-pressed={aspect === s.value}
+                      onClick={() => setAspect(s.value)}
+                    >
+                      <span className="box" style={{ width: s.w, height: s.h }} />
+                      <strong>{s.label}</strong>
+                      <span>{s.use}</span>
+                    </button>
+                  ))}
+                </div>
               )}
+              {styleOptions && (
+                <label className="field">
+                  Your own instructions (optional)
+                  <textarea
+                    rows={3}
+                    maxLength={MAX_NOTE}
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder={
+                      kind === 'product'
+                        ? 'e.g. a splash of iced coffee wraps around the bottle, palm leaves on the left'
+                        : 'e.g. a woman relaxing by a pool, taking a sip from the can, sunny day'
+                    }
+                  />
+                </label>
+              )}
+              {styleOptions && <small className="muted">Write in English for best results. Keep it tasteful: the AI refuses suggestive photos.</small>}
+
+              {styleOptions && (
+                <div className="gen-prompt">
+                  <button type="button" aria-expanded={showPrompt} onClick={() => setShowPrompt(!showPrompt)}>
+                    See the prompt we send to the AI
+                    <span aria-hidden="true">{showPrompt ? '▲' : '▼'}</span>
+                  </button>
+                  {showPrompt && <p>{prompt ?? 'Loading…'}</p>}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <label className="field" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  Images
+                  <select value={count} onChange={(e) => setCount(Number(e.target.value))} style={{ width: 72 }}>
+                    {[1, 2, 3, 4].map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="btn primary"
+                  style={{ flex: '1 1 220px' }}
+                  disabled={!ready || starting || uploading || !setup.data?.enabled}
+                  onClick={generate}
+                >
+                  {starting ? 'Starting…' : `Generate ${count} image${count > 1 ? 's' : ''}${credits ? ` · ${credits * count} credits` : ''}`}
+                </button>
+              </div>
+              {!ready && <small className="muted">{!garment ? 'Upload the product photo.' : 'Choose a model above.'}</small>}
             </section>
           </div>
 
@@ -352,9 +583,12 @@ export default function GenerateImagePage() {
             <h2 style={{ fontSize: 16 }}>Your new images</h2>
             {setup.loading && !setup.data && <Loading />}
             {made.length === 0 && (
-              <Empty>
-                Images you generate here show up here in about half a minute. Older ones are in the <Link href="/media">Media library</Link>.
-              </Empty>
+              <div className="gen-preview" style={{ aspectRatio: `${size.w} / ${size.h}` }}>
+                <span>{size.label}</span>
+                <small>
+                  Images show here in about half a minute. Older ones are in the <Link href="/media">Media library</Link>.
+                </small>
+              </div>
             )}
             <div className="results">
               {made.map((img) => (
@@ -362,17 +596,10 @@ export default function GenerateImagePage() {
                   <div className="ph">
                     {img.status === 'succeeded' && img.resultImageUrl ? (
                       <a href={img.resultImageUrl} target="_blank" rel="noreferrer">
-                        <img src={img.resultImageUrl} alt="Model with your product" />
+                        <img src={img.resultImageUrl} alt="Your product photo" style={{ objectFit: 'contain' }} />
                       </a>
                     ) : img.status === 'pending' ? (
-                      <div
-                        style={{
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          gap: 10,
-                        }}
-                      >
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
                         <div className="spinner" aria-hidden="true" />
                         Making your image…
                       </div>

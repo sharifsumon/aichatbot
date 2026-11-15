@@ -169,3 +169,36 @@ test('words that trip the safety filter are tidied, keeping what the shop asked 
   assert.equal(tidyNote('two young boys playing football, hot summer day'), 'two men playing football, hot summer day');
   assert.match(tryOnPrompt({ ...req, note: 'a sexy girl' }), /The shop also asks: a woman/);
 });
+
+test('a product-only shot: no people, the chosen scene, and the frame size sent to the AI', async () => {
+  const p = tryOnPrompt({
+    garment: req.garment,
+    category: 'auto',
+    productName: 'iced coffee bottle',
+    style: { shot: 'product', surface: 'podium', effects: ['splash', 'condensation'], background: 'sunset', lighting: 'golden', camera: 'shallow', aspect: '16:9' },
+  });
+  assert.match(p, /commercial product photograph of exactly the product \(iced coffee bottle\)/);
+  assert.match(p, /no people/);
+  assert.match(p, /stone cylinder podium/);
+  assert.match(p, /liquid splash.*condensation droplets/);
+  assert.match(p, /golden-hour/);
+  assert.match(p, /Frame: 16:9/);
+
+  const bodies: { aspect_ratio?: string; image_urls?: string[] }[] = [];
+  const provider = new FalTryOn({
+    apiKey: 'k',
+    pollMs: 0,
+    fetch: (async (url: string, init: RequestInit = {}) => {
+      if (init.method === 'POST') {
+        bodies.push(JSON.parse(init.body as string));
+        return json(200, { request_id: 'r', status_url: 'https://q/s/status', response_url: 'https://q/s' });
+      }
+      if (url.endsWith('/status')) return json(200, { status: 'COMPLETED' });
+      if (url === 'https://q/s') return json(200, { images: [{ url: 'https://fal.media/o.jpg' }] });
+      return new Response(new Uint8Array([1]), { status: 200, headers: { 'content-type': 'image/jpeg' } });
+    }) as typeof fetch,
+  });
+  await provider.tryOn({ garment: req.garment, category: 'auto', style: { shot: 'product', aspect: '9:16' } });
+  assert.equal(bodies[0]!.aspect_ratio, '9:16');
+  assert.equal(bodies[0]!.image_urls!.length, 1);
+});
