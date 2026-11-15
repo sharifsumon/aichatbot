@@ -630,26 +630,25 @@ function GeneratedPhotos({ ws, room, have, onClose, onPick }: { ws: string; room
           </Empty>
         )}
         {!!images?.length && (
-          <div className="lib-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10, padding: 0, maxHeight: '60vh', overflowY: 'auto' }}>
+          <div className="results lib-cards pick-cards">
             {images.map((i) => {
               const url = i.resultImageUrl!;
               const n = picked.indexOf(url);
               const added = have.includes(url);
+              const label = added ? 'Already a photo of this product' : n >= 0 ? 'Unselect image' : 'Select image';
               return (
-                <button
-                  key={i.id}
-                  type="button"
-                  className={`lib-item${n >= 0 ? ' sel' : ''}`}
-                  aria-pressed={n >= 0}
-                  aria-label={added ? 'Already a photo of this product' : n >= 0 ? 'Unselect image' : 'Select image'}
-                  disabled={added}
-                  style={added ? { opacity: 0.45, cursor: 'default' } : undefined}
-                  onClick={() => toggle(url)}
-                >
-                  <img src={url} alt="" loading="lazy" />
-                  <span className="lib-check">{n >= 0 ? n + 1 : ''}</span>
-                  {added && <span className="lib-tag">Added</span>}
-                </button>
+                <div key={i.id} className={`result${n >= 0 ? ' sel' : ''}`} style={added ? { opacity: 0.5 } : undefined}>
+                  <button type="button" className="ph" disabled={added} aria-pressed={n >= 0} aria-label={label} onClick={() => toggle(url)}>
+                    <img src={url} alt="" loading="lazy" />
+                    {!added && <span className="lib-check">{n >= 0 ? n + 1 : ''}</span>}
+                  </button>
+                  <div className="info">
+                    <small className="muted lib-date">{new Date(i.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</small>
+                    <button type="button" className={`btn sm${n >= 0 ? '' : ' primary'}`} disabled={added} onClick={() => toggle(url)}>
+                      {added ? 'Added' : n >= 0 ? `Picked ${n + 1}` : 'Use this photo'}
+                    </button>
+                  </div>
+                </div>
               );
             })}
           </div>

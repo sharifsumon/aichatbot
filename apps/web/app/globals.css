@@ -717,3 +717,21 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
 @media (max-width: 720px) {
   .gen-page .gen-looks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* Galleries as cards, like "Your videos" on Videos with models: preview on top, tag, date and actions below. */
+.lib-cards { padding-bottom: 72px; }
+.lib-cards .result { transition: border-color .15s, box-shadow .15s; }
+.lib-cards .result.sel { border-color: #6366f1; box-shadow: 0 0 0 4px rgba(99, 102, 241, .12); }
+.lib-cards .result .ph { border: 0; cursor: pointer; font: inherit; width: 100%; }
+.lib-cards .result .ph:disabled { cursor: default; }
+.lib-cards .result .ph video { width: 100%; height: 100%; object-fit: cover; display: block; background: #000; }
+.lib-cards .result .lib-check { cursor: pointer; padding: 0; z-index: 2; }
+.lib-cards .result.sel .lib-check { background: var(--brand); }
+.lib-cards .lib-date { margin-right: auto; }
+.pick-cards { padding-bottom: 0; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); max-height: 60vh; overflow-y: auto; }
+@media (max-width: 720px) {
+  .lib-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .lib-cards .info { padding: 8px; gap: 6px; }
+  .lib-cards .info .btn.sm { flex: 1 1 100%; }
+  .pick-cards { max-height: none; }
+}
