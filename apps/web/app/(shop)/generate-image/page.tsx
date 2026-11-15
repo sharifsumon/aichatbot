@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useShop } from '@/components/Shell';
 import { AddToProduct } from '@/components/AddToProduct';
+import { Icon } from '@/components/icons';
 import { Empty, Loading, Notice, Pill, TopBar } from '@/components/ui';
 import { ApiError, qs, useApi, useLoad, useUpload } from '@/lib/api';
 import { shrinkImage } from '@/lib/image';
@@ -210,6 +211,57 @@ function ModelGrid({ models, current, onPick }: { models: Model[]; current?: Mod
   );
 }
 
+function labelOf<T extends string>(options: { value: T; label: string }[], v: T) {
+  return options.find((o) => o.value === v)?.label ?? '';
+}
+
+/** A section header: a pastel icon tile, the title, and a green badge or a grey note. */
+function SectionHead({ icon, tone, title, badge, note }: { icon: keyof typeof Icon; tone: string; title: string; badge?: string; note?: string }) {
+  const I = Icon[icon];
+  return (
+    <div className="gen-head">
+      <span className={`opt-icon lg ${tone}`} aria-hidden="true">
+        <I />
+      </span>
+      <h2>{title}</h2>
+      {badge && <span className="badge-ok">{badge}</span>}
+      {note && <span className="muted">{note}</span>}
+    </div>
+  );
+}
+
+/** One choice as a row of pill chips. */
+function ChipRow<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="gen-row">
+      <span className="gen-label">{label}</span>
+      <div className="chips" role="group" aria-label={label}>
+        {options.map((o) => (
+          <button
+            key={o.value || 'auto'}
+            type="button"
+            className={`chip${o.value === value ? ' on' : ''}`}
+            aria-pressed={o.value === value}
+            onClick={() => onChange(o.value)}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function Select<T extends string>({
   label,
   value,
@@ -259,7 +311,7 @@ export default function GenerateImagePage() {
   const [note, setNote] = useState('');
   const [count, setCount] = useState(1);
   const [prompt, setPrompt] = useState<string>();
-  const [showPrompt, setShowPrompt] = useState(false);
+  const [showPrompt, setShowPrompt] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string>();
@@ -402,28 +454,59 @@ export default function GenerateImagePage() {
     }
   }
 
+  const summary: [string, string][] = styleOptions
+    ? [
+        ['Photo', SHOTS.find((x) => x.value === kind)!.label + (chosen ? ` · ${chosen.name}` : '')],
+        ['Style', LOOKS.find((l) => l.id === look)?.label ?? 'Custom'],
+        ...(kind !== 'model' ? [['Surface', labelOf(SURFACES, surface)] as [string, string]] : []),
+        ['Background', labelOf(BACKGROUNDS, background)],
+        ['Effects', effects.length ? effects.map((e) => labelOf(EFFECTS, e)).join(', ') : 'None'],
+        ['Format', `${size.label} · ${count} image${count > 1 ? 's' : ''}`],
+      ]
+    : [['Model', chosen?.name ?? 'Not chosen yet']];
+
   return (
     <>
       <TopBar title="Generate image" back={{ href: '/media', label: 'Media library' }} />
-      <div className="content tryon-page">
-        <p className="sub" style={{ margin: 0, fontSize: 14 }}>
-          Upload any product, pick a look, and the AI makes an advertising photo of it. Every image is also saved in your Media library.
-        </p>
+      <div className="content tryon-page gen-page">
+        <div className="gen-hero">
+          <div>
+            <h1>Generate a product image</h1>
+            <p>Upload your product and pick a look. We write the AI prompt for you.</p>
+          </div>
+          {credits > 0 && (
+            <span className="gen-pill">
+              <Icon.sparkle /> <strong>{credits}</strong> credits per image
+            </span>
+          )}
+        </div>
         {setup.data && !setup.data.enabled && <Notice tone="warn">Making images is not switched on for Agently yet. It will be soon.</Notice>}
         {done && <Notice tone="ok">{done}</Notice>}
         {error && <Notice tone="error">{error}</Notice>}
         {setup.error && <Notice tone="error">{setup.error}</Notice>}
 
-        <div className="tryon">
-          <div className="tryon-col">
-            <section className="card pad" aria-label="Upload your product">
-              <h2>1. Upload your product</h2>
+        <div className="gen-layout">
+          <div className="gen-main">
+            <section className={`card pad gen-sec${!garment ? ' active' : ''}`} aria-label="Your product">
+              <SectionHead icon="catalog" tone="blue" title="Your product" badge="Required" />
               <div className="gen-upload">
                 <button type="button" className="garment" onClick={() => file.current?.click()} disabled={uploading}>
-                  {garment ? <img src={garment} alt="Your product" /> : uploading ? 'Uploading…' : '+ Choose a photo'}
+                  {garment ? (
+                    <img src={garment} alt="Your product" />
+                  ) : uploading ? (
+                    'Uploading…'
+                  ) : (
+                    <span className="garment-empty">
+                      <span className="gen-label">Product photo</span>
+                      <small>No photo selected yet.</small>
+                      <span className="btn">
+                        <Icon.upload /> Choose photo
+                      </span>
+                    </span>
+                  )}
                 </button>
                 <input ref={file} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => pickGarment(e.target.files?.[0])} />
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: '1 1 220px', minWidth: 0 }}>
+                <div className="gen-upload-side">
                   {styleOptions && (
                     <label className="field">
                       What is it? (optional)
@@ -439,54 +522,41 @@ export default function GenerateImagePage() {
                     Any product works: clothes, shoes, bags, drinks, food, cosmetics, gadgets. The product is always kept as it is, with its own label and
                     colours. Best results: the whole product in good light, on a plain background.
                   </small>
+                  {garment && (
+                    <button type="button" className="btn sm" style={{ alignSelf: 'flex-start' }} onClick={() => file.current?.click()} disabled={uploading}>
+                      <Icon.upload /> Change photo
+                    </button>
+                  )}
                 </div>
               </div>
             </section>
 
-            <section className="card pad" aria-label="Photo type">
-              <h2>2. Photo type</h2>
-              {styleOptions && (
-                <div className="gen-types">
-                  {SHOTS.map((s) => (
-                    <button
-                      key={s.value}
-                      type="button"
-                      className={kind === s.value ? 'on' : ''}
-                      aria-pressed={kind === s.value}
-                      onClick={() => setShot(s.value)}
-                    >
-                      <strong>{s.label}</strong>
-                      <span>{s.hint}</span>
+            {styleOptions && (
+              <section className="card pad gen-sec" aria-label="Choose a style">
+                <SectionHead icon="sparkle" tone="violet" title="Choose a style" badge="Fills the scene for you" />
+                <div className="chips" role="group" aria-label="Style">
+                  {LOOKS.map((l) => (
+                    <button key={l.id} type="button" className={`chip${look === l.id ? ' on' : ''}`} aria-pressed={look === l.id} onClick={() => pickLook(l)}>
+                      <span className="sw" style={{ background: l.swatch }} aria-hidden="true" />
+                      {l.label}
                     </button>
                   ))}
+                  <button type="button" className={`chip dashed${look === '' ? ' on' : ''}`} aria-pressed={look === ''} onClick={() => setLook('')}>
+                    + Custom
+                  </button>
                 </div>
-              )}
-              {kind !== 'product' && setup.data && <ModelGrid models={setup.data.models} current={model} onPick={setModel} />}
-              {kind !== 'product' && !setup.data && <Loading />}
-            </section>
+              </section>
+            )}
 
             {styleOptions && (
-              <section className="card pad" aria-label="Pick a look">
-                <div className="card-head">
-                  <h2>3. Pick a look</h2>
-                  <small className="muted">One tap fills the scene below. Change anything after.</small>
-                </div>
-                <div className="gen-looks">
-                  {LOOKS.map((l) => (
-                    <button key={l.id} type="button" className={look === l.id ? 'on' : ''} aria-pressed={look === l.id} onClick={() => pickLook(l)}>
-                      <span className="sw" style={{ background: l.swatch }} />
-                      <span className="lb">{l.label}</span>
-                    </button>
-                  ))}
-                </div>
-                <div className="gen-grid">
-                  {kind !== 'model' && <Select label="Surface" value={surface} options={SURFACES} onChange={custom(setSurface)} />}
-                  <Select label="Background" value={background} options={BACKGROUNDS} onChange={custom(setBackground)} />
-                  <Select label="Lighting" value={lighting} options={LIGHTINGS} onChange={custom(setLighting)} />
-                  <Select label="Camera" value={camera} options={CAMERAS} onChange={custom(setCamera)} />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <strong style={{ fontSize: 13 }}>Effects (pick any)</strong>
+              <section className="card pad gen-sec" aria-label="Scene">
+                <SectionHead icon="images" tone="amber" title="Scene" />
+                {kind !== 'model' && <ChipRow label="Surface" value={surface} options={SURFACES} onChange={custom(setSurface)} />}
+                <ChipRow label="Background" value={background} options={BACKGROUNDS} onChange={custom(setBackground)} />
+                <div className="gen-row">
+                  <span className="gen-label">
+                    Effects <span className="muted">(pick any)</span>
+                  </span>
                   <div className="chips" role="group" aria-label="Effects">
                     {EFFECTS.map((e) => {
                       const on = effects.includes(e.value);
@@ -504,126 +574,174 @@ export default function GenerateImagePage() {
                     })}
                   </div>
                 </div>
+                <div className="gen-grid">
+                  <Select label="Lighting" value={lighting} options={LIGHTINGS} onChange={custom(setLighting)} />
+                  <Select label="Camera angle" value={camera} options={CAMERAS} onChange={custom(setCamera)} />
+                </div>
               </section>
             )}
 
-            <section className="card pad" aria-label="Size and details">
-              <h2>{styleOptions ? '4. Size and details' : '3. Details'}</h2>
+            <section className="card pad gen-sec" aria-label="Use a model">
+              <SectionHead icon="models" tone="green" title="Use a model" note={styleOptions ? 'Optional' : undefined} />
               {styleOptions && (
-                <div className="gen-sizes">
-                  {SIZES.map((s) => (
+                <div className="gen-types" role="radiogroup" aria-label="Photo type">
+                  {SHOTS.map((s) => (
                     <button
                       key={s.value}
                       type="button"
-                      className={aspect === s.value ? 'on' : ''}
-                      aria-pressed={aspect === s.value}
-                      onClick={() => setAspect(s.value)}
+                      role="radio"
+                      className={`opt${kind === s.value ? ' on' : ''}`}
+                      aria-checked={kind === s.value}
+                      onClick={() => setShot(s.value)}
                     >
-                      <span className="box" style={{ width: s.w, height: s.h }} />
-                      <strong>{s.label}</strong>
-                      <span>{s.use}</span>
+                      <span className="opt-radio" aria-hidden="true" />
+                      <span className="opt-text">
+                        <strong>{s.label}</strong>
+                        <span>{s.hint}</span>
+                      </span>
                     </button>
                   ))}
                 </div>
               )}
-              {styleOptions && (
-                <label className="field">
-                  Your own instructions (optional)
-                  <textarea
-                    rows={3}
-                    maxLength={MAX_NOTE}
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    placeholder={
-                      kind === 'product'
-                        ? 'e.g. a splash of iced coffee wraps around the bottle, palm leaves on the left'
-                        : 'e.g. a woman relaxing by a pool, taking a sip from the can, sunny day'
-                    }
-                  />
-                </label>
-              )}
-              {styleOptions && <small className="muted">Write in English for best results. Keep it tasteful: the AI refuses suggestive photos.</small>}
+              {kind !== 'product' && setup.data && <ModelGrid models={setup.data.models} current={model} onPick={setModel} />}
+              {kind !== 'product' && !setup.data && <Loading />}
+            </section>
 
+            <section className="card pad gen-sec" aria-label="Format">
+              <SectionHead icon="post" tone="teal" title={styleOptions ? 'Format' : 'Details'} />
               {styleOptions && (
-                <div className="gen-prompt">
-                  <button type="button" aria-expanded={showPrompt} onClick={() => setShowPrompt(!showPrompt)}>
-                    See the prompt we send to the AI
-                    <span aria-hidden="true">{showPrompt ? '▲' : '▼'}</span>
-                  </button>
-                  {showPrompt && <p>{prompt ?? 'Loading…'}</p>}
+                <div className="chips" role="group" aria-label="Size">
+                  {SIZES.map((s) => (
+                    <button
+                      key={s.value}
+                      type="button"
+                      className={`chip${aspect === s.value ? ' on' : ''}`}
+                      aria-pressed={aspect === s.value}
+                      onClick={() => setAspect(s.value)}
+                    >
+                      <span className="ratio" style={{ width: Math.round(s.w * 0.7), height: Math.round(s.h * 0.7) }} aria-hidden="true" />
+                      {s.value} {s.use}
+                    </button>
+                  ))}
                 </div>
               )}
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                <label className="field" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  Images
-                  <select value={count} onChange={(e) => setCount(Number(e.target.value))} style={{ width: 72 }}>
+              <div className="gen-grid">
+                {styleOptions && (
+                  <label className="field">
+                    Extra details (optional)
+                    <textarea
+                      rows={3}
+                      maxLength={MAX_NOTE}
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      placeholder={
+                        kind === 'product'
+                          ? 'e.g. a splash of iced coffee wraps around the bottle, palm leaves on the left'
+                          : 'e.g. a woman relaxing by a pool, taking a sip from the can, sunny day'
+                      }
+                    />
+                  </label>
+                )}
+                <div className="gen-row">
+                  <span className="gen-label">Number of images</span>
+                  <div className="gen-count" role="radiogroup" aria-label="Number of images">
                     {[1, 2, 3, 4].map((n) => (
-                      <option key={n} value={n}>
+                      <button key={n} type="button" role="radio" aria-checked={count === n} className={count === n ? 'on' : ''} onClick={() => setCount(n)}>
                         {n}
-                      </option>
+                      </button>
                     ))}
-                  </select>
-                </label>
-                <button
-                  type="button"
-                  className="btn primary"
-                  style={{ flex: '1 1 220px' }}
-                  disabled={!ready || starting || uploading || !setup.data?.enabled}
-                  onClick={generate}
-                >
-                  {starting ? 'Starting…' : `Generate ${count} image${count > 1 ? 's' : ''}${credits ? ` · ${credits * count} credits` : ''}`}
+                  </div>
+                  {credits > 0 && <small className="muted">Each image uses {credits} credits.</small>}
+                </div>
+              </div>
+              {styleOptions && <small className="muted">Write in English for best results. Keep it tasteful: the AI refuses suggestive photos.</small>}
+            </section>
+
+            <div className="gen-actions">
+              <Link href="/media" className="btn">
+                ← Back
+              </Link>
+              <div className="gen-go">
+                {!ready && <small className="muted">{!garment ? 'Upload the product photo first.' : 'Choose a model above.'}</small>}
+                {credits > 0 && <span className="gen-cost">{credits * count} credits</span>}
+                <button type="button" className="btn primary lg" disabled={!ready || starting || uploading || !setup.data?.enabled} onClick={generate}>
+                  {starting ? 'Starting…' : `Generate ${count > 1 ? `${count} images` : 'image'}`} <span aria-hidden="true">›</span>
                 </button>
               </div>
-              {!ready && <small className="muted">{!garment ? 'Upload the product photo.' : 'Choose a model above.'}</small>}
-            </section>
+            </div>
           </div>
 
-          <section aria-label="Made here" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <h2 style={{ fontSize: 16 }}>Your new images</h2>
-            {setup.loading && !setup.data && <Loading />}
-            {made.length === 0 && (
-              <div className="gen-preview" style={{ aspectRatio: `${size.w} / ${size.h}` }}>
-                <span>{size.label}</span>
-                <small>
-                  Images show here in about half a minute. Older ones are in the <Link href="/media">Media library</Link>.
-                </small>
+          <aside className="gen-aside" aria-label="Preview">
+            <div className="card pad">
+              <h2 style={{ fontSize: 16 }}>Preview</h2>
+              {setup.loading && !setup.data && <Loading />}
+              {made.length === 0 ? (
+                <div className="gen-preview" style={{ aspectRatio: `${size.w} / ${size.h}` }}>
+                  <Icon.images />
+                  <span>Your image appears here ({aspect})</span>
+                  <small>
+                    Ready in about half a minute. Older ones are in the <Link href="/media">Media library</Link>.
+                  </small>
+                </div>
+              ) : (
+                <div className="results">
+                  {made.map((img) => (
+                    <div key={img.id} className="result">
+                      <div className="ph">
+                        {img.status === 'succeeded' && img.resultImageUrl ? (
+                          <a href={img.resultImageUrl} target="_blank" rel="noreferrer">
+                            <img src={img.resultImageUrl} alt="Your product photo" style={{ objectFit: 'contain' }} />
+                          </a>
+                        ) : img.status === 'pending' ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                            <div className="spinner" aria-hidden="true" />
+                            Making your image…
+                          </div>
+                        ) : (
+                          <div style={{ padding: 16 }}>{img.error ?? 'This image could not be made.'}</div>
+                        )}
+                      </div>
+                      <div className="info">
+                        {img.status === 'succeeded' && img.resultImageUrl && (
+                          <>
+                            <button type="button" className="btn sm primary" onClick={() => setAdding(img)}>
+                              Add to a product
+                            </button>
+                            <button type="button" className="btn sm" onClick={() => router.push(`/catalog${qs({ newPhoto: img.resultImageUrl })}`)}>
+                              New product
+                            </button>
+                          </>
+                        )}
+                        {img.status === 'failed' && <Pill tone="red">Failed</Pill>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <dl className="gen-summary">
+                {summary.map(([k, v]) => (
+                  <div key={k}>
+                    <dt>{k}</dt>
+                    <dd>{v}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+
+            {styleOptions && (
+              <div className="card pad gen-prompt">
+                <button type="button" aria-expanded={showPrompt} onClick={() => setShowPrompt(!showPrompt)}>
+                  <span>Prompt we will send</span>
+                  <span aria-hidden="true">{showPrompt ? '▲' : '▼'}</span>
+                </button>
+                {showPrompt && <p>{prompt ?? 'Loading…'}</p>}
               </div>
             )}
-            <div className="results">
-              {made.map((img) => (
-                <div key={img.id} className="result">
-                  <div className="ph">
-                    {img.status === 'succeeded' && img.resultImageUrl ? (
-                      <a href={img.resultImageUrl} target="_blank" rel="noreferrer">
-                        <img src={img.resultImageUrl} alt="Your product photo" style={{ objectFit: 'contain' }} />
-                      </a>
-                    ) : img.status === 'pending' ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-                        <div className="spinner" aria-hidden="true" />
-                        Making your image…
-                      </div>
-                    ) : (
-                      <div style={{ padding: 16 }}>{img.error ?? 'This image could not be made.'}</div>
-                    )}
-                  </div>
-                  <div className="info">
-                    {img.status === 'succeeded' && img.resultImageUrl && (
-                      <>
-                        <button type="button" className="btn sm primary" onClick={() => setAdding(img)}>
-                          Add to a product
-                        </button>
-                        <button type="button" className="btn sm" onClick={() => router.push(`/catalog${qs({ newPhoto: img.resultImageUrl })}`)}>
-                          New product
-                        </button>
-                      </>
-                    )}
-                    {img.status === 'failed' && <Pill tone="red">Failed</Pill>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
+
+            <p className="gen-tip">
+              Tip: describe people as &quot;adult woman&quot; or &quot;adult man&quot;, and avoid brand names. We tidy risky words automatically.
+            </p>
+          </aside>
         </div>
       </div>
 
