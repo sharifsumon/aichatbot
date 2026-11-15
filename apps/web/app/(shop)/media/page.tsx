@@ -131,8 +131,8 @@ export default function MediaLibraryPage() {
         <div className="tabs lib-tabs" role="tablist" aria-label="Media">
           {(
             [
-              ['images', 'Images', readyImages.length],
-              ['videos', 'Videos', readyVideos.length],
+              ['images', 'Generated Images', readyImages.length],
+              ['videos', 'Generated Videos', readyVideos.length],
             ] as const
           ).map(([v, label, n]) => (
             <button key={v} type="button" role="tab" aria-selected={tab === v} className={`tab${tab === v ? ' on' : ''}`} onClick={() => setTab(v)}>
