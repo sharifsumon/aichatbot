@@ -612,7 +612,7 @@ export default function GenerateImagePage() {
               <div className="gen-grid">
                 {styleOptions && (
                   <label className="field">
-                    Extra details (optional)
+                    Custom Prompt (optional)
                     <textarea
                       rows={3}
                       maxLength={MAX_NOTE}
@@ -626,17 +626,18 @@ export default function GenerateImagePage() {
                     />
                   </label>
                 )}
-                <div className="gen-row">
-                  <span className="gen-label">Number of images</span>
-                  <div className="gen-count" role="radiogroup" aria-label="Number of images">
+                <label className="field">
+                  Number of images
+                  <select value={count} onChange={(e) => setCount(Number(e.target.value))}>
                     {[1, 2, 3, 4].map((n) => (
-                      <button key={n} type="button" role="radio" aria-checked={count === n} className={count === n ? 'on' : ''} onClick={() => setCount(n)}>
-                        {n}
-                      </button>
+                      <option key={n} value={n}>
+                        {n} image{n > 1 ? 's' : ''}
+                        {credits ? ` · ${credits * n} credits` : ''}
+                      </option>
                     ))}
-                  </div>
-                  {credits > 0 && <small className="muted">Each image uses {credits} credits.</small>}
-                </div>
+                  </select>
+                  {credits > 0 && <small>Each image uses {credits} credits.</small>}
+                </label>
               </div>
               {styleOptions && <small className="muted">Write in English for best results. Keep it tasteful: the AI refuses suggestive photos.</small>}
             </section>

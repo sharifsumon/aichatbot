@@ -639,9 +639,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
 .gen-upload .garment-empty .gen-label { color: var(--brand); }
 .gen-upload .garment-empty .btn { pointer-events: none; }
 .gen-upload-side { flex: 1 1 240px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
-.gen-count { display: flex; gap: 10px; }
-.gen-count button { width: 48px; height: 48px; border-radius: 12px; border: 1px solid #e5e7eb; background: #fff; color: #1f2937; font: inherit; font-size: 15px; cursor: pointer; }
-.gen-count button.on { border-color: #6366f1; background: #eef0ff; color: #4338ca; font-weight: 600; }
 .gen-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding-top: 4px; }
 .gen-actions > .btn { height: 48px; padding: 0 20px; font-size: 16px; }
 .gen-go { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 16px; }
