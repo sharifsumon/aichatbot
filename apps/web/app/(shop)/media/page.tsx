@@ -230,21 +230,14 @@ export default function MediaLibraryPage() {
                       <img src={url} alt="" loading="lazy" />
                       <span className="lib-check">{n >= 0 ? n + 1 : ''}</span>
                     </button>
-                    <div className="lib-acts">
+                    <div className="info">
                       <button
                         type="button"
-                        aria-label="Add to product"
-                        title="Add to product"
+                        className="btn sm primary"
                         onClick={() => router.push(`/catalog?${new URLSearchParams([['newPhoto', url]]).toString()}`)}
                       >
-                        +
+                        Add photo
                       </button>
-                      <a href={url} download target="_blank" rel="noreferrer" aria-label="Download" title="Download">
-                        ↓
-                      </a>
-                    </div>
-                    <div className="info">
-                      <strong>{isOwn(i) ? 'Your model' : 'AI model'}</strong>
                     </div>
                   </div>
                 );
@@ -266,19 +259,15 @@ export default function MediaLibraryPage() {
                         {on ? '✓' : ''}
                       </button>
                     </div>
-                    <div className="lib-acts">
-                      <button type="button" aria-label="Add to product" title="Add to product" onClick={() => setAdding(url)}>
-                        +
+                    <div className="info">
+                      <button
+                        type="button"
+                        className="btn sm primary"
+                        onClick={() => router.push(`/catalog?${new URLSearchParams([['newVideo', url]]).toString()}`)}
+                      >
+                        Add video
                       </button>
-                      <a href={url} download target="_blank" rel="noreferrer" aria-label="Download" title="Download">
-                        ↓
-                      </a>
                     </div>
-                    {v.durationSec ? (
-                      <div className="info">
-                        <strong>{duration(v.durationSec)}</strong>
-                      </div>
-                    ) : null}
                   </div>
                 );
               })}

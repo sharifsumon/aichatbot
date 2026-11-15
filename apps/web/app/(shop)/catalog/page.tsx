@@ -52,11 +52,16 @@ export default function CatalogPage() {
   }, [load]);
 
   // "New product" from generated images opens the editor with those photos (?newPhoto=a&newPhoto=b).
+  // A generated video comes the same way (?newVideo=url).
   const [newPhoto, setNewPhoto] = useState<string[]>();
+  const [newVideo, setNewVideo] = useState<string>();
   useEffect(() => {
-    const photos = new URLSearchParams(window.location.search).getAll('newPhoto');
-    if (!photos.length || !manager) return;
+    const params = new URLSearchParams(window.location.search);
+    const photos = params.getAll('newPhoto');
+    const video = params.get('newVideo') ?? undefined;
+    if ((!photos.length && !video) || !manager) return;
     setNewPhoto(photos);
+    setNewVideo(video);
     setEditing('new');
     window.history.replaceState(null, '', window.location.pathname);
   }, [manager]);
@@ -141,6 +146,7 @@ export default function CatalogPage() {
               key={current?.id ?? 'new'}
               product={current}
               initialPhoto={current ? undefined : newPhoto}
+              initialVideo={current ? undefined : newVideo}
               onClose={() => setEditing(undefined)}
               onPost={current ? () => setPosting(current) : undefined}
               onSaved={(p, message) => {
@@ -200,6 +206,7 @@ function variantsOf(g: Grid) {
 function Editor({
   product,
   initialPhoto,
+  initialVideo,
   onClose,
   onSaved,
   onPost,
@@ -207,6 +214,7 @@ function Editor({
   product?: Product;
   /** A photo to start a new product with. */
   initialPhoto?: string[];
+  initialVideo?: string;
   onClose: () => void;
   onSaved: (p: Product | null, message: string) => void;
   /** Opens the Facebook post composer for the saved product. */
@@ -217,10 +225,11 @@ function Editor({
   const upload = useUpload();
   const file = useRef<HTMLInputElement>(null);
   const videoFile = useRef<HTMLInputElement>(null);
-  const [videoUrl, setVideoUrl] = useState(product?.videoUrl ?? '');
+  const [videoUrl, setVideoUrl] = useState(product?.videoUrl ?? initialVideo ?? '');
   const [videoLink, setVideoLink] = useState('');
   const [videoUploading, setVideoUploading] = useState(false);
   const [pickingVideo, setPickingVideo] = useState(false);
+  const [pickingPhotos, setPickingPhotos] = useState(false);
   const [title, setTitle] = useState(product?.title ?? '');
   const [code, setCode] = useState(product?.code ?? '');
   const [description, setDescription] = useState(product?.description ?? '');
@@ -424,16 +433,24 @@ function Editor({
           <button type="button" className="btn sm" onClick={() => file.current?.click()} disabled={busy || shownImages.length >= MAX_PHOTOS}>
             {uploading ? `Uploading ${uploading.done + 1} of ${uploading.of}…` : 'Upload photos'}
           </button>
+          <button type="button" className="btn sm" onClick={() => setPickingPhotos(true)} disabled={busy || shownImages.length >= MAX_PHOTOS}>
+            Add photo
+          </button>
           <input ref={file} type="file" multiple accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => pickPhotos([...(e.target.files ?? [])])} />
         </div>
-        <GeneratedPhotos
-          ws={ws}
-          full={shownImages.length >= MAX_PHOTOS}
-          have={shownImages.map((i) => i.url)}
-          // Photos added while one colour is chosen are tagged with it.
-          onAdd={(url) => setImages((cur) => [...cur, { url, color: photoColor }])}
-          onRemove={(url) => setImages(shownImages.filter((x) => x.url !== url))}
-        />
+        {pickingPhotos && (
+          <GeneratedPhotos
+            ws={ws}
+            room={MAX_PHOTOS - shownImages.length}
+            have={shownImages.map((i) => i.url)}
+            onClose={() => setPickingPhotos(false)}
+            // Photos added while one colour is chosen are tagged with it.
+            onAdd={(urls) => {
+              setImages((cur) => [...cur, ...urls.map((url) => ({ url, color: photoColor }))]);
+              setPickingPhotos(false);
+            }}
+          />
+        )}
         <span style={{ display: 'flex', gap: 6 }}>
           <input className="input" aria-label="Photo link" placeholder="or paste a photo link" value={photoLink} onChange={(e) => setPhotoLink(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addLink())} style={{ height: 34, fontSize: 13, flex: 1, minWidth: 0 }} />
           <button type="button" className="btn sm" onClick={addLink} disabled={!photoLink.trim()}>
@@ -587,26 +604,27 @@ function Editor({
 }
 
 /**
- * Every finished generated image, newest first, listed in the form (no popup):
- * "Use this photo" adds it to the product, tapping again takes it off.
+ * "Add photo" popup: every finished generated image, newest first. Tap photos to
+ * pick them (photos already on the product are marked), then add them all at once.
  */
 function GeneratedPhotos({
   ws,
-  full,
+  room,
   have,
+  onClose,
   onAdd,
-  onRemove,
 }: {
   ws: string;
-  full: boolean;
+  room: number;
   have: string[];
-  onAdd: (url: string) => void;
-  onRemove: (url: string) => void;
+  onClose: () => void;
+  onAdd: (urls: string[]) => void;
 }) {
   const api = useApi();
   const [images, setImages] = useState<{ id: string; resultImageUrl: string | null; status: string; createdAt: string }[]>();
   const [error, setError] = useState<string>();
   const [shown, setShown] = useState(12);
+  const [picked, setPicked] = useState<string[]>([]);
   useEffect(() => {
     api<{ images: NonNullable<typeof images> }>(`${ws}/try-on`)
       .then((r) =>
@@ -614,55 +632,68 @@ function GeneratedPhotos({
       )
       .catch((e: Error) => setError(e.message));
   }, [api, ws]);
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', esc);
+    return () => window.removeEventListener('keydown', esc);
+  }, [onClose]);
+  const full = picked.length >= room;
+  const toggle = (url: string) => setPicked((cur) => (cur.includes(url) ? cur.filter((u) => u !== url) : cur.length < room ? [...cur, url] : cur));
   return (
-    <div className="gen-photos">
-      <strong>Your generated photos</strong>
-      {error && <Notice tone="error">{error}</Notice>}
-      {!images && !error && <Loading />}
-      {images?.length === 0 && (
-        <small className="muted">
-          No generated images yet. <a href="/generate-image">Make one with Generate image</a>.
-        </small>
-      )}
-      {!!images?.length && (
-        <div className="results lib-cards pick-cards">
-          {images.slice(0, shown).map((i) => {
-            const url = i.resultImageUrl!;
-            const added = have.includes(url);
-            return (
-              <div key={i.id} className={`result${added ? ' sel' : ''}`}>
-                <button
-                  type="button"
-                  className="ph"
-                  disabled={!added && full}
-                  aria-pressed={added}
-                  aria-label={added ? 'Remove from this product' : 'Add to this product'}
-                  onClick={() => (added ? onRemove(url) : onAdd(url))}
-                >
-                  <img src={url} alt="" loading="lazy" />
-                  <span className="lib-check">{added ? '✓' : ''}</span>
-                </button>
-                <div className="info">
+    <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="dialog wide photo-pick" role="dialog" aria-modal="true" aria-label="Add photo">
+        <h2>Add photo</h2>
+        {error && <Notice tone="error">{error}</Notice>}
+        {!images && !error && <Loading />}
+        {images?.length === 0 && (
+          <Empty>
+            No generated images yet. <a href="/generate-image">Make one with Generate image</a>.
+          </Empty>
+        )}
+        {!!images?.length && (
+          <div className="results lib-cards pick-cards">
+            {images.slice(0, shown).map((i) => {
+              const url = i.resultImageUrl!;
+              const already = have.includes(url);
+              const n = picked.indexOf(url);
+              return (
+                <div key={i.id} className={`result${n >= 0 || already ? ' sel' : ''}`}>
                   <button
                     type="button"
-                    className={`btn sm${added ? '' : ' primary'}`}
-                    disabled={!added && full}
-                    onClick={() => (added ? onRemove(url) : onAdd(url))}
+                    className="ph"
+                    disabled={already || (n < 0 && full)}
+                    aria-pressed={n >= 0}
+                    aria-label={already ? 'Already on this product' : n >= 0 ? 'Unselect photo' : 'Select photo'}
+                    onClick={() => toggle(url)}
                   >
-                    {added ? 'Added ✓' : 'Use this photo'}
+                    <img src={url} alt="" loading="lazy" />
+                    <span className="lib-check">{already ? '✓' : n >= 0 ? n + 1 : ''}</span>
                   </button>
+                  {already && (
+                    <div className="info">
+                      <small className="muted">On this product</small>
+                    </div>
+                  )}
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
+        )}
+        {images && images.length > shown && (
+          <button type="button" className="btn sm" style={{ alignSelf: 'center' }} onClick={() => setShown((n) => n + 12)}>
+            Show more ({images.length - shown} more)
+          </button>
+        )}
+        {full && room > 0 && <small className="muted">A product can have {MAX_PHOTOS} photos, so you can pick {room} more.</small>}
+        <div className="buttons">
+          <button type="button" className="btn" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="button" className="btn primary" disabled={!picked.length} onClick={() => onAdd(picked)}>
+            {picked.length ? `Add ${picked.length} photo${picked.length === 1 ? '' : 's'}` : 'Add photo'}
+          </button>
         </div>
-      )}
-      {images && images.length > shown && (
-        <button type="button" className="btn sm" style={{ alignSelf: 'center' }} onClick={() => setShown((n) => n + 12)}>
-          Show more ({images.length - shown} more)
-        </button>
-      )}
-      {full && <small className="muted">This product has {MAX_PHOTOS} photos, the most it can have. Remove one to add another.</small>}
+      </div>
     </div>
   );
 }
