@@ -643,7 +643,6 @@ function GeneratedPhotos({
                   <span className="lib-check">{added ? '✓' : ''}</span>
                 </button>
                 <div className="info">
-                  <small className="muted lib-date">{new Date(i.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</small>
                   <button
                     type="button"
                     className={`btn sm${added ? '' : ' primary'}`}

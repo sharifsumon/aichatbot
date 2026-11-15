@@ -42,10 +42,6 @@ function duration(sec: number | null) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-function shortDate(iso: string) {
-  return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-}
-
 /**
  * Media library: every image and video the shop made with models, in one place.
  * Pick some and post them on the Page, or add one to a product.
@@ -248,9 +244,7 @@ export default function MediaLibraryPage() {
                       </a>
                     </div>
                     <div className="info">
-                      <strong>
-                        {isOwn(i) ? 'Your model' : 'AI model'} · {shortDate(i.createdAt)}
-                      </strong>
+                      <strong>{isOwn(i) ? 'Your model' : 'AI model'}</strong>
                     </div>
                   </div>
                 );
@@ -280,12 +274,11 @@ export default function MediaLibraryPage() {
                         ↓
                       </a>
                     </div>
-                    <div className="info">
-                      <strong>
-                        {v.durationSec ? `${duration(v.durationSec)} · ` : ''}
-                        {shortDate(v.createdAt)}
-                      </strong>
-                    </div>
+                    {v.durationSec ? (
+                      <div className="info">
+                        <strong>{duration(v.durationSec)}</strong>
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}
