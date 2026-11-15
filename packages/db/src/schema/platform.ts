@@ -168,7 +168,8 @@ export const modelCharacters = pgTable(
   {
     id: id(),
     name: text().notNull(),
-    gender: modelGenderEnum().notNull(),
+    // Set for platform models; a shop's own model has none (the shop does not pick one).
+    gender: modelGenderEnum(),
     imageUrl: text().notNull(),
     /** The stored object's key, so the photo can be deleted with the model. */
     imageKey: text(),
