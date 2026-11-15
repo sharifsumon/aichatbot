@@ -509,3 +509,28 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
 .gen-chosen { display: flex; align-items: center; gap: 10px; }
 .gen-chosen img { width: 48px; height: 64px; border-radius: 8px; object-fit: cover; background: var(--line-soft); }
 .gen-chosen span { display: flex; flex-direction: column; gap: 2px; margin-right: auto; font-size: 14px; }
+
+/* Generate image: photo type, looks, sizes, prompt preview */
+.gen-upload { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
+.gen-upload .garment { width: 160px; flex: 0 0 160px; }
+.gen-types { display: flex; gap: 10px; flex-wrap: wrap; }
+.gen-types button { flex: 1 1 170px; min-height: 76px; padding: 12px 14px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--surface); text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 4px; color: var(--text); font: inherit; }
+.gen-types button strong { font-size: 14px; color: var(--ink); }
+.gen-types button span { font-size: 12px; color: var(--muted); }
+.gen-types button.on, .gen-looks button.on, .gen-sizes button.on { border-color: var(--brand); background: var(--brand-soft); box-shadow: 0 0 0 3px #e4e0ff; }
+.gen-looks { display: flex; gap: 10px; overflow-x: auto; padding: 2px 2px 6px; }
+.gen-looks button { flex: 0 0 120px; padding: 0; border-radius: 14px; border: 1.5px solid var(--line); background: var(--surface); cursor: pointer; overflow: hidden; text-align: left; font: inherit; color: var(--ink); }
+.gen-looks .sw { display: block; height: 72px; }
+.gen-looks .lb { display: block; padding: 8px 10px; font-size: 12px; font-weight: 600; }
+.gen-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.gen-sizes { display: flex; gap: 10px; flex-wrap: wrap; }
+.gen-sizes button { flex: 1 1 100px; min-height: 76px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--surface); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 8px; font: inherit; color: var(--text); }
+.gen-sizes .box { display: block; border: 2px solid var(--brand); border-radius: 4px; }
+.gen-sizes strong { font-size: 12px; }
+.gen-sizes span:last-child { font-size: 11px; color: var(--muted); }
+.gen-prompt { border: 1px solid var(--line); border-radius: 12px; background: var(--line-soft); }
+.gen-prompt button { width: 100%; min-height: 44px; display: flex; justify-content: space-between; align-items: center; padding: 0 14px; background: none; border: 0; font: 600 13px inherit; color: var(--text); cursor: pointer; }
+.gen-prompt p { margin: 0; padding: 0 14px 14px; font-size: 13px; line-height: 1.55; color: var(--text); }
+.gen-preview { max-height: 480px; border: 2px dashed var(--line); border-radius: 16px; background: var(--grad-soft); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 16px; text-align: center; color: var(--muted); }
+.gen-preview span { font-weight: 700; color: var(--brand-dark); }
+.gen-preview small { font-size: 12px; max-width: 260px; }

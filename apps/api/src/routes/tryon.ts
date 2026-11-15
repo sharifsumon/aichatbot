@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { and, asc, desc, eq, isNull, lt, or, sql } from 'drizzle-orm';
 import type { FastifyBaseLogger, FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import { GARMENT_CATEGORIES, TRYON_STYLES, TryOnError, type TryOnProvider, type TryOnStyle } from '@agently/ai';
+import { GARMENT_CATEGORIES, TRYON_ASPECTS, TRYON_SHOTS, TRYON_STYLES, TryOnError, tryOnPrompt, type TryOnProvider, type TryOnStyle } from '@agently/ai';
 import { creditsRemaining, recordUsage } from '@agently/billing';
 import { modelCharacters, platformSettings, tryOnImages, type Db } from '@agently/db';
 import { workspaceKey, type ObjectStore } from '@agently/storage';
@@ -23,7 +23,7 @@ export interface TryOnDeps {
 /** Credits one image uses when the super admin has not set tryon.creditsPerImage. */
 export const DEFAULT_TRYON_CREDITS = 10;
 /** A shop can have this many images being made at once. */
-const MAX_RUNNING = 3;
+const MAX_RUNNING = 4;
 /** A run still pending after this long was lost (the API restarted); it shows as failed. */
 const STALE_MS = 5 * 60_000;
 const RUN_TIMEOUT_MS = 4 * 60_000;
@@ -38,9 +38,24 @@ const generateBody = z.object({
   expression: z.enum(Object.keys(TRYON_STYLES.expression) as [string, ...string[]]).optional(),
   camera: z.enum(Object.keys(TRYON_STYLES.camera) as [string, ...string[]]).optional(),
   background: z.enum(Object.keys(TRYON_STYLES.background) as [string, ...string[]]).optional(),
+  surface: z.enum(Object.keys(TRYON_STYLES.surface) as [string, ...string[]]).optional(),
+  lighting: z.enum(Object.keys(TRYON_STYLES.lighting) as [string, ...string[]]).optional(),
+  effects: z.array(z.enum(Object.keys(TRYON_STYLES.effects) as [string, ...string[]])).max(8).optional(),
+  /** Left out: a photo with a model, as before. */
+  shot: z.enum(TRYON_SHOTS as [string, ...string[]]).optional(),
+  aspect: z.enum(TRYON_ASPECTS as unknown as [string, ...string[]]).optional(),
+  /** What the product is, e.g. "iced coffee bottle". */
+  productName: z.string().trim().max(80).optional(),
   /** The shop's own instructions for the photo. */
   note: z.string().trim().max(500).optional(),
 });
+type GenerateBody = z.infer<typeof generateBody>;
+
+/** The choices that shape the photo, leaving out the ones not made. */
+const styleOf = (b: GenerateBody) => {
+  const all = { pose: b.pose, expression: b.expression, camera: b.camera, background: b.background, surface: b.surface, lighting: b.lighting, effects: b.effects, shot: b.shot, aspect: b.aspect };
+  return Object.fromEntries(Object.entries(all).filter(([, v]) => v !== undefined)) as TryOnStyle;
+};
 
 const ownModelBody = z.object({
   name: z.string().trim().min(1).max(60),
@@ -148,6 +163,25 @@ export const tryOnRoutes: FastifyPluginAsync<TryOnDeps> = async (app, deps) => {
   });
 
   /** Starts making an image. Answers at once with a pending image; poll it until it succeeds or fails. */
+
+  /** The words the image AI would get for these choices, shown on the page. Costs nothing. */
+  app.post<{ Params: { workspaceId: string } }>('/workspaces/:workspaceId/try-on/prompt', async (req, reply) => {
+    if (!(await requireRole(db, req, reply, MANAGERS))) return reply;
+    const body = await parseBody(generateBody.extend({ garmentImageUrl: z.string().optional() }), req.body, reply);
+    if (!body) return reply;
+    const withModel = !!body.characterId && body.shot !== 'product';
+    const empty = { bytes: new Uint8Array(), contentType: 'image/jpeg' };
+    const prompt = tryOnPrompt({
+      model: withModel ? empty : undefined,
+      garment: empty,
+      category: body.category as (typeof GARMENT_CATEGORIES)[number],
+      style: styleOf(body as GenerateBody),
+      note: body.note || undefined,
+      productName: body.productName || undefined,
+    });
+    return { prompt };
+  });
+
   app.post<{ Params: { workspaceId: string } }>('/workspaces/:workspaceId/try-on', async (req, reply) => {
     if (!(await requireRole(db, req, reply, MANAGERS))) return reply;
     const { storage, publicFileUrl } = deps;
@@ -170,6 +204,8 @@ export const tryOnRoutes: FastifyPluginAsync<TryOnDeps> = async (app, deps) => {
     const garmentKey = workspaceKey(workspaceId, 'images', name);
 
     let character: { id: string; imageUrl: string; imageKey: string } | undefined;
+    // A product-only photo has no person in it, so a chosen model is left out.
+    if (body.shot === 'product') body.characterId = undefined;
     if (body.characterId) {
       const found = await db.query.modelCharacters.findFirst({ where: and(eq(modelCharacters.id, body.characterId), visibleTo(workspaceId)) });
       if (!found?.imageKey) return reply.code(404).send({ error: 'That model is no longer available' });
@@ -177,7 +213,8 @@ export const tryOnRoutes: FastifyPluginAsync<TryOnDeps> = async (app, deps) => {
     } else {
       // Without a model, the AI creates one from the shop's description.
       if (tryOn.name === 'fashn') return reply.code(400).send({ error: 'Choose a model: this try-on service needs one.' });
-      if (!body.note) return reply.code(400).send({ error: 'Choose a model, or describe the model you want in your own instructions.' });
+      // A product-only or lifestyle photo needs no model; the old flow asks for a description of one.
+      if (!body.shot && !body.note) return reply.code(400).send({ error: 'Choose a model, or describe the model you want in your own instructions.' });
     }
 
     const cost = await creditsPerTryOn(db);
@@ -212,8 +249,9 @@ export const tryOnRoutes: FastifyPluginAsync<TryOnDeps> = async (app, deps) => {
       garmentKey,
       garmentUrl: body.garmentImageUrl,
       category: body.category as (typeof GARMENT_CATEGORIES)[number],
-      style: { pose: body.pose, expression: body.expression, camera: body.camera, background: body.background } as TryOnStyle,
+      style: styleOf(body),
       note: body.note || undefined,
+      productName: body.productName || undefined,
       credits: cost,
     });
     return reply.code(202).send({ image: view(image!) });
@@ -237,7 +275,7 @@ export async function run(
   deps: { db: Db; storage: ObjectStore; publicFileUrl: (key: string) => string; tryOn: TryOnProvider; log: FastifyBaseLogger },
   imageId: string,
   workspaceId: string,
-  job: { modelKey?: string; modelUrl?: string; garmentKey: string; garmentUrl?: string; category: (typeof GARMENT_CATEGORIES)[number]; style?: TryOnStyle; note?: string; credits: number },
+  job: { modelKey?: string; modelUrl?: string; garmentKey: string; garmentUrl?: string; category: (typeof GARMENT_CATEGORIES)[number]; style?: TryOnStyle; note?: string; productName?: string; credits: number },
 ): Promise<void> {
   const { db, storage, tryOn } = deps;
   const usageModel = `tryon:${tryOn.model}`;
@@ -250,6 +288,7 @@ export async function run(
         category: job.category,
         style: job.style,
         note: job.note,
+        productName: job.productName,
       },
       AbortSignal.timeout(RUN_TIMEOUT_MS),
     );
