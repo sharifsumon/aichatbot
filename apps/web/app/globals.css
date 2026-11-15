@@ -537,3 +537,60 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
 .gen-preview { max-height: 480px; border: 2px dashed var(--line); border-radius: 16px; background: var(--grad-soft); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 16px; text-align: center; color: var(--muted); }
 .gen-preview span { font-weight: 700; color: var(--brand-dark); }
 .gen-preview small { font-size: 12px; max-width: 260px; }
+
+/* Shared elements (reference: the onboarding "train your AI agent" screen).
+   Option cards with a radio, an icon tile and a badge; outlined pill chips with a tick;
+   soft inner panels; 48px inputs with a brand focus ring; white secondary and gradient primary buttons. */
+.card.pad { padding: 24px; gap: 14px; }
+.card h2 { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; }
+.field input, .field select, .input { height: 46px; border-radius: 12px; border-color: #e4e7ec; }
+.field textarea { border-radius: 12px; border-color: #e4e7ec; }
+.field input:focus, .field select:focus, .field textarea:focus, .input:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 4px rgba(99, 102, 241, .12); }
+.btn { height: 44px; padding: 0 18px; border-color: #e4e7ec; color: var(--ink); }
+.btn.sm { height: 34px; padding: 0 12px; }
+.btn:not(.primary):not(.danger):hover:not(:disabled) { border-color: #c7c9f9; }
+.lib-bar .btn:not(.primary):not(.danger):hover:not(:disabled) { border-color: #475569; }
+
+.chip { height: 40px; padding: 0 16px; display: inline-flex; align-items: center; gap: 8px; border: 1px solid #e4e7ec; background: var(--surface); color: var(--ink); font-size: 14px; font-weight: 500; }
+.chip:hover { border-color: #c7c9f9; }
+.chip.on, .chip.on:hover { background: #eef0ff; border-color: #6366f1; color: var(--brand-dark); font-weight: 600; }
+.chip.on::after { content: ''; width: 10px; height: 6px; border-left: 1.75px solid #12b76a; border-bottom: 1.75px solid #12b76a; transform: rotate(-45deg) translateY(-2px); }
+
+.opt { position: relative; display: flex; align-items: center; gap: 14px; width: 100%; padding: 16px 18px; border-radius: 16px; border: 1px solid #e4e7ec; background: var(--surface); text-align: left; cursor: pointer; font: inherit; color: var(--text); transition: border-color .15s, box-shadow .15s; }
+.opt:hover { border-color: #c7c9f9; }
+.opt.on { border-color: #6366f1; box-shadow: 0 0 0 4px rgba(99, 102, 241, .1); }
+.opt-radio { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid #d0d5dd; background: #fff; }
+.opt.on .opt-radio { border: 1.5px solid #6366f1; box-shadow: inset 0 0 0 4px #fff; background: #6366f1; }
+.opt-icon { flex: none; width: 44px; height: 44px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; background: #eef0ff; color: var(--brand); }
+.opt-icon svg { width: 22px; height: 22px; }
+.opt-icon.blue { background: #e0f2fe; color: #0ea5e9; }
+.opt-icon.violet { background: #f3e8ff; color: #9333ea; }
+.opt-icon.amber { background: #fff7ed; color: #f97316; }
+.opt-icon.green { background: #dcfce7; color: #16a34a; }
+.opt-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.opt-text strong { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 15px; font-weight: 700; color: var(--ink); }
+.opt-text > span { font-size: 13px; color: var(--muted); }
+.badge-rec { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 10px; border-radius: 999px; background: #ecfdf3; color: #067647; font-size: 12px; font-weight: 600; }
+.badge-rec::before { content: '\2726'; font-size: 11px; }
+
+/* Generate image uses the shared option cards and soft panels. */
+.gen-types { flex-direction: column; gap: 12px; }
+.gen-types button.opt { flex: none; min-height: 0; flex-direction: row; gap: 14px; padding: 16px 18px; border-radius: 16px; border: 1px solid #e4e7ec; }
+.gen-types button.opt.on { border-color: #6366f1; }
+.gen-types button.opt.on { background: var(--surface); }
+.gen-looks button, .gen-sizes button { border: 1px solid #e4e7ec; border-radius: 16px; }
+.gen-looks button.on, .gen-sizes button.on { border-color: #6366f1; background: var(--surface); box-shadow: 0 0 0 4px rgba(99, 102, 241, .1); }
+.gen-model, .gen-prompt, .tryon fieldset.style { background: #f9fafc; border-color: #e9eaf3; border-radius: 14px; padding: 16px; }
+.gen-prompt { padding: 0; }
+.garment { border: 1.5px dashed #d0d5dd; border-radius: 14px; background: #f9fafc; }
+.garment:hover:not(:disabled) { border-color: #6366f1; background: #f5f5ff; }
+.garment-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; color: var(--muted); }
+.garment-empty strong { color: var(--ink); font-size: 14px; }
+.garment-empty small { font-size: 12px; }
+.pick button { border-width: 1px; border-color: #e4e7ec; border-radius: 14px; }
+.pick button.on { border-color: #6366f1; box-shadow: 0 0 0 4px rgba(99, 102, 241, .1); }
+/* Buttons on the image pages follow the shared style (white, and gradient for the main action). */
+.tryon-page .btn:not(.link) { background: var(--surface); border-color: #e4e7ec; color: var(--ink); }
+.tryon-page .btn:not(.link):hover:not(:disabled) { background: #f9fafb; border-color: #c7c9f9; color: var(--ink); }
+.tryon-page .btn.primary, .tryon-page .btn.primary:hover:not(:disabled) { background: var(--grad); border-color: transparent; color: #fff; box-shadow: var(--glow); }
+.tryon-page .btn.link { color: var(--brand-dark); }

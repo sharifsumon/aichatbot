@@ -77,6 +77,12 @@ export const Icon = {
       <path d="M21 16l-5-5-9 9" />
     </Svg>
   ),
+  upload: () => (
+    <Svg>
+      <path d="M12 15V4M7.5 8.5 12 4l4.5 4.5" />
+      <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+    </Svg>
+  ),
   sparkle: () => (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
       <path d="M12 2l2.4 7.6L22 12l-7.6 2.4L12 22l-2.4-7.6L2 12l7.6-2.4z" />

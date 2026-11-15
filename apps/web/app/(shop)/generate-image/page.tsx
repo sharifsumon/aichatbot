@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useShop } from '@/components/Shell';
 import { AddToProduct } from '@/components/AddToProduct';
+import { Icon } from '@/components/icons';
 import { Empty, Loading, Notice, Pill, TopBar } from '@/components/ui';
 import { ApiError, qs, useApi, useLoad, useUpload } from '@/lib/api';
 import { shrinkImage } from '@/lib/image';
@@ -34,10 +35,10 @@ type Lighting = '' | 'studio' | 'daylight' | 'golden' | 'evening' | 'rim' | 'neo
 type Camera = '' | 'front' | 'shallow' | 'three-quarter' | 'top' | 'low' | 'macro' | 'full';
 type Effect = 'splash' | 'condensation' | 'drops' | 'ice' | 'smoke' | 'fruit' | 'petals' | 'sparkles';
 
-const SHOTS: { value: Shot; label: string; hint: string }[] = [
-  { value: 'product', label: 'Product only', hint: 'A studio ad of the product, no person' },
-  { value: 'model', label: 'With a model', hint: 'A model wears, holds or uses it' },
-  { value: 'lifestyle', label: 'Lifestyle scene', hint: 'The product in a real moment, by a pool or at a table' },
+const SHOTS: { value: Shot; label: string; hint: string; icon: keyof typeof Icon; tone: string; recommended?: boolean }[] = [
+  { value: 'product', label: 'Product only', hint: 'A studio ad of the product, no person', icon: 'catalog', tone: 'blue' },
+  { value: 'model', label: 'With a model', hint: 'A model wears, holds or uses it', icon: 'models', tone: 'violet', recommended: true },
+  { value: 'lifestyle', label: 'Lifestyle scene', hint: 'The product in a real moment, by a pool or at a table', icon: 'images', tone: 'amber' },
 ];
 
 interface Look {
@@ -420,7 +421,19 @@ export default function GenerateImagePage() {
               <h2>1. Upload your product</h2>
               <div className="gen-upload">
                 <button type="button" className="garment" onClick={() => file.current?.click()} disabled={uploading}>
-                  {garment ? <img src={garment} alt="Your product" /> : uploading ? 'Uploading…' : '+ Choose a photo'}
+                  {garment ? (
+                    <img src={garment} alt="Your product" />
+                  ) : uploading ? (
+                    'Uploading…'
+                  ) : (
+                    <span className="garment-empty">
+                      <span className="opt-icon blue" aria-hidden="true">
+                        <Icon.upload />
+                      </span>
+                      <strong>Choose a photo</strong>
+                      <small>JPG, PNG or WebP</small>
+                    </span>
+                  )}
                 </button>
                 <input ref={file} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => pickGarment(e.target.files?.[0])} />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: '1 1 220px', minWidth: 0 }}>
@@ -446,19 +459,32 @@ export default function GenerateImagePage() {
             <section className="card pad" aria-label="Photo type">
               <h2>2. Photo type</h2>
               {styleOptions && (
-                <div className="gen-types">
-                  {SHOTS.map((s) => (
-                    <button
-                      key={s.value}
-                      type="button"
-                      className={kind === s.value ? 'on' : ''}
-                      aria-pressed={kind === s.value}
-                      onClick={() => setShot(s.value)}
-                    >
-                      <strong>{s.label}</strong>
-                      <span>{s.hint}</span>
-                    </button>
-                  ))}
+                <div className="gen-types" role="radiogroup" aria-label="Photo type">
+                  {SHOTS.map((s) => {
+                    const ShotIcon = Icon[s.icon];
+                    return (
+                      <button
+                        key={s.value}
+                        type="button"
+                        role="radio"
+                        className={`opt${kind === s.value ? ' on' : ''}`}
+                        aria-checked={kind === s.value}
+                        onClick={() => setShot(s.value)}
+                      >
+                        <span className="opt-radio" aria-hidden="true" />
+                        <span className={`opt-icon ${s.tone}`} aria-hidden="true">
+                          <ShotIcon />
+                        </span>
+                        <span className="opt-text">
+                          <strong>
+                            {s.label}
+                            {s.recommended && <span className="badge-rec">Recommended</span>}
+                          </strong>
+                          <span>{s.hint}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
               {kind !== 'product' && setup.data && <ModelGrid models={setup.data.models} current={model} onPick={setModel} />}
