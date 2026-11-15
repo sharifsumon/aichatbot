@@ -328,6 +328,8 @@ export async function runVideo(
     const key = workspaceKey(workspaceId, 'videos', `${randomUUID()}.mp4`);
     await storage.put(key, result.video.bytes, result.video.contentType);
     const credits = Math.ceil(result.durationSec || job.seconds) * job.creditsPerSecond;
+    // Recorded before the video shows as done, so whoever sees it done also sees it paid for.
+    await recordUsage(db, { workspaceId, model: usageModel, aiReplies: credits, inputTokens: 0, outputTokens: 0, costUsd: result.costUsd });
     await db
       .update(modelVideos)
       .set({
@@ -339,7 +341,6 @@ export async function runVideo(
         finishedAt: new Date(),
       })
       .where(eq(modelVideos.id, videoId));
-    await recordUsage(db, { workspaceId, model: usageModel, aiReplies: credits, inputTokens: 0, outputTokens: 0, costUsd: result.costUsd });
   } catch (err) {
     deps.log.warn({ err, videoId }, 'Model video failed');
     const message = err instanceof TryOnError ? err.userMessage : 'Something went wrong making this video. Try again.';
