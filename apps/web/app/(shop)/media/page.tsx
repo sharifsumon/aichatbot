@@ -7,7 +7,7 @@ import { AddToProduct } from '@/components/AddToProduct';
 import { useShop } from '@/components/Shell';
 import { Icon } from '@/components/icons';
 import { Chips, Empty, Loading, Notice, TopBar } from '@/components/ui';
-import { useLoad } from '@/lib/api';
+import { useApi, useLoad } from '@/lib/api';
 import { sendToPost } from '@/lib/postMedia';
 
 type Tab = 'images' | 'videos';
@@ -54,6 +54,9 @@ export default function MediaLibraryPage() {
   const [picked, setPicked] = useState<string[]>([]);
   const [adding, setAdding] = useState<string>();
   const [done, setDone] = useState<string>();
+  const [error, setError] = useState<string>();
+  const [deleting, setDeleting] = useState(false);
+  const api = useApi();
   const models = useLoad<{ models: Model[] }>(manager ? `${ws}/try-on/models` : null);
   const images = useLoad<{ images: TryOnImage[] }>(manager ? `${ws}/try-on` : null);
   const videos = useLoad<{ videos: Video[] }>(manager ? `${ws}/videos` : null);
@@ -94,6 +97,32 @@ export default function MediaLibraryPage() {
   function toggle(id: string) {
     if (tab === 'videos') return setPicked((cur) => (cur[0] === id ? [] : [id]));
     setPicked((cur) => (cur.includes(id) ? cur.filter((u) => u !== id) : cur.length >= MAX_PHOTOS ? cur : [...cur, id]));
+  }
+
+  /** Removes the picked items from the library. A copy already added to a product or a post stays there. */
+  async function remove() {
+    const what =
+      tab === 'videos'
+        ? picked.length > 1
+          ? `these ${picked.length} videos`
+          : 'this video'
+        : picked.length > 1
+          ? `these ${picked.length} images`
+          : 'this image';
+    if (!window.confirm(`Delete ${what} from your Media library? This can't be undone. Products and posts that already use it keep their copy.`)) return;
+    setDeleting(true);
+    setError(undefined);
+    setDone(undefined);
+    try {
+      for (const id of picked) await api(tab === 'videos' ? `${ws}/videos/${id}` : `${ws}/try-on/${id}`, { method: 'DELETE' });
+      setDone(`Deleted ${what.replace(/^(these|this) /, 'the ')}.`);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setPicked([]);
+      setDeleting(false);
+      (tab === 'videos' ? reloadVideos : reloadImages)();
+    }
   }
 
   function post() {
@@ -159,6 +188,7 @@ export default function MediaLibraryPage() {
         )}
 
         {done && <Notice tone="ok">{done}</Notice>}
+        {error && <Notice tone="error">{error}</Notice>}
         {load.error && <Notice tone="error">{load.error}</Notice>}
         {load.loading && !load.data && <Loading />}
 
@@ -189,7 +219,14 @@ export default function MediaLibraryPage() {
                 const url = i.resultImageUrl!;
                 const n = picked.indexOf(i.id);
                 return (
-                  <button key={i.id} type="button" className={`lib-item${n >= 0 ? ' sel' : ''}`} aria-pressed={n >= 0} aria-label={n >= 0 ? 'Unselect image' : 'Select image'} onClick={() => toggle(i.id)}>
+                  <button
+                    key={i.id}
+                    type="button"
+                    className={`lib-item${n >= 0 ? ' sel' : ''}`}
+                    aria-pressed={n >= 0}
+                    aria-label={n >= 0 ? 'Unselect image' : 'Select image'}
+                    onClick={() => toggle(i.id)}
+                  >
                     <img src={url} alt="" loading="lazy" />
                     <span className="lib-check">{n >= 0 ? n + 1 : ''}</span>
                     <span className="lib-tag">{isOwn(i) ? 'Your model' : 'AI model'}</span>
@@ -200,7 +237,14 @@ export default function MediaLibraryPage() {
                 const url = v.resultVideoUrl!;
                 const on = picked[0] === v.id;
                 return (
-                  <button key={v.id} type="button" className={`lib-item${on ? ' sel' : ''}`} aria-pressed={on} aria-label={on ? 'Unselect video' : 'Select video'} onClick={() => toggle(v.id)}>
+                  <button
+                    key={v.id}
+                    type="button"
+                    className={`lib-item${on ? ' sel' : ''}`}
+                    aria-pressed={on}
+                    aria-label={on ? 'Unselect video' : 'Select video'}
+                    onClick={() => toggle(v.id)}
+                  >
                     <video src={url} poster={v.sourceImageUrl} preload="none" muted playsInline />
                     <span className="lib-play" aria-hidden="true">
                       <span>
@@ -232,11 +276,16 @@ export default function MediaLibraryPage() {
           <button
             type="button"
             className="btn sm"
-            disabled={pickedUrls.length !== 1}
-            title={pickedUrls.length !== 1 ? 'Pick one image to add it to a product' : undefined}
-            onClick={() => setAdding(pickedUrls[0])}
+            disabled={tab === 'videos' && pickedUrls.length !== 1}
+            onClick={() =>
+              // Images open "Add a product" with the picked photos, in the order picked.
+              tab === 'videos' ? setAdding(pickedUrls[0]) : router.push(`/catalog?${new URLSearchParams(pickedUrls.map((u) => ['newPhoto', u])).toString()}`)
+            }
           >
             Add to product
+          </button>
+          <button type="button" className="btn sm danger" disabled={deleting} onClick={remove}>
+            {deleting ? 'Deleting…' : 'Delete'}
           </button>
           <button type="button" className="btn sm primary" onClick={post}>
             Post on Page
