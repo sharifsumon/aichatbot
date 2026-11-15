@@ -665,3 +665,12 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
   .gen-actions, .gen-go { justify-content: stretch; }
   .gen-go .btn.lg { flex: 1 1 auto; }
 }
+
+/* Catalog: while adding or editing a product, the form takes 60% of the width and the list 40%. */
+.catalog.editing { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }
+.catalog.editing .editor { max-width: none; }
+.catalog.editing .products { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+@media (max-width: 960px) {
+  .catalog.editing { grid-template-columns: minmax(0, 1fr); }
+  .catalog.editing .editor { order: -1; position: static; max-height: none; }
+}
