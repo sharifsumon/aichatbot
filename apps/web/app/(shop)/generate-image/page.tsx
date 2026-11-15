@@ -10,7 +10,6 @@ import { ApiError, qs, useApi, useLoad, useUpload } from '@/lib/api';
 import { shrinkImage } from '@/lib/image';
 
 type Gender = 'female' | 'male';
-type Category = 'auto' | 'tops' | 'bottoms' | 'one-pieces';
 interface Model {
   id: string;
   name: string;
@@ -28,13 +27,6 @@ interface TryOnImage {
   error: string | null;
   createdAt: string;
 }
-
-const CATEGORIES: { value: Category; label: string }[] = [
-  { value: 'auto', label: 'Let the AI decide' },
-  { value: 'one-pieces', label: 'Full outfit (dress, saree, kameez set)' },
-  { value: 'tops', label: 'Top (shirt, kurti, t-shirt)' },
-  { value: 'bottoms', label: 'Bottom (pants, skirt, palazzo)' },
-];
 
 type Pose = '' | 'standing' | 'walking' | 'sitting' | 'hand-on-hip' | 'side' | 'back';
 type Expression = '' | 'smile' | 'laughing' | 'neutral' | 'confident';
@@ -82,24 +74,13 @@ const MAX_NOTE = 500;
 /** Same limit as the API: product photos are at most 5 MB after shrinking. */
 const MAX_PHOTO_MB = 5;
 
-/** Popup with every model to choose from. */
-function ModelPicker({ models, current, onPick, onClose }: { models: Model[]; current?: Model; onPick: (m: Model) => void; onClose: () => void }) {
+/** Every model, shown under "Use a model" to pick from. Tapping the chosen one again unselects it. */
+function ModelGrid({ models, current, onPick }: { models: Model[]; current?: Model; onPick: (m: Model | undefined) => void }) {
   const [gender, setGender] = useState<Gender | 'all'>('all');
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
   const shown = models.filter((m) => gender === 'all' || m.gender === gender);
   return (
-    <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="dialog wide tryon-page" role="dialog" aria-modal="true" aria-label="Choose a model">
-        <div className="card-head">
-          <h2>Choose a model</h2>
-          <Link href="/model-images?add=model" className="btn sm light">
-            + Add your own model
-          </Link>
-        </div>
+    <>
+      <div className="card-head">
         <Chips
           label="Show"
           value={gender}
@@ -110,43 +91,50 @@ function ModelPicker({ models, current, onPick, onClose }: { models: Model[]; cu
             { value: 'male', label: 'Men' },
           ]}
         />
-        {shown.length === 0 && <Empty>No models here yet.</Empty>}
-        <div className="pick">
-          {shown.map((m) => (
-            <button key={m.id} type="button" className={current?.id === m.id ? 'on' : ''} aria-pressed={current?.id === m.id} onClick={() => onPick(m)}>
-              <img src={m.imageUrl} alt="" loading="lazy" />
-              <span>
-                {m.name}
-                {m.own && ' · Yours'}
-              </span>
-            </button>
-          ))}
-        </div>
-        <div className="buttons">
-          <button type="button" className="btn" onClick={onClose}>
-            Cancel
-          </button>
-        </div>
+        <Link href="/model-images?add=model" className="btn sm light">
+          + Add your own model
+        </Link>
       </div>
-    </div>
+      {shown.length === 0 && <Empty>No models here yet.</Empty>}
+      <div className="pick">
+        {shown.map((m) => (
+          <button
+            key={m.id}
+            type="button"
+            className={current?.id === m.id ? 'on' : ''}
+            aria-pressed={current?.id === m.id}
+            onClick={() => onPick(current?.id === m.id ? undefined : m)}
+          >
+            <img src={m.imageUrl} alt="" loading="lazy" />
+            <span>
+              {m.name}
+              {m.own && ' · Yours'}
+            </span>
+          </button>
+        ))}
+      </div>
+    </>
   );
 }
 
 /**
- * Generate image: upload a photo of the dress, optionally pick a model, and
- * the AI makes a photo of the model wearing it.
+ * Generate image: upload a photo of the product, optionally pick a model, and
+ * the AI makes a photo of the model with it. The AI decides what kind of product it is.
  */
 export default function GenerateImagePage() {
   const { ws, manager, reloadHome } = useShop();
   const api = useApi();
   const upload = useUpload();
   const router = useRouter();
-  const setup = useLoad<{ models: Model[]; enabled: boolean; creditsPerImage: number; styleOptions?: boolean }>(manager ? `${ws}/try-on/models` : null);
+  const setup = useLoad<{
+    models: Model[];
+    enabled: boolean;
+    creditsPerImage: number;
+    styleOptions?: boolean;
+  }>(manager ? `${ws}/try-on/models` : null);
   const [useModel, setUseModel] = useState(false);
-  const [picking, setPicking] = useState(false);
   const [model, setModel] = useState<Model>();
   const [garment, setGarment] = useState<string>();
-  const [category, setCategory] = useState<Category>('auto');
   const [pose, setPose] = useState<Pose>('');
   const [expression, setExpression] = useState<Expression>('');
   const [camera, setCamera] = useState<Camera>('');
@@ -236,7 +224,7 @@ export default function GenerateImagePage() {
         body: {
           ...(chosen && { characterId: chosen.id }),
           garmentImageUrl: garment,
-          category,
+          category: 'auto',
           ...(styleOptions && {
             ...(pose && { pose }),
             ...(expression && { expression }),
@@ -260,7 +248,7 @@ export default function GenerateImagePage() {
       <TopBar title="Generate image" back={{ href: '/media', label: 'Media library' }} />
       <div className="content tryon-page">
         <p className="sub" style={{ margin: 0, fontSize: 14 }}>
-          Upload a photo of your dress and the AI makes a photo of a model wearing it. Every image is also saved in your Media library.
+          Upload a photo of your product and the AI makes a photo of a model with it. Every image is also saved in your Media library.
         </p>
         {setup.data && !setup.data.enabled && <Notice tone="warn">Making images with models is not switched on for Agently yet. It will be soon.</Notice>}
         {done && <Notice tone="ok">{done}</Notice>}
@@ -268,127 +256,103 @@ export default function GenerateImagePage() {
         {setup.error && <Notice tone="error">{setup.error}</Notice>}
 
         <div className="tryon">
-          <section className="card pad" aria-label="Upload your dress">
-            <h2>Upload your dress</h2>
-            <button type="button" className="garment" onClick={() => file.current?.click()} disabled={uploading}>
-              {garment ? <img src={garment} alt="Your garment" /> : uploading ? 'Uploading…' : '+ Choose a photo of the garment'}
-            </button>
-            <input ref={file} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => pickGarment(e.target.files?.[0])} />
-            <small className="muted">Best results: the whole garment, flat or on a hanger or mannequin, in good light, nothing covering it.</small>
-            <label className="field">
-              What is it?
-              <select value={category} onChange={(e) => setCategory(e.target.value as Category)}>
-                {CATEGORIES.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+          <div className="tryon-col">
+            <section className="card pad" aria-label="Upload your product">
+              <h2>Upload your product</h2>
+              <button type="button" className="garment" onClick={() => file.current?.click()} disabled={uploading}>
+                {garment ? <img src={garment} alt="Your product" /> : uploading ? 'Uploading…' : '+ Choose a photo of the product'}
+              </button>
+              <input ref={file} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => pickGarment(e.target.files?.[0])} />
+              <small className="muted">Best results: the whole product, flat or on a hanger or mannequin, in good light, nothing covering it.</small>
+            </section>
 
-            <div className="gen-model">
+            <section className="card pad" aria-label="Use a model">
               <label className="gen-check">
                 <input type="checkbox" checked={useModel} onChange={(e) => setUseModel(e.target.checked)} />
-                Use a model
+                <h2 style={{ margin: 0 }}>Use a model</h2>
               </label>
-              {useModel && (
-                <div className="gen-chosen">
-                  {model ? (
-                    <>
-                      <img src={model.imageUrl} alt="" />
-                      <span>
-                        <strong>{model.name}</strong>
-                        <small className="muted">{model.own ? 'Your model' : 'AI model'}</small>
-                      </span>
-                      <button type="button" className="btn sm light" onClick={() => setPicking(true)}>
-                        Change
-                      </button>
-                    </>
-                  ) : (
-                    <button type="button" className="btn sm light" onClick={() => setPicking(true)} disabled={!setup.data}>
-                      Show models
-                    </button>
-                  )}
-                </div>
-              )}
+              {useModel && setup.data && <ModelGrid models={setup.data.models} current={model} onPick={setModel} />}
+              {useModel && !setup.data && <Loading />}
               {!useModel && styleOptions && <small className="muted">No model? Describe one in "Your own instructions" below and the AI creates one.</small>}
-            </div>
+            </section>
 
-            {styleOptions && (
-              <fieldset className="style">
-                <legend>Style (optional)</legend>
-                <label className="field">
-                  Pose
-                  <select value={pose} onChange={(e) => setPose(e.target.value as Pose)}>
-                    {POSES.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="field">
-                  Expression
-                  <select value={expression} onChange={(e) => setExpression(e.target.value as Expression)}>
-                    {EXPRESSIONS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="field">
-                  Camera
-                  <select value={camera} onChange={(e) => setCamera(e.target.value as Camera)}>
-                    {CAMERAS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="field">
-                  Background
-                  <select value={background} onChange={(e) => setBackground(e.target.value as Background)}>
-                    {BACKGROUNDS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="field">
-                  Your own instructions
-                  <textarea
-                    rows={3}
-                    maxLength={MAX_NOTE}
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    placeholder={
-                      chosen
-                        ? 'e.g. holding a small golden clutch, soft evening light, wearing gold earrings'
-                        : 'Describe the model, e.g. a young Bangladeshi woman with long hair, smiling, standing in a garden'
-                    }
-                  />
-                </label>
-                <small className="muted">Write in English for best results. The garment is always copied as it is.</small>
-              </fieldset>
-            )}
-            <button type="button" className="btn primary" disabled={!ready || starting || uploading || !setup.data?.enabled} onClick={generate}>
-              {starting ? 'Starting…' : `Generate image${credits ? ` · ${credits} credits` : ''}`}
-            </button>
-            {!ready && (
-              <small className="muted">
-                {!garment
-                  ? 'Upload the garment photo.'
-                  : useModel && !model
-                    ? 'Choose a model with Show models.'
-                    : styleOptions
-                      ? 'Use a model, or describe the model in your own instructions.'
-                      : 'Use a model first.'}
-              </small>
-            )}
-          </section>
+            <section className="card pad" aria-label="Style and generate">
+              {styleOptions && (
+                <fieldset className="style">
+                  <legend>Style (optional)</legend>
+                  <label className="field">
+                    Pose
+                    <select value={pose} onChange={(e) => setPose(e.target.value as Pose)}>
+                      {POSES.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    Expression
+                    <select value={expression} onChange={(e) => setExpression(e.target.value as Expression)}>
+                      {EXPRESSIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    Camera
+                    <select value={camera} onChange={(e) => setCamera(e.target.value as Camera)}>
+                      {CAMERAS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    Background
+                    <select value={background} onChange={(e) => setBackground(e.target.value as Background)}>
+                      {BACKGROUNDS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    Your own instructions
+                    <textarea
+                      rows={3}
+                      maxLength={MAX_NOTE}
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      placeholder={
+                        chosen
+                          ? 'e.g. holding a small golden clutch, soft evening light, wearing gold earrings'
+                          : 'Describe the model, e.g. a young Bangladeshi woman with long hair, smiling, standing in a garden'
+                      }
+                    />
+                  </label>
+                  <small className="muted">Write in English for best results. The product is always copied as it is.</small>
+                </fieldset>
+              )}
+              <button type="button" className="btn primary" disabled={!ready || starting || uploading || !setup.data?.enabled} onClick={generate}>
+                {starting ? 'Starting…' : `Generate image${credits ? ` · ${credits} credits` : ''}`}
+              </button>
+              {!ready && (
+                <small className="muted">
+                  {!garment
+                    ? 'Upload the product photo.'
+                    : useModel && !model
+                      ? 'Choose a model above.'
+                      : styleOptions
+                        ? 'Use a model, or describe the model in your own instructions.'
+                        : 'Use a model first.'}
+                </small>
+              )}
+            </section>
+          </div>
 
           <section aria-label="Made here" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <h2 style={{ fontSize: 16 }}>Your new images</h2>
@@ -404,10 +368,17 @@ export default function GenerateImagePage() {
                   <div className="ph">
                     {img.status === 'succeeded' && img.resultImageUrl ? (
                       <a href={img.resultImageUrl} target="_blank" rel="noreferrer">
-                        <img src={img.resultImageUrl} alt="Model wearing your garment" />
+                        <img src={img.resultImageUrl} alt="Model with your product" />
                       </a>
                     ) : img.status === 'pending' ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: 10,
+                        }}
+                      >
                         <div className="spinner" aria-hidden="true" />
                         Making your image…
                       </div>
@@ -435,17 +406,6 @@ export default function GenerateImagePage() {
         </div>
       </div>
 
-      {picking && setup.data && (
-        <ModelPicker
-          models={setup.data.models}
-          current={model}
-          onClose={() => setPicking(false)}
-          onPick={(m) => {
-            setModel(m);
-            setPicking(false);
-          }}
-        />
-      )}
       {adding?.resultImageUrl && (
         <AddToProduct
           url={adding.resultImageUrl}
