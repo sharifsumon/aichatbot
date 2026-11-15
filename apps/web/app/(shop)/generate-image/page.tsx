@@ -13,7 +13,7 @@ type Gender = 'female' | 'male';
 interface Model {
   id: string;
   name: string;
-  gender: Gender;
+  gender: Gender | null;
   imageUrl: string;
   own?: boolean;
 }
@@ -76,28 +76,16 @@ const MAX_PHOTO_MB = 5;
 
 /** Every model, shown under "Use a model" to pick from. Tapping the chosen one again unselects it. */
 function ModelGrid({ models, current, onPick }: { models: Model[]; current?: Model; onPick: (m: Model | undefined) => void }) {
-  const [gender, setGender] = useState<Gender | 'all'>('all');
-  const shown = models.filter((m) => gender === 'all' || m.gender === gender);
   return (
     <>
-      <div className="card-head">
-        <Chips
-          label="Show"
-          value={gender}
-          onChange={setGender}
-          options={[
-            { value: 'all', label: 'All' },
-            { value: 'female', label: 'Women' },
-            { value: 'male', label: 'Men' },
-          ]}
-        />
+      <div className="card-head" style={{ justifyContent: 'flex-end' }}>
         <Link href="/model-images?add=model" className="btn sm light">
           + Add your own model
         </Link>
       </div>
-      {shown.length === 0 && <Empty>No models here yet.</Empty>}
+      {models.length === 0 && <Empty>No models here yet.</Empty>}
       <div className="pick">
-        {shown.map((m) => (
+        {models.map((m) => (
           <button
             key={m.id}
             type="button"
@@ -248,7 +236,8 @@ export default function GenerateImagePage() {
       <TopBar title="Generate image" back={{ href: '/media', label: 'Media library' }} />
       <div className="content tryon-page">
         <p className="sub" style={{ margin: 0, fontSize: 14 }}>
-          Upload a photo of any product and the AI makes an advertising photo of a model wearing, holding or using it. Every image is also saved in your Media library.
+          Upload a photo of any product and the AI makes an advertising photo of a model wearing, holding or using it. Every image is also saved in your Media
+          library.
         </p>
         {setup.data && !setup.data.enabled && <Notice tone="warn">Making images with models is not switched on for Agently yet. It will be soon.</Notice>}
         {done && <Notice tone="ok">{done}</Notice>}
@@ -263,7 +252,10 @@ export default function GenerateImagePage() {
                 {garment ? <img src={garment} alt="Your product" /> : uploading ? 'Uploading…' : '+ Choose a photo of the product'}
               </button>
               <input ref={file} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => pickGarment(e.target.files?.[0])} />
-              <small className="muted">Any product works: clothes, shoes, bags, drinks, food, cosmetics, gadgets. Best results: the whole product in good light, on a plain background, nothing covering it.</small>
+              <small className="muted">
+                Any product works: clothes, shoes, bags, drinks, food, cosmetics, gadgets. Best results: the whole product in good light, on a plain background,
+                nothing covering it.
+              </small>
             </section>
 
             <section className="card pad" aria-label="Use a model">
@@ -334,7 +326,9 @@ export default function GenerateImagePage() {
                       }
                     />
                   </label>
-                  <small className="muted">Write in English for best results. The product is always copied as it is. Keep it tasteful: the AI refuses suggestive photos.</small>
+                  <small className="muted">
+                    Write in English for best results. The product is always copied as it is. Keep it tasteful: the AI refuses suggestive photos.
+                  </small>
                 </fieldset>
               )}
               <button type="button" className="btn primary" disabled={!ready || starting || uploading || !setup.data?.enabled} onClick={generate}>

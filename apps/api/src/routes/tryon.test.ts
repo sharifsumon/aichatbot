@@ -303,10 +303,12 @@ test('a shop adds its own model from its photo; only that shop sees and uses it'
 
   const bad = await app.inject({ method: 'POST', url: `/api/workspaces/${ws.id}/try-on/models`, ...auth, payload: { name: 'Mim', gender: 'female', imageUrl: 'https://elsewhere.test/a.jpg' } });
   assert.equal(bad.statusCode, 400);
-  const added = await app.inject({ method: 'POST', url: `/api/workspaces/${ws.id}/try-on/models`, ...auth, payload: { name: 'Mim', gender: 'female', imageUrl: photo } });
+  const added = await app.inject({ method: 'POST', url: `/api/workspaces/${ws.id}/try-on/models`, ...auth, payload: { name: 'Mim', imageUrl: photo } });
   assert.equal(added.statusCode, 201, added.body);
-  const mine = added.json().model as { id: string; own: boolean };
+  const mine = added.json().model as { id: string; own: boolean; gender: string | null };
   assert.equal(mine.own, true);
+  // The shop is not asked whether the model is a woman or a man.
+  assert.equal(mine.gender, null);
 
   const list = await app.inject({ method: 'GET', url: `/api/workspaces/${ws.id}/try-on/models`, ...auth });
   assert.equal(list.json().models[0].id, mine.id);

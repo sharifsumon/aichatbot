@@ -1,0 +1,1 @@
+ALTER TABLE "model_characters" ALTER COLUMN "gender" DROP NOT NULL;

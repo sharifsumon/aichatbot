@@ -44,7 +44,8 @@ const generateBody = z.object({
 
 const ownModelBody = z.object({
   name: z.string().trim().min(1).max(60),
-  gender: z.enum(['female', 'male']),
+  /** Not asked any more: kept for older apps that still send it. */
+  gender: z.enum(['female', 'male']).optional(),
   /** A photo uploaded with POST /uploads/images. */
   imageUrl: z.string().url(),
 });
@@ -105,7 +106,7 @@ export const tryOnRoutes: FastifyPluginAsync<TryOnDeps> = async (app, deps) => {
     if ((count?.n ?? 0) >= MAX_OWN_MODELS) return reply.code(400).send({ error: `You can keep up to ${MAX_OWN_MODELS} of your own models. Remove one first.` });
     const [model] = await db
       .insert(modelCharacters)
-      .values({ workspaceId, name: body.name, gender: body.gender, imageUrl: body.imageUrl, imageKey: workspaceKey(workspaceId, 'images', name) })
+      .values({ workspaceId, name: body.name, gender: body.gender ?? null, imageUrl: body.imageUrl, imageKey: workspaceKey(workspaceId, 'images', name) })
       .returning({ id: modelCharacters.id, name: modelCharacters.name, gender: modelCharacters.gender, imageUrl: modelCharacters.imageUrl });
     return reply.code(201).send({ model: { ...model, own: true } });
   });
