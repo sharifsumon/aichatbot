@@ -381,9 +381,12 @@ a.stat:hover { border-color: #c7d2fe; color: inherit; }
 .plist img, .plist .noimg { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; background: var(--line-soft); flex: none; }
 
 /* Media library */
-.lib-tabs { border-bottom: 1px solid var(--line); gap: 0; }
-.lib-tabs .tab { border-radius: 0; height: 42px; padding: 0 16px; border-bottom: 2px solid transparent; margin-bottom: -1px; gap: 6px; background: none; }
-.lib-tabs .tab.on { background: none; color: var(--brand-dark); border-bottom-color: var(--brand); }
+.lib-tabs { gap: 10px; padding: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; width: auto; align-self: flex-start; }
+.lib-tabs .tab { height: 48px; padding: 0 22px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--surface); color: var(--text); font-size: 16px; font-weight: 700; gap: 8px; }
+.lib-tabs .tab:hover { border-color: var(--brand); color: var(--brand-dark); background: var(--brand-soft); }
+.lib-tabs .tab.on, .lib-tabs .tab.on:hover { background: var(--grad); border-color: transparent; color: #fff; box-shadow: var(--glow); }
+.lib-tabs .tab.on .lib-n { background: rgba(255, 255, 255, .25); color: #fff; }
+.lib-tabs .lib-n { font-size: 12px; padding: 2px 8px; }
 .lib-n { font-size: 11px; font-weight: 600; background: var(--line-soft); color: var(--muted); border-radius: 999px; padding: 1px 7px; }
 .tab.on .lib-n { background: var(--brand-soft); color: var(--brand-dark); }
 .lib-making { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--muted); }
