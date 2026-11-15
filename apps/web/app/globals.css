@@ -709,3 +709,14 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
   /* Catalog editor: Save stays reachable. */
   .editor .save-bar { position: sticky; bottom: 0; background: var(--surface); padding: 10px 0; z-index: 2; }
 }
+
+/* Generate image: style presets as palette cards (colour swatch + name). */
+.gen-page .gen-looks { flex-wrap: wrap; overflow: visible; gap: 12px; }
+.gen-page .gen-looks button { flex: 0 0 132px; border: 1px solid #e4e7ec; border-radius: 14px; }
+.gen-page .gen-looks .sw { height: 76px; }
+.gen-page .gen-looks .lb { font-size: 13px; padding: 10px 12px; }
+.gen-page .gen-looks button.on { border-color: #6366f1; box-shadow: 0 0 0 4px rgba(99, 102, 241, .12); }
+.gen-page .gen-looks button.custom .sw { display: flex; align-items: center; justify-content: center; background: #f8f8fc; border-bottom: 1px dashed #c7c9f5; color: var(--brand); font-size: 28px; font-weight: 300; }
+@media (max-width: 720px) {
+  .gen-page .gen-looks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

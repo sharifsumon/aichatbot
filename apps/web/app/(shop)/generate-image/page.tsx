@@ -157,15 +157,25 @@ const CAMERAS: { value: Camera; label: string }[] = [
   { value: 'macro', label: 'Close-up' },
   { value: 'full', label: 'Full body (with a person)' },
 ];
-const EFFECTS: { value: Effect; label: string }[] = [
-  { value: 'splash', label: 'Liquid splash' },
-  { value: 'condensation', label: 'Condensation drops' },
-  { value: 'drops', label: 'Water drops' },
-  { value: 'ice', label: 'Ice' },
-  { value: 'smoke', label: 'Smoke and mist' },
-  { value: 'fruit', label: 'Fruit slices' },
-  { value: 'petals', label: 'Petals' },
-  { value: 'sparkles', label: 'Sparkles' },
+const EFFECTS: { value: Effect; label: string; swatch: string }[] = [
+  { value: 'splash', label: 'Liquid splash', swatch: 'linear-gradient(160deg,#7c3a10,#e08a3c 55%,#f6d38a)' },
+  { value: 'condensation', label: 'Condensation drops', swatch: 'linear-gradient(160deg,#dbeafe,#93c5fd 60%,#eff6ff)' },
+  {
+    value: 'drops',
+    label: 'Water drops',
+    swatch:
+      'radial-gradient(circle at 30% 35%,#fff 0 6%,transparent 7%),radial-gradient(circle at 70% 60%,#fff 0 5%,transparent 6%),linear-gradient(160deg,#0ea5e9,#38bdf8)',
+  },
+  { value: 'ice', label: 'Ice', swatch: 'linear-gradient(160deg,#e0f2fe,#bae6fd 50%,#f0f9ff)' },
+  { value: 'smoke', label: 'Smoke and mist', swatch: 'linear-gradient(160deg,#1f2937,#6b7280 55%,#d1d5db)' },
+  { value: 'fruit', label: 'Fruit slices', swatch: 'linear-gradient(160deg,#fb923c,#facc15 50%,#84cc16)' },
+  { value: 'petals', label: 'Petals', swatch: 'linear-gradient(160deg,#fce7f3,#f9a8d4 55%,#fda4af)' },
+  {
+    value: 'sparkles',
+    label: 'Sparkles',
+    swatch:
+      'radial-gradient(circle at 25% 30%,#fde68a 0 4%,transparent 5%),radial-gradient(circle at 70% 65%,#fde68a 0 3%,transparent 4%),linear-gradient(160deg,#1e1b4b,#4338ca)',
+  },
 ];
 const SIZES: { value: Aspect; label: string; use: string; w: number; h: number }[] = [
   { value: '1:1', label: 'Square 1:1', use: 'Facebook post', w: 22, h: 22 },
@@ -226,38 +236,6 @@ function SectionHead({ icon, tone, title, badge, note }: { icon: keyof typeof Ic
       <h2>{title}</h2>
       {badge && <span className="badge-ok">{badge}</span>}
       {note && <span className="muted">{note}</span>}
-    </div>
-  );
-}
-
-/** One choice as a row of pill chips. */
-function ChipRow<T extends string>({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: T;
-  options: { value: T; label: string }[];
-  onChange: (v: T) => void;
-}) {
-  return (
-    <div className="gen-row">
-      <span className="gen-label">{label}</span>
-      <div className="chips" role="group" aria-label={label}>
-        {options.map((o) => (
-          <button
-            key={o.value || 'auto'}
-            type="button"
-            className={`chip${o.value === value ? ' on' : ''}`}
-            aria-pressed={o.value === value}
-            onClick={() => onChange(o.value)}
-          >
-            {o.label}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
@@ -534,15 +512,18 @@ export default function GenerateImagePage() {
             {styleOptions && (
               <section className="card pad gen-sec" aria-label="Choose a style">
                 <SectionHead icon="sparkle" tone="violet" title="Choose a style" badge="Fills the scene for you" />
-                <div className="chips" role="group" aria-label="Style">
+                <div className="gen-looks" role="group" aria-label="Style">
                   {LOOKS.map((l) => (
-                    <button key={l.id} type="button" className={`chip${look === l.id ? ' on' : ''}`} aria-pressed={look === l.id} onClick={() => pickLook(l)}>
-                      <span className="sw" style={{ background: l.swatch }} aria-hidden="true" />
-                      {l.label}
+                    <button key={l.id} type="button" className={look === l.id ? 'on' : ''} aria-pressed={look === l.id} onClick={() => pickLook(l)}>
+                      <span className="sw" style={{ background: l.swatch }} />
+                      <span className="lb">{l.label}</span>
                     </button>
                   ))}
-                  <button type="button" className={`chip dashed${look === '' ? ' on' : ''}`} aria-pressed={look === ''} onClick={() => setLook('')}>
-                    + Custom
+                  <button type="button" className={`custom${look === '' ? ' on' : ''}`} aria-pressed={look === ''} onClick={() => setLook('')}>
+                    <span className="sw" aria-hidden="true">
+                      +
+                    </span>
+                    <span className="lb">Custom</span>
                   </button>
                 </div>
               </section>
@@ -551,24 +532,27 @@ export default function GenerateImagePage() {
             {styleOptions && (
               <section className="card pad gen-sec" aria-label="Scene">
                 <SectionHead icon="images" tone="amber" title="Scene" />
-                {kind !== 'model' && <ChipRow label="Surface" value={surface} options={SURFACES} onChange={custom(setSurface)} />}
-                <ChipRow label="Background" value={background} options={BACKGROUNDS} onChange={custom(setBackground)} />
+                <div className="gen-grid">
+                  {kind !== 'model' && <Select label="Surface" value={surface} options={SURFACES} onChange={custom(setSurface)} />}
+                  <Select label="Background" value={background} options={BACKGROUNDS} onChange={custom(setBackground)} />
+                </div>
                 <div className="gen-row">
                   <span className="gen-label">
                     Effects <span className="muted">(pick any)</span>
                   </span>
-                  <div className="chips" role="group" aria-label="Effects">
+                  <div className="gen-looks" role="group" aria-label="Effects">
                     {EFFECTS.map((e) => {
                       const on = effects.includes(e.value);
                       return (
                         <button
                           key={e.value}
                           type="button"
-                          className={`chip${on ? ' on' : ''}`}
+                          className={on ? 'on' : ''}
                           aria-pressed={on}
                           onClick={() => custom(setEffects)(on ? effects.filter((x) => x !== e.value) : [...effects, e.value])}
                         >
-                          {e.label}
+                          <span className="sw" style={{ background: e.swatch }} />
+                          <span className="lb">{e.label}</span>
                         </button>
                       );
                     })}
