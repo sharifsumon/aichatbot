@@ -90,7 +90,7 @@ export default function CatalogPage() {
           </Notice>
         )}
         {error && <Notice tone="error">{error}</Notice>}
-        <div className="catalog">
+        <div className={`catalog${editing ? ' editing' : ''}`}>
           <section className="products" aria-label="Products">
             {rows.map((p) => (
               <button
