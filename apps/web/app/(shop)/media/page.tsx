@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AddToProduct } from '@/components/AddToProduct';
 import { useShop } from '@/components/Shell';
 import { Icon } from '@/components/icons';
-import { Chips, Empty, Loading, Notice, Pill, TopBar } from '@/components/ui';
+import { Chips, Empty, Loading, Notice, TopBar } from '@/components/ui';
 import { useApi, useLoad } from '@/lib/api';
 import { sendToPost } from '@/lib/postMedia';
 
@@ -40,10 +40,6 @@ function duration(sec: number | null) {
   if (!sec) return '';
   const s = Math.round(sec);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-}
-
-function shortDate(iso: string) {
-  return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 }
 
 /**
@@ -234,19 +230,21 @@ export default function MediaLibraryPage() {
                       <img src={url} alt="" loading="lazy" />
                       <span className="lib-check">{n >= 0 ? n + 1 : ''}</span>
                     </button>
-                    <div className="info">
-                      <Pill tone={isOwn(i) ? 'brand' : undefined}>{isOwn(i) ? 'Your model' : 'AI model'}</Pill>
-                      <small className="muted lib-date">{shortDate(i.createdAt)}</small>
+                    <div className="lib-acts">
                       <button
                         type="button"
-                        className="btn sm primary"
+                        aria-label="Add to product"
+                        title="Add to product"
                         onClick={() => router.push(`/catalog?${new URLSearchParams([['newPhoto', url]]).toString()}`)}
                       >
-                        Add to product
+                        +
                       </button>
-                      <a className="btn sm" href={url} download target="_blank" rel="noreferrer">
-                        Download
+                      <a href={url} download target="_blank" rel="noreferrer" aria-label="Download" title="Download">
+                        ↓
                       </a>
+                    </div>
+                    <div className="info">
+                      <strong>{isOwn(i) ? 'Your model' : 'AI model'}</strong>
                     </div>
                   </div>
                 );
@@ -268,16 +266,19 @@ export default function MediaLibraryPage() {
                         {on ? '✓' : ''}
                       </button>
                     </div>
-                    <div className="info">
-                      {v.durationSec ? <Pill>{duration(v.durationSec)}</Pill> : null}
-                      <small className="muted lib-date">{shortDate(v.createdAt)}</small>
-                      <button type="button" className="btn sm primary" onClick={() => setAdding(url)}>
-                        Add to product
+                    <div className="lib-acts">
+                      <button type="button" aria-label="Add to product" title="Add to product" onClick={() => setAdding(url)}>
+                        +
                       </button>
-                      <a className="btn sm" href={url} download target="_blank" rel="noreferrer">
-                        Download
+                      <a href={url} download target="_blank" rel="noreferrer" aria-label="Download" title="Download">
+                        ↓
                       </a>
                     </div>
+                    {v.durationSec ? (
+                      <div className="info">
+                        <strong>{duration(v.durationSec)}</strong>
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}

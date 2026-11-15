@@ -727,7 +727,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
 .lib-cards .result .ph video { width: 100%; height: 100%; object-fit: cover; display: block; background: #000; }
 .lib-cards .result .lib-check { cursor: pointer; padding: 0; z-index: 2; }
 .lib-cards .result.sel .lib-check { background: var(--brand); }
-.lib-cards .lib-date { margin-right: auto; }
 .pick-cards { padding-bottom: 0; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); max-height: 60vh; overflow-y: auto; }
 @media (max-width: 720px) {
   .lib-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
@@ -737,10 +736,47 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
 }
 
 /* Generate image: every image made, listed under the form like "Your videos". Catalog form: generated photos listed inline. */
-.gen-gallery { display: flex; flex-direction: column; gap: 12px; }
-.gen-gallery h2 { font-size: 18px; font-weight: 700; }
 .gen-photos { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid #e9eaf3; border-radius: 14px; background: #f9fafc; }
 .gen-photos > strong { font-size: 13px; }
 .gen-photos .pick-cards { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); max-height: none; overflow: visible; gap: 10px; }
 .gen-photos .result .info { padding: 8px; }
 .gen-photos .result .info .btn.sm { flex: 1 1 100%; }
+
+/* Product Catalog: tall, compact picture cards like the model cards (3:4 photo, name and details under it). */
+.products { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.catalog.editing .products { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.product { border-radius: 14px; }
+.product .ph { aspect-ratio: 3 / 4; }
+.product .ph img { object-position: top; }
+.product .info { padding: 10px 12px; gap: 4px; }
+.product .info strong { font-size: 14px; }
+.product .info .pill { font-size: 11px; }
+/* Generated photos in the product form: the same compact cards. */
+.gen-photos .pick-cards { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+.gen-photos .result { border-radius: 14px; }
+.gen-photos .result .ph img { object-position: top; }
+.gen-photos .result .info { padding: 6px 8px 8px; gap: 4px; }
+.gen-photos .result .info .btn.sm { height: 30px; min-height: 30px; font-size: 12px; }
+@media (max-width: 720px) {
+  .products, .catalog.editing .products { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .gen-photos .pick-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* Media library: the same tall, compact cards as the model cards. */
+.results.lib-cards { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.lib-cards .result { border-radius: 14px; }
+.lib-cards .result .ph img { object-position: top; }
+.lib-cards .result .info { padding: 8px 10px 10px; gap: 6px; }
+.lib-cards .result .info .pill { font-size: 11px; }
+.lib-cards .result .info .btn.sm { flex: 1 1 100%; height: 32px; min-height: 32px; font-size: 12.5px; }
+.lib-cards .lib-check { width: 22px; height: 22px; top: 8px; left: 8px; }
+@media (max-width: 720px) {
+  .results.lib-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+}
+/* Media library cards: like the model cards — photo on top, one bold line under it, small actions on the photo. */
+.lib-cards .result { position: relative; }
+.lib-cards .result .info strong { font-size: 13px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lib-acts { position: absolute; top: 8px; right: 8px; z-index: 3; display: flex; gap: 6px; }
+.lib-acts button, .lib-acts a { width: 30px; height: 30px; border-radius: 50%; border: 0; background: rgba(255, 255, 255, .92); color: var(--ink); display: inline-flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 700; line-height: 1; text-decoration: none; cursor: pointer; box-shadow: 0 1px 4px rgba(15, 23, 42, .2); }
+.lib-acts button:hover, .lib-acts a:hover { background: #fff; color: var(--brand); }
+@media (max-width: 720px) { .lib-acts button, .lib-acts a { width: 34px; height: 34px; } }
