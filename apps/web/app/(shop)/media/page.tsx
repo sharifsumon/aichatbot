@@ -276,9 +276,11 @@ export default function MediaLibraryPage() {
           <button
             type="button"
             className="btn sm"
-            disabled={pickedUrls.length !== 1}
-            title={pickedUrls.length !== 1 ? 'Pick one image to add it to a product' : undefined}
-            onClick={() => setAdding(pickedUrls[0])}
+            disabled={tab === 'videos' && pickedUrls.length !== 1}
+            onClick={() =>
+              // Images open "Add a product" with the picked photos, in the order picked.
+              tab === 'videos' ? setAdding(pickedUrls[0]) : router.push(`/catalog?${new URLSearchParams(pickedUrls.map((u) => ['newPhoto', u])).toString()}`)
+            }
           >
             Add to product
           </button>

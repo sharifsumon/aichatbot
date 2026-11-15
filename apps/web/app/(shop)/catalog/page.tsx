@@ -51,12 +51,12 @@ export default function CatalogPage() {
     load();
   }, [load]);
 
-  // "New product" from Images with models opens the editor with that photo.
-  const [newPhoto, setNewPhoto] = useState<string>();
+  // "New product" from generated images opens the editor with those photos (?newPhoto=a&newPhoto=b).
+  const [newPhoto, setNewPhoto] = useState<string[]>();
   useEffect(() => {
-    const photo = new URLSearchParams(window.location.search).get('newPhoto');
-    if (!photo || !manager) return;
-    setNewPhoto(photo);
+    const photos = new URLSearchParams(window.location.search).getAll('newPhoto');
+    if (!photos.length || !manager) return;
+    setNewPhoto(photos);
     setEditing('new');
     window.history.replaceState(null, '', window.location.pathname);
   }, [manager]);
@@ -206,7 +206,7 @@ function Editor({
 }: {
   product?: Product;
   /** A photo to start a new product with. */
-  initialPhoto?: string;
+  initialPhoto?: string[];
   onClose: () => void;
   onSaved: (p: Product | null, message: string) => void;
   /** Opens the Facebook post composer for the saved product. */
@@ -225,7 +225,7 @@ function Editor({
   const [code, setCode] = useState(product?.code ?? '');
   const [description, setDescription] = useState(product?.description ?? '');
   const [price, setPrice] = useState(product ? String(Number(product.price)) : '');
-  const [images, setImages] = useState<ProductImage[]>(() => product?.images ?? (initialPhoto ? [{ url: initialPhoto, color: '' }] : []));
+  const [images, setImages] = useState<ProductImage[]>(() => product?.images ?? (initialPhoto ?? []).map((url) => ({ url, color: '' })));
   const [photoLink, setPhotoLink] = useState('');
   /** The colour new photos are tagged with; '' for the whole product. */
   const [photoColor, setPhotoColor] = useState('');
