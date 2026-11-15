@@ -639,9 +639,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
 .gen-upload .garment-empty .gen-label { color: var(--brand); }
 .gen-upload .garment-empty .btn { pointer-events: none; }
 .gen-upload-side { flex: 1 1 240px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
-.gen-count { display: flex; gap: 10px; }
-.gen-count button { width: 48px; height: 48px; border-radius: 12px; border: 1px solid #e5e7eb; background: #fff; color: #1f2937; font: inherit; font-size: 15px; cursor: pointer; }
-.gen-count button.on { border-color: #6366f1; background: #eef0ff; color: #4338ca; font-weight: 600; }
 .gen-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding-top: 4px; }
 .gen-actions > .btn { height: 48px; padding: 0 20px; font-size: 16px; }
 .gen-go { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 16px; }
@@ -709,3 +706,41 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
   /* Catalog editor: Save stays reachable. */
   .editor .save-bar { position: sticky; bottom: 0; background: var(--surface); padding: 10px 0; z-index: 2; }
 }
+
+/* Generate image: style presets as palette cards (colour swatch + name). */
+.gen-page .gen-looks { flex-wrap: wrap; overflow: visible; gap: 12px; }
+.gen-page .gen-looks button { flex: 0 0 132px; border: 1px solid #e4e7ec; border-radius: 14px; }
+.gen-page .gen-looks .sw { height: 76px; }
+.gen-page .gen-looks .lb { font-size: 13px; padding: 10px 12px; }
+.gen-page .gen-looks button.on { border-color: #6366f1; box-shadow: 0 0 0 4px rgba(99, 102, 241, .12); }
+.gen-page .gen-looks button.custom .sw { display: flex; align-items: center; justify-content: center; background: #f8f8fc; border-bottom: 1px dashed #c7c9f5; color: var(--brand); font-size: 28px; font-weight: 300; }
+@media (max-width: 720px) {
+  .gen-page .gen-looks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Galleries as cards, like "Your videos" on Videos with models: preview on top, tag, date and actions below. */
+.lib-cards { padding-bottom: 72px; }
+.lib-cards .result { transition: border-color .15s, box-shadow .15s; }
+.lib-cards .result.sel { border-color: #6366f1; box-shadow: 0 0 0 4px rgba(99, 102, 241, .12); }
+.lib-cards .result .ph { border: 0; cursor: pointer; font: inherit; width: 100%; }
+.lib-cards .result .ph:disabled { cursor: default; }
+.lib-cards .result .ph video { width: 100%; height: 100%; object-fit: cover; display: block; background: #000; }
+.lib-cards .result .lib-check { cursor: pointer; padding: 0; z-index: 2; }
+.lib-cards .result.sel .lib-check { background: var(--brand); }
+.lib-cards .lib-date { margin-right: auto; }
+.pick-cards { padding-bottom: 0; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); max-height: 60vh; overflow-y: auto; }
+@media (max-width: 720px) {
+  .lib-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .lib-cards .info { padding: 8px; gap: 6px; }
+  .lib-cards .info .btn.sm { flex: 1 1 100%; }
+  .pick-cards { max-height: none; }
+}
+
+/* Generate image: every image made, listed under the form like "Your videos". Catalog form: generated photos listed inline. */
+.gen-gallery { display: flex; flex-direction: column; gap: 12px; }
+.gen-gallery h2 { font-size: 18px; font-weight: 700; }
+.gen-photos { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid #e9eaf3; border-radius: 14px; background: #f9fafc; }
+.gen-photos > strong { font-size: 13px; }
+.gen-photos .pick-cards { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); max-height: none; overflow: visible; gap: 10px; }
+.gen-photos .result .info { padding: 8px; }
+.gen-photos .result .info .btn.sm { flex: 1 1 100%; }

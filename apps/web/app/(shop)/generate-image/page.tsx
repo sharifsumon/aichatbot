@@ -157,15 +157,25 @@ const CAMERAS: { value: Camera; label: string }[] = [
   { value: 'macro', label: 'Close-up' },
   { value: 'full', label: 'Full body (with a person)' },
 ];
-const EFFECTS: { value: Effect; label: string }[] = [
-  { value: 'splash', label: 'Liquid splash' },
-  { value: 'condensation', label: 'Condensation drops' },
-  { value: 'drops', label: 'Water drops' },
-  { value: 'ice', label: 'Ice' },
-  { value: 'smoke', label: 'Smoke and mist' },
-  { value: 'fruit', label: 'Fruit slices' },
-  { value: 'petals', label: 'Petals' },
-  { value: 'sparkles', label: 'Sparkles' },
+const EFFECTS: { value: Effect; label: string; swatch: string }[] = [
+  { value: 'splash', label: 'Liquid splash', swatch: 'linear-gradient(160deg,#7c3a10,#e08a3c 55%,#f6d38a)' },
+  { value: 'condensation', label: 'Condensation drops', swatch: 'linear-gradient(160deg,#dbeafe,#93c5fd 60%,#eff6ff)' },
+  {
+    value: 'drops',
+    label: 'Water drops',
+    swatch:
+      'radial-gradient(circle at 30% 35%,#fff 0 6%,transparent 7%),radial-gradient(circle at 70% 60%,#fff 0 5%,transparent 6%),linear-gradient(160deg,#0ea5e9,#38bdf8)',
+  },
+  { value: 'ice', label: 'Ice', swatch: 'linear-gradient(160deg,#e0f2fe,#bae6fd 50%,#f0f9ff)' },
+  { value: 'smoke', label: 'Smoke and mist', swatch: 'linear-gradient(160deg,#1f2937,#6b7280 55%,#d1d5db)' },
+  { value: 'fruit', label: 'Fruit slices', swatch: 'linear-gradient(160deg,#fb923c,#facc15 50%,#84cc16)' },
+  { value: 'petals', label: 'Petals', swatch: 'linear-gradient(160deg,#fce7f3,#f9a8d4 55%,#fda4af)' },
+  {
+    value: 'sparkles',
+    label: 'Sparkles',
+    swatch:
+      'radial-gradient(circle at 25% 30%,#fde68a 0 4%,transparent 5%),radial-gradient(circle at 70% 65%,#fde68a 0 3%,transparent 4%),linear-gradient(160deg,#1e1b4b,#4338ca)',
+  },
 ];
 const SIZES: { value: Aspect; label: string; use: string; w: number; h: number }[] = [
   { value: '1:1', label: 'Square 1:1', use: 'Facebook post', w: 22, h: 22 },
@@ -226,38 +236,6 @@ function SectionHead({ icon, tone, title, badge, note }: { icon: keyof typeof Ic
       <h2>{title}</h2>
       {badge && <span className="badge-ok">{badge}</span>}
       {note && <span className="muted">{note}</span>}
-    </div>
-  );
-}
-
-/** One choice as a row of pill chips. */
-function ChipRow<T extends string>({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: T;
-  options: { value: T; label: string }[];
-  onChange: (v: T) => void;
-}) {
-  return (
-    <div className="gen-row">
-      <span className="gen-label">{label}</span>
-      <div className="chips" role="group" aria-label={label}>
-        {options.map((o) => (
-          <button
-            key={o.value || 'auto'}
-            type="button"
-            className={`chip${o.value === value ? ' on' : ''}`}
-            aria-pressed={o.value === value}
-            onClick={() => onChange(o.value)}
-          >
-            {o.label}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
@@ -371,6 +349,19 @@ export default function GenerateImagePage() {
     return () => clearTimeout(t);
   }, [api, ws, bodyKey, showPrompt, styleOptions]);
 
+  // Every image the shop made before, newest first, listed under the form.
+  useEffect(() => {
+    api<{ images: TryOnImage[] }>(`${ws}/try-on`)
+      .then((r) =>
+        setMade((cur) => [...cur, ...r.images.filter((i) => !cur.some((c) => c.id === i.id)).sort((x, y) => y.createdAt.localeCompare(x.createdAt))]),
+      )
+      .catch(() => undefined);
+  }, [api, ws]);
+  // Started on this page: shown in the preview.
+  const [mine, setMine] = useState<string[]>([]);
+  const latest = made.filter((i) => mine.includes(i.id));
+  const [shown, setShown] = useState(12);
+
   // While an image is being made, check every few seconds.
   const pending = made.some((i) => i.status === 'pending');
   const refresh = useCallback(async () => {
@@ -445,6 +436,7 @@ export default function GenerateImagePage() {
       for (let i = 0; i < count; i++) {
         const r = await api<{ image: TryOnImage }>(`${ws}/try-on`, { method: 'POST', body: { ...body, garmentImageUrl: garment } });
         setMade((cur) => [r.image, ...cur]);
+        setMine((cur) => [r.image.id, ...cur]);
       }
       reloadHome();
     } catch (e) {
@@ -534,15 +526,18 @@ export default function GenerateImagePage() {
             {styleOptions && (
               <section className="card pad gen-sec" aria-label="Choose a style">
                 <SectionHead icon="sparkle" tone="violet" title="Choose a style" badge="Fills the scene for you" />
-                <div className="chips" role="group" aria-label="Style">
+                <div className="gen-looks" role="group" aria-label="Style">
                   {LOOKS.map((l) => (
-                    <button key={l.id} type="button" className={`chip${look === l.id ? ' on' : ''}`} aria-pressed={look === l.id} onClick={() => pickLook(l)}>
-                      <span className="sw" style={{ background: l.swatch }} aria-hidden="true" />
-                      {l.label}
+                    <button key={l.id} type="button" className={look === l.id ? 'on' : ''} aria-pressed={look === l.id} onClick={() => pickLook(l)}>
+                      <span className="sw" style={{ background: l.swatch }} />
+                      <span className="lb">{l.label}</span>
                     </button>
                   ))}
-                  <button type="button" className={`chip dashed${look === '' ? ' on' : ''}`} aria-pressed={look === ''} onClick={() => setLook('')}>
-                    + Custom
+                  <button type="button" className={`custom${look === '' ? ' on' : ''}`} aria-pressed={look === ''} onClick={() => setLook('')}>
+                    <span className="sw" aria-hidden="true">
+                      +
+                    </span>
+                    <span className="lb">Custom</span>
                   </button>
                 </div>
               </section>
@@ -551,24 +546,27 @@ export default function GenerateImagePage() {
             {styleOptions && (
               <section className="card pad gen-sec" aria-label="Scene">
                 <SectionHead icon="images" tone="amber" title="Scene" />
-                {kind !== 'model' && <ChipRow label="Surface" value={surface} options={SURFACES} onChange={custom(setSurface)} />}
-                <ChipRow label="Background" value={background} options={BACKGROUNDS} onChange={custom(setBackground)} />
+                <div className="gen-grid">
+                  {kind !== 'model' && <Select label="Surface" value={surface} options={SURFACES} onChange={custom(setSurface)} />}
+                  <Select label="Background" value={background} options={BACKGROUNDS} onChange={custom(setBackground)} />
+                </div>
                 <div className="gen-row">
                   <span className="gen-label">
                     Effects <span className="muted">(pick any)</span>
                   </span>
-                  <div className="chips" role="group" aria-label="Effects">
+                  <div className="gen-looks" role="group" aria-label="Effects">
                     {EFFECTS.map((e) => {
                       const on = effects.includes(e.value);
                       return (
                         <button
                           key={e.value}
                           type="button"
-                          className={`chip${on ? ' on' : ''}`}
+                          className={on ? 'on' : ''}
                           aria-pressed={on}
                           onClick={() => custom(setEffects)(on ? effects.filter((x) => x !== e.value) : [...effects, e.value])}
                         >
-                          {e.label}
+                          <span className="sw" style={{ background: e.swatch }} />
+                          <span className="lb">{e.label}</span>
                         </button>
                       );
                     })}
@@ -628,7 +626,7 @@ export default function GenerateImagePage() {
               <div className="gen-grid">
                 {styleOptions && (
                   <label className="field">
-                    Extra details (optional)
+                    Custom Prompt (optional)
                     <textarea
                       rows={3}
                       maxLength={MAX_NOTE}
@@ -642,17 +640,18 @@ export default function GenerateImagePage() {
                     />
                   </label>
                 )}
-                <div className="gen-row">
-                  <span className="gen-label">Number of images</span>
-                  <div className="gen-count" role="radiogroup" aria-label="Number of images">
+                <label className="field">
+                  Number of images
+                  <select value={count} onChange={(e) => setCount(Number(e.target.value))}>
                     {[1, 2, 3, 4].map((n) => (
-                      <button key={n} type="button" role="radio" aria-checked={count === n} className={count === n ? 'on' : ''} onClick={() => setCount(n)}>
-                        {n}
-                      </button>
+                      <option key={n} value={n}>
+                        {n} image{n > 1 ? 's' : ''}
+                        {credits ? ` · ${credits * n} credits` : ''}
+                      </option>
                     ))}
-                  </div>
-                  {credits > 0 && <small className="muted">Each image uses {credits} credits.</small>}
-                </div>
+                  </select>
+                  {credits > 0 && <small>Each image uses {credits} credits.</small>}
+                </label>
               </div>
               {styleOptions && <small className="muted">Write in English for best results. Keep it tasteful: the AI refuses suggestive photos.</small>}
             </section>
@@ -675,7 +674,7 @@ export default function GenerateImagePage() {
             <div className="card pad">
               <h2 style={{ fontSize: 16 }}>Preview</h2>
               {setup.loading && !setup.data && <Loading />}
-              {made.length === 0 ? (
+              {latest.length === 0 ? (
                 <div className="gen-preview" style={{ aspectRatio: `${size.w} / ${size.h}` }}>
                   <Icon.images />
                   <span>Your image appears here ({aspect})</span>
@@ -685,7 +684,7 @@ export default function GenerateImagePage() {
                 </div>
               ) : (
                 <div className="results">
-                  {made.map((img) => (
+                  {latest.map((img) => (
                     <div key={img.id} className="result">
                       <div className="ph">
                         {img.status === 'succeeded' && img.resultImageUrl ? (
@@ -743,6 +742,52 @@ export default function GenerateImagePage() {
             </p>
           </aside>
         </div>
+
+        <section aria-label="Your images" className="gen-gallery">
+          <h2>Your images</h2>
+          {made.length === 0 && <Empty>Images you make show up here. Each one takes about half a minute.</Empty>}
+          <div className="results">
+            {made.slice(0, shown).map((img) => (
+              <div key={img.id} className="result">
+                <div className="ph">
+                  {img.status === 'succeeded' && img.resultImageUrl ? (
+                    <a href={img.resultImageUrl} target="_blank" rel="noreferrer">
+                      <img src={img.resultImageUrl} alt="Your product photo" />
+                    </a>
+                  ) : img.status === 'pending' ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                      <div className="spinner" aria-hidden="true" />
+                      Making your image…
+                    </div>
+                  ) : (
+                    <div style={{ padding: 16 }}>{img.error ?? 'This image could not be made.'}</div>
+                  )}
+                </div>
+                <div className="info">
+                  <small className="muted" style={{ marginRight: 'auto' }}>
+                    {new Date(img.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+                  </small>
+                  {img.status === 'succeeded' && img.resultImageUrl && (
+                    <>
+                      <button type="button" className="btn sm primary" onClick={() => setAdding(img)}>
+                        Add to a product
+                      </button>
+                      <a className="btn sm" href={img.resultImageUrl} download target="_blank" rel="noreferrer">
+                        Download
+                      </a>
+                    </>
+                  )}
+                  {img.status === 'failed' && <Pill tone="red">Failed</Pill>}
+                </div>
+              </div>
+            ))}
+          </div>
+          {made.length > shown && (
+            <button type="button" className="btn" style={{ alignSelf: 'center' }} onClick={() => setShown((n) => n + 12)}>
+              Show more ({made.length - shown} more)
+            </button>
+          )}
+        </section>
       </div>
 
       {adding?.resultImageUrl && (

@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AddToProduct } from '@/components/AddToProduct';
 import { useShop } from '@/components/Shell';
 import { Icon } from '@/components/icons';
-import { Chips, Empty, Loading, Notice, TopBar } from '@/components/ui';
+import { Chips, Empty, Loading, Notice, Pill, TopBar } from '@/components/ui';
 import { useApi, useLoad } from '@/lib/api';
 import { sendToPost } from '@/lib/postMedia';
 
@@ -40,6 +40,10 @@ function duration(sec: number | null) {
   if (!sec) return '';
   const s = Math.round(sec);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+function shortDate(iso: string) {
+  return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 }
 
 /**
@@ -213,47 +217,68 @@ export default function MediaLibraryPage() {
           </Empty>
         )}
 
-        <div className="lib-grid">
+        <div className="results lib-cards">
           {tab === 'images'
             ? shownImages.map((i) => {
                 const url = i.resultImageUrl!;
                 const n = picked.indexOf(i.id);
                 return (
-                  <button
-                    key={i.id}
-                    type="button"
-                    className={`lib-item${n >= 0 ? ' sel' : ''}`}
-                    aria-pressed={n >= 0}
-                    aria-label={n >= 0 ? 'Unselect image' : 'Select image'}
-                    onClick={() => toggle(i.id)}
-                  >
-                    <img src={url} alt="" loading="lazy" />
-                    <span className="lib-check">{n >= 0 ? n + 1 : ''}</span>
-                    <span className="lib-tag">{isOwn(i) ? 'Your model' : 'AI model'}</span>
-                  </button>
+                  <div key={i.id} className={`result${n >= 0 ? ' sel' : ''}`}>
+                    <button
+                      type="button"
+                      className="ph"
+                      aria-pressed={n >= 0}
+                      aria-label={n >= 0 ? 'Unselect image' : 'Select image'}
+                      onClick={() => toggle(i.id)}
+                    >
+                      <img src={url} alt="" loading="lazy" />
+                      <span className="lib-check">{n >= 0 ? n + 1 : ''}</span>
+                    </button>
+                    <div className="info">
+                      <Pill tone={isOwn(i) ? 'brand' : undefined}>{isOwn(i) ? 'Your model' : 'AI model'}</Pill>
+                      <small className="muted lib-date">{shortDate(i.createdAt)}</small>
+                      <button
+                        type="button"
+                        className="btn sm primary"
+                        onClick={() => router.push(`/catalog?${new URLSearchParams([['newPhoto', url]]).toString()}`)}
+                      >
+                        Add to product
+                      </button>
+                      <a className="btn sm" href={url} download target="_blank" rel="noreferrer">
+                        Download
+                      </a>
+                    </div>
+                  </div>
                 );
               })
             : readyVideos.map((v) => {
                 const url = v.resultVideoUrl!;
                 const on = picked[0] === v.id;
                 return (
-                  <button
-                    key={v.id}
-                    type="button"
-                    className={`lib-item${on ? ' sel' : ''}`}
-                    aria-pressed={on}
-                    aria-label={on ? 'Unselect video' : 'Select video'}
-                    onClick={() => toggle(v.id)}
-                  >
-                    <video src={url} poster={v.sourceImageUrl} preload="none" muted playsInline />
-                    <span className="lib-play" aria-hidden="true">
-                      <span>
-                        <Icon.play />
-                      </span>
-                    </span>
-                    <span className="lib-check">{on ? '✓' : ''}</span>
-                    {v.durationSec ? <span className="lib-dur">{duration(v.durationSec)}</span> : null}
-                  </button>
+                  <div key={v.id} className={`result${on ? ' sel' : ''}`}>
+                    <div className="ph">
+                      <video src={url} poster={v.sourceImageUrl} controls playsInline preload="metadata" />
+                      <button
+                        type="button"
+                        className="lib-check"
+                        aria-pressed={on}
+                        aria-label={on ? 'Unselect video' : 'Select video'}
+                        onClick={() => toggle(v.id)}
+                      >
+                        {on ? '✓' : ''}
+                      </button>
+                    </div>
+                    <div className="info">
+                      {v.durationSec ? <Pill>{duration(v.durationSec)}</Pill> : null}
+                      <small className="muted lib-date">{shortDate(v.createdAt)}</small>
+                      <button type="button" className="btn sm primary" onClick={() => setAdding(url)}>
+                        Add to product
+                      </button>
+                      <a className="btn sm" href={url} download target="_blank" rel="noreferrer">
+                        Download
+                      </a>
+                    </div>
+                  </div>
                 );
               })}
         </div>

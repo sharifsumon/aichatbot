@@ -221,7 +221,6 @@ function Editor({
   const [videoLink, setVideoLink] = useState('');
   const [videoUploading, setVideoUploading] = useState(false);
   const [pickingVideo, setPickingVideo] = useState(false);
-  const [pickingPhotos, setPickingPhotos] = useState(false);
   const [title, setTitle] = useState(product?.title ?? '');
   const [code, setCode] = useState(product?.code ?? '');
   const [description, setDescription] = useState(product?.description ?? '');
@@ -425,24 +424,16 @@ function Editor({
           <button type="button" className="btn sm" onClick={() => file.current?.click()} disabled={busy || shownImages.length >= MAX_PHOTOS}>
             {uploading ? `Uploading ${uploading.done + 1} of ${uploading.of}…` : 'Upload photos'}
           </button>
-          <button type="button" className="btn sm" onClick={() => setPickingPhotos(true)} disabled={busy || shownImages.length >= MAX_PHOTOS}>
-            Add Photos
-          </button>
           <input ref={file} type="file" multiple accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => pickPhotos([...(e.target.files ?? [])])} />
         </div>
-        {pickingPhotos && (
-          <GeneratedPhotos
-            ws={ws}
-            room={MAX_PHOTOS - shownImages.length}
-            have={shownImages.map((i) => i.url)}
-            onClose={() => setPickingPhotos(false)}
-            onPick={(urls) => {
-              // Photos picked while one colour is chosen are tagged with it.
-              setImages((cur) => [...cur, ...urls.map((url) => ({ url, color: photoColor }))]);
-              setPickingPhotos(false);
-            }}
-          />
-        )}
+        <GeneratedPhotos
+          ws={ws}
+          full={shownImages.length >= MAX_PHOTOS}
+          have={shownImages.map((i) => i.url)}
+          // Photos added while one colour is chosen are tagged with it.
+          onAdd={(url) => setImages((cur) => [...cur, { url, color: photoColor }])}
+          onRemove={(url) => setImages(shownImages.filter((x) => x.url !== url))}
+        />
         <span style={{ display: 'flex', gap: 6 }}>
           <input className="input" aria-label="Photo link" placeholder="or paste a photo link" value={photoLink} onChange={(e) => setPhotoLink(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addLink())} style={{ height: 34, fontSize: 13, flex: 1, minWidth: 0 }} />
           <button type="button" className="btn sm" onClick={addLink} disabled={!photoLink.trim()}>
@@ -596,73 +587,83 @@ function Editor({
 }
 
 /**
- * A popup of the shop's generated images (the Media library's "Generated Images"), newest first.
- * Pick up to `room` of them to add as product photos; ones the product already has are marked.
+ * Every finished generated image, newest first, listed in the form (no popup):
+ * "Use this photo" adds it to the product, tapping again takes it off.
  */
-function GeneratedPhotos({ ws, room, have, onClose, onPick }: { ws: string; room: number; have: string[]; onClose: () => void; onPick: (urls: string[]) => void }) {
+function GeneratedPhotos({
+  ws,
+  full,
+  have,
+  onAdd,
+  onRemove,
+}: {
+  ws: string;
+  full: boolean;
+  have: string[];
+  onAdd: (url: string) => void;
+  onRemove: (url: string) => void;
+}) {
   const api = useApi();
   const [images, setImages] = useState<{ id: string; resultImageUrl: string | null; status: string; createdAt: string }[]>();
-  const [picked, setPicked] = useState<string[]>([]);
   const [error, setError] = useState<string>();
+  const [shown, setShown] = useState(12);
   useEffect(() => {
     api<{ images: NonNullable<typeof images> }>(`${ws}/try-on`)
-      .then((r) => setImages(r.images.filter((i) => i.status === 'succeeded' && i.resultImageUrl)))
+      .then((r) =>
+        setImages(r.images.filter((i) => i.status === 'succeeded' && i.resultImageUrl).sort((x, y) => y.createdAt.localeCompare(x.createdAt))),
+      )
       .catch((e: Error) => setError(e.message));
   }, [api, ws]);
-  useEffect(() => {
-    const esc = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', esc);
-    return () => window.removeEventListener('keydown', esc);
-  }, [onClose]);
-  const toggle = (url: string) => setPicked((cur) => (cur.includes(url) ? cur.filter((u) => u !== url) : cur.length >= room ? cur : [...cur, url]));
   return (
-    <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="dialog wide" role="dialog" aria-modal="true" aria-label="Add photos from your generated images">
-        <h2>Add photos from your generated images</h2>
+    <div className="gen-photos">
+      <strong>Your generated photos</strong>
+      {error && <Notice tone="error">{error}</Notice>}
+      {!images && !error && <Loading />}
+      {images?.length === 0 && (
         <small className="muted">
-          Pick up to {room} photo{room === 1 ? '' : 's'}. They are added in the order you pick them.
+          No generated images yet. <a href="/generate-image">Make one with Generate image</a>.
         </small>
-        {error && <Notice tone="error">{error}</Notice>}
-        {!images && !error && <Loading />}
-        {images?.length === 0 && (
-          <Empty>
-            No generated images yet. <a href="/generate-image">Make one with Generate image</a>.
-          </Empty>
-        )}
-        {!!images?.length && (
-          <div className="lib-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10, padding: 0, maxHeight: '60vh', overflowY: 'auto' }}>
-            {images.map((i) => {
-              const url = i.resultImageUrl!;
-              const n = picked.indexOf(url);
-              const added = have.includes(url);
-              return (
+      )}
+      {!!images?.length && (
+        <div className="results lib-cards pick-cards">
+          {images.slice(0, shown).map((i) => {
+            const url = i.resultImageUrl!;
+            const added = have.includes(url);
+            return (
+              <div key={i.id} className={`result${added ? ' sel' : ''}`}>
                 <button
-                  key={i.id}
                   type="button"
-                  className={`lib-item${n >= 0 ? ' sel' : ''}`}
-                  aria-pressed={n >= 0}
-                  aria-label={added ? 'Already a photo of this product' : n >= 0 ? 'Unselect image' : 'Select image'}
-                  disabled={added}
-                  style={added ? { opacity: 0.45, cursor: 'default' } : undefined}
-                  onClick={() => toggle(url)}
+                  className="ph"
+                  disabled={!added && full}
+                  aria-pressed={added}
+                  aria-label={added ? 'Remove from this product' : 'Add to this product'}
+                  onClick={() => (added ? onRemove(url) : onAdd(url))}
                 >
                   <img src={url} alt="" loading="lazy" />
-                  <span className="lib-check">{n >= 0 ? n + 1 : ''}</span>
-                  {added && <span className="lib-tag">Added</span>}
+                  <span className="lib-check">{added ? '✓' : ''}</span>
                 </button>
-              );
-            })}
-          </div>
-        )}
-        <div className="buttons">
-          <button type="button" className="btn" onClick={onClose}>
-            Cancel
-          </button>
-          <button type="button" className="btn primary" disabled={!picked.length} onClick={() => onPick(picked)}>
-            {picked.length ? `Add ${picked.length} photo${picked.length === 1 ? '' : 's'}` : 'Add photos'}
-          </button>
+                <div className="info">
+                  <small className="muted lib-date">{new Date(i.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</small>
+                  <button
+                    type="button"
+                    className={`btn sm${added ? '' : ' primary'}`}
+                    disabled={!added && full}
+                    onClick={() => (added ? onRemove(url) : onAdd(url))}
+                  >
+                    {added ? 'Added ✓' : 'Use this photo'}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
-      </div>
+      )}
+      {images && images.length > shown && (
+        <button type="button" className="btn sm" style={{ alignSelf: 'center' }} onClick={() => setShown((n) => n + 12)}>
+          Show more ({images.length - shown} more)
+        </button>
+      )}
+      {full && <small className="muted">This product has {MAX_PHOTOS} photos, the most it can have. Remove one to add another.</small>}
     </div>
   );
 }
