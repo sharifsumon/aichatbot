@@ -349,6 +349,19 @@ export default function GenerateImagePage() {
     return () => clearTimeout(t);
   }, [api, ws, bodyKey, showPrompt, styleOptions]);
 
+  // Every image the shop made before, newest first, listed under the form.
+  useEffect(() => {
+    api<{ images: TryOnImage[] }>(`${ws}/try-on`)
+      .then((r) =>
+        setMade((cur) => [...cur, ...r.images.filter((i) => !cur.some((c) => c.id === i.id)).sort((x, y) => y.createdAt.localeCompare(x.createdAt))]),
+      )
+      .catch(() => undefined);
+  }, [api, ws]);
+  // Started on this page: shown in the preview.
+  const [mine, setMine] = useState<string[]>([]);
+  const latest = made.filter((i) => mine.includes(i.id));
+  const [shown, setShown] = useState(12);
+
   // While an image is being made, check every few seconds.
   const pending = made.some((i) => i.status === 'pending');
   const refresh = useCallback(async () => {
@@ -423,6 +436,7 @@ export default function GenerateImagePage() {
       for (let i = 0; i < count; i++) {
         const r = await api<{ image: TryOnImage }>(`${ws}/try-on`, { method: 'POST', body: { ...body, garmentImageUrl: garment } });
         setMade((cur) => [r.image, ...cur]);
+        setMine((cur) => [r.image.id, ...cur]);
       }
       reloadHome();
     } catch (e) {
@@ -660,7 +674,7 @@ export default function GenerateImagePage() {
             <div className="card pad">
               <h2 style={{ fontSize: 16 }}>Preview</h2>
               {setup.loading && !setup.data && <Loading />}
-              {made.length === 0 ? (
+              {latest.length === 0 ? (
                 <div className="gen-preview" style={{ aspectRatio: `${size.w} / ${size.h}` }}>
                   <Icon.images />
                   <span>Your image appears here ({aspect})</span>
@@ -670,7 +684,7 @@ export default function GenerateImagePage() {
                 </div>
               ) : (
                 <div className="results">
-                  {made.map((img) => (
+                  {latest.map((img) => (
                     <div key={img.id} className="result">
                       <div className="ph">
                         {img.status === 'succeeded' && img.resultImageUrl ? (
@@ -728,6 +742,52 @@ export default function GenerateImagePage() {
             </p>
           </aside>
         </div>
+
+        <section aria-label="Your images" className="gen-gallery">
+          <h2>Your images</h2>
+          {made.length === 0 && <Empty>Images you make show up here. Each one takes about half a minute.</Empty>}
+          <div className="results">
+            {made.slice(0, shown).map((img) => (
+              <div key={img.id} className="result">
+                <div className="ph">
+                  {img.status === 'succeeded' && img.resultImageUrl ? (
+                    <a href={img.resultImageUrl} target="_blank" rel="noreferrer">
+                      <img src={img.resultImageUrl} alt="Your product photo" />
+                    </a>
+                  ) : img.status === 'pending' ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                      <div className="spinner" aria-hidden="true" />
+                      Making your image…
+                    </div>
+                  ) : (
+                    <div style={{ padding: 16 }}>{img.error ?? 'This image could not be made.'}</div>
+                  )}
+                </div>
+                <div className="info">
+                  <small className="muted" style={{ marginRight: 'auto' }}>
+                    {new Date(img.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+                  </small>
+                  {img.status === 'succeeded' && img.resultImageUrl && (
+                    <>
+                      <button type="button" className="btn sm primary" onClick={() => setAdding(img)}>
+                        Add to a product
+                      </button>
+                      <a className="btn sm" href={img.resultImageUrl} download target="_blank" rel="noreferrer">
+                        Download
+                      </a>
+                    </>
+                  )}
+                  {img.status === 'failed' && <Pill tone="red">Failed</Pill>}
+                </div>
+              </div>
+            ))}
+          </div>
+          {made.length > shown && (
+            <button type="button" className="btn" style={{ alignSelf: 'center' }} onClick={() => setShown((n) => n + 12)}>
+              Show more ({made.length - shown} more)
+            </button>
+          )}
+        </section>
       </div>
 
       {adding?.resultImageUrl && (

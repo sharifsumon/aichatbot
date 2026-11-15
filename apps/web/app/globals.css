@@ -735,3 +735,12 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
   .lib-cards .info .btn.sm { flex: 1 1 100%; }
   .pick-cards { max-height: none; }
 }
+
+/* Generate image: every image made, listed under the form like "Your videos". Catalog form: generated photos listed inline. */
+.gen-gallery { display: flex; flex-direction: column; gap: 12px; }
+.gen-gallery h2 { font-size: 18px; font-weight: 700; }
+.gen-photos { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid #e9eaf3; border-radius: 14px; background: #f9fafc; }
+.gen-photos > strong { font-size: 13px; }
+.gen-photos .pick-cards { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); max-height: none; overflow: visible; gap: 10px; }
+.gen-photos .result .info { padding: 8px; }
+.gen-photos .result .info .btn.sm { flex: 1 1 100%; }
