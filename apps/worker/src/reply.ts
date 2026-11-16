@@ -1,4 +1,4 @@
-import { and, eq, gt, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, sql } from 'drizzle-orm';
 import { AIProviderError, costUsd } from '@agently/ai';
 import { activities, agents, channels, conversations, messages, productPosts, products, workspaces } from '@agently/db';
 import { GraphApiError, INSTAGRAM_MAX_TEXT } from '@agently/meta';
@@ -69,16 +69,14 @@ export async function handleReply(deps: WorkerDeps, job: ReplyJob, opts: { final
   if (!workspace || workspace.status === 'suspended') return 'skipped_suspended';
   if (!channel?.accessTokenEncrypted || channel.status !== 'connected') return 'skipped_channel_unavailable';
 
-  // The channel's own bot; otherwise the shop's bot for this channel type. WhatsApp and
-  // Instagram without a bot of their own wait for staff rather than borrow Facebook's.
+  // The channel's own bot; otherwise the shop's oldest bot of this channel type (the same
+  // one Chat Agent edits). WhatsApp and Instagram without a bot of their own wait for staff
+  // rather than borrow Facebook's, and a Facebook page never falls back to one of theirs.
   const agent = channel.agentId
-    ? await db.query.agents.findFirst({ where: eq(agents.id, channel.agentId) })
+    ? await db.query.agents.findFirst({ where: and(eq(agents.id, channel.agentId), eq(agents.workspaceId, workspace.id)) })
     : await db.query.agents.findFirst({
-        where:
-          channel.type === 'facebook_page'
-            ? eq(agents.workspaceId, workspace.id)
-            : and(eq(agents.workspaceId, workspace.id), eq(agents.channelType, channel.type)),
-        orderBy: agents.createdAt,
+        where: and(eq(agents.workspaceId, workspace.id), eq(agents.channelType, channel.type)),
+        orderBy: [asc(agents.createdAt), asc(agents.id)],
       });
   if (!agent || agent.status !== 'live') return 'skipped_agent_not_live';
   if (message.kind === 'comment' && agent.commentReplyMode === 'off') return 'skipped_comments_off';

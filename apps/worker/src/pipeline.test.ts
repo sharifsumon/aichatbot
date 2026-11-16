@@ -377,3 +377,21 @@ test('WhatsApp: answered by the WhatsApp agent on the number, never by the Faceb
   assert.deepEqual(sentWhatsApp, [{ phoneNumberId, to: '8801712345678', text: 'Cotton Shirt ৳850, Blue L in stock.' }]);
   assert.equal(sent.length, 0);
 });
+
+test('a Facebook page without its own bot uses the main Facebook bot, never a WhatsApp one', { skip }, async () => {
+  const page = `page-${randomBytes(4).toString('hex')}`;
+  const ws = await makeShop(page);
+  await db.update(channels).set({ agentId: null }).where(eq(channels.externalId, page));
+  await db.update(agents).set({ status: 'paused' }).where(eq(agents.workspaceId, ws.id));
+  // An older, live WhatsApp bot must not answer Messenger.
+  await db.insert(agents).values({ workspaceId: ws.id, name: 'WA bot', channelType: 'whatsapp', status: 'live', createdAt: new Date(Date.now() - 864e5) });
+
+  assert.equal(await handleInbound(deps(), inbound(page, `${page}-m1`, 'hi')), 'saved');
+  assert.equal(await handleReply(deps(), queued[0]!, { finalAttempt: false }), 'skipped_agent_not_live');
+  assert.equal(sent.length, 0);
+
+  await db.update(agents).set({ status: 'live' }).where(and(eq(agents.workspaceId, ws.id), eq(agents.channelType, 'facebook_page')));
+  assert.equal(await handleInbound(deps(), inbound(page, `${page}-m2`, 'price?')), 'saved');
+  assert.equal(await handleReply(deps(), queued[1]!, { finalAttempt: false }), 'sent');
+  assert.equal(sent.length, 1);
+});

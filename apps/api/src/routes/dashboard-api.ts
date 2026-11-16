@@ -23,7 +23,7 @@ import { catalogRoutes, type CatalogDeps } from './catalog.ts';
 import { facebookPostRoutes, type FacebookPostDeps } from './facebook-posts.ts';
 import { pagePostRoutes, type PagePostDeps } from './page-posts.ts';
 import { knowledgeRoutes, type KnowledgeDeps } from './knowledge.ts';
-import { settingsRoutes } from './settings.ts';
+import { mainAgent, settingsRoutes } from './settings.ts';
 import { teamRoutes } from './team.ts';
 import { billingRoutes } from './billing.ts';
 import { homeRoutes } from './home.ts';
@@ -177,10 +177,7 @@ export const dashboardApiRoutes: FastifyPluginAsync<DashboardDeps> = async (app,
       return reply.code(502).send({ error: 'Facebook did not let us connect this page. Try again in a minute.' });
     }
 
-    const agent = await db.query.agents.findFirst({
-      where: and(eq(agents.workspaceId, workspaceId), eq(agents.channelType, 'facebook_page')),
-      orderBy: asc(agents.createdAt),
-    });
+    const agent = await mainAgent(db, workspaceId);
     const values = {
       workspaceId,
       agentId: agent?.id ?? null,

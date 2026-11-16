@@ -3,7 +3,8 @@ import { and, desc, eq, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { limitsFor } from '@agently/billing';
-import { activities, agents, knowledgeChunks, knowledgeSources, type Db } from '@agently/db';
+import { activities, knowledgeChunks, knowledgeSources, type Db } from '@agently/db';
+import { mainAgent } from './settings.ts';
 import type { KnowledgeJob } from '@agently/shared';
 import { workspaceKey, type ObjectStore } from '@agently/storage';
 import { ALL_ROLES, MANAGERS, isUuid, requireRole } from './guard.ts';
@@ -219,7 +220,7 @@ type NewSource = Pick<typeof knowledgeSources.$inferInsert, 'type' | 'name' | 'u
 
 async function insertSource(db: Db, workspaceId: string, userId: string, values: NewSource) {
   return db.transaction(async (tx) => {
-    const agent = await tx.query.agents.findFirst({ where: eq(agents.workspaceId, workspaceId), orderBy: agents.createdAt });
+    const agent = await mainAgent(tx, workspaceId);
     const [source] = await tx
       .insert(knowledgeSources)
       .values({ ...values, workspaceId, agentId: agent?.id ?? null, status: 'queued' })
