@@ -15,6 +15,12 @@ export const FACEBOOK_SCOPES = [
   'pages_manage_posts',
 ];
 
+/**
+ * Asked for only when a shop connects Instagram, so signing in keeps working
+ * for everyone while the Meta app waits for these permissions in App Review.
+ */
+export const INSTAGRAM_SCOPES = ['instagram_basic', 'instagram_manage_messages'];
+
 /** Webhook fields each connected page is subscribed to. */
 export const PAGE_SUBSCRIBED_FIELDS = ['messages', 'messaging_postbacks', 'messaging_referrals', 'feed'];
 
@@ -24,6 +30,14 @@ export interface FacebookPage {
   accessToken: string;
   /** What the user may do on the page; MESSAGING and MODERATE are needed for Agently. */
   tasks: string[];
+}
+
+/** An Instagram professional account linked to a page the user manages. */
+export interface InstagramAccount {
+  id: string;
+  username: string;
+  name?: string;
+  page: { id: string; name: string; accessToken: string; tasks: string[] };
 }
 
 export interface FacebookAppOptions {
@@ -45,13 +59,13 @@ export class FacebookApp {
     this.fetchImpl = options.fetch ?? fetch;
   }
 
-  loginUrl(redirectUri: string, state: string): string {
+  loginUrl(redirectUri: string, state: string, extraScopes: string[] = []): string {
     const params = new URLSearchParams({
       client_id: this.options.appId,
       redirect_uri: redirectUri,
       state,
       response_type: 'code',
-      scope: FACEBOOK_SCOPES.join(','),
+      scope: [...FACEBOOK_SCOPES, ...extraScopes].join(','),
       // Ask again for any permission declined or removed before; without this,
       // Facebook skips them silently and the page stops sending messages.
       auth_type: 'rerequest',
@@ -104,6 +118,49 @@ export class FacebookApp {
   }
 
   /**
+   * Instagram professional accounts linked to the user's pages. Needs the
+   * Instagram permissions (INSTAGRAM_SCOPES); without them Meta answers with a
+   * permission error (GraphApiError.permissionMissing).
+   */
+  async instagramAccounts(userToken: string): Promise<InstagramAccount[]> {
+    const accounts: InstagramAccount[] = [];
+    let after: string | undefined;
+    do {
+      const res = await this.call<{
+        data: { id: string; name: string; access_token: string; tasks?: string[]; instagram_business_account?: { id: string; username?: string; name?: string } }[];
+        paging?: { cursors?: { after?: string }; next?: string };
+      }>(
+        'GET',
+        '/me/accounts',
+        { fields: 'id,name,access_token,tasks,instagram_business_account{id,username,name}', limit: '100', ...(after && { after }) },
+        userToken,
+      );
+      for (const p of res.data) {
+        const ig = p.instagram_business_account;
+        if (!ig) continue;
+        accounts.push({
+          id: ig.id,
+          username: ig.username ?? ig.name ?? ig.id,
+          name: ig.name,
+          page: { id: p.id, name: p.name, accessToken: p.access_token, tasks: p.tasks ?? [] },
+        });
+      }
+      after = res.paging?.next ? res.paging.cursors?.after : undefined;
+    } while (after);
+    return accounts;
+  }
+
+  /** WhatsApp Embedded Signup: the code from the signup popup → a business token for the shop's WhatsApp account. */
+  async exchangeSignupCode(code: string): Promise<string> {
+    const res = await this.call<{ access_token: string }>('GET', '/oauth/access_token', {
+      client_id: this.options.appId,
+      client_secret: this.options.appSecret,
+      code,
+    });
+    return res.access_token;
+  }
+
+  /**
    * Starts webhook delivery for a page, and turns on Messenger's Get Started
    * button: a new customer opening an m.me link from a post taps it, and
    * that is how the link's ref (which product) reaches the bot.
@@ -112,6 +169,15 @@ export class FacebookApp {
     await this.call('POST', `/${pageId}/subscribed_apps`, { subscribed_fields: PAGE_SUBSCRIBED_FIELDS.join(',') }, pageToken);
     // Best effort: without it messaging still works, only new chats from links lose the product.
     await this.call('POST', '/me/messenger_profile', { get_started: JSON.stringify({ payload: 'GET_STARTED' }) }, pageToken).catch(() => undefined);
+  }
+
+  /**
+   * Instagram DMs are delivered through the linked page's app subscription
+   * (plus the app's own Instagram webhook). Uses the full field list: a
+   * subscription replaces the page's fields, and the page may be connected too.
+   */
+  async subscribeInstagramPage(pageId: string, pageToken: string): Promise<void> {
+    await this.call('POST', `/${pageId}/subscribed_apps`, { subscribed_fields: PAGE_SUBSCRIBED_FIELDS.join(',') }, pageToken);
   }
 
   async unsubscribePage(pageId: string, pageToken: string): Promise<void> {

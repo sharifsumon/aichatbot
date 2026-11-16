@@ -1,7 +1,7 @@
 import { and, eq, gt, sql } from 'drizzle-orm';
 import { AIProviderError, costUsd } from '@agently/ai';
 import { activities, agents, channels, conversations, messages, productPosts, products, workspaces } from '@agently/db';
-import { GraphApiError } from '@agently/meta';
+import { GraphApiError, INSTAGRAM_MAX_TEXT } from '@agently/meta';
 import { decryptSecret, type ReplyJob } from '@agently/shared';
 import { generateReply, type ShopContext } from './agent/generate.ts';
 import { FALLBACK_REPLY, SENT_TO_INBOX, detectLanguage, type ReplyLanguage } from './agent/language.ts';
@@ -69,9 +69,17 @@ export async function handleReply(deps: WorkerDeps, job: ReplyJob, opts: { final
   if (!workspace || workspace.status === 'suspended') return 'skipped_suspended';
   if (!channel?.accessTokenEncrypted || channel.status !== 'connected') return 'skipped_channel_unavailable';
 
-  const agent = await db.query.agents.findFirst({
-    where: channel.agentId ? eq(agents.id, channel.agentId) : eq(agents.workspaceId, workspace.id),
-  });
+  // The channel's own bot; otherwise the shop's bot for this channel type. WhatsApp and
+  // Instagram without a bot of their own wait for staff rather than borrow Facebook's.
+  const agent = channel.agentId
+    ? await db.query.agents.findFirst({ where: eq(agents.id, channel.agentId) })
+    : await db.query.agents.findFirst({
+        where:
+          channel.type === 'facebook_page'
+            ? eq(agents.workspaceId, workspace.id)
+            : and(eq(agents.workspaceId, workspace.id), eq(agents.channelType, channel.type)),
+        orderBy: agents.createdAt,
+      });
   if (!agent || agent.status !== 'live') return 'skipped_agent_not_live';
   if (message.kind === 'comment' && agent.commentReplyMode === 'off') return 'skipped_comments_off';
 
@@ -81,7 +89,7 @@ export async function handleReply(deps: WorkerDeps, job: ReplyJob, opts: { final
   const pageToken = decryptSecret(channel.accessTokenEncrypted, deps.encryptionKey);
   const commentMode = agent.commentReplyMode;
   const send = (text: string, language: ReplyLanguage) =>
-    sendReply(deps, { pageToken, pageId: channel.externalId, source: message, commentMode, text, language });
+    sendReply(deps, { pageToken, channel, source: message, commentMode, text, language });
 
   const shop: ShopContext = {
     shopName: workspace.name,
@@ -153,7 +161,7 @@ export async function handleReply(deps: WorkerDeps, job: ReplyJob, opts: { final
     outputTokens: draft.usage.outputTokens,
   }, 'ai');
   if (draft.photos.length && message.kind === 'message' && sent.some((s) => s.externalId)) {
-    await sendPhotos(deps, { pageToken, channelId: channel.id, source: message, urls: draft.photos });
+    await sendPhotos(deps, { pageToken, channel, source: message, urls: draft.photos });
   }
   if (sent.some((s) => s.externalId)) {
     // One credit per AI reply that reached the customer.
@@ -173,7 +181,8 @@ async function sendReply(
   deps: WorkerDeps,
   r: {
     pageToken: string;
-    pageId: string;
+    /** externalId is the page id, Instagram account id or WhatsApp phone number id. */
+    channel: { type: string; externalId: string };
     /** The inbound message or comment being answered. */
     source: { kind: string; externalId: string | null; conversationId: string };
     commentMode: 'off' | 'public' | 'private' | 'public_and_private';
@@ -186,14 +195,14 @@ async function sendReply(
 
   if (source.kind === 'message') {
     const psid = await customerPsid(deps, source.conversationId);
-    const ids = await graph.sendText(r.pageToken, psid, r.text);
+    const ids = await sendChatText(deps, r.channel, r.pageToken, psid, r.text);
     return [{ kind: 'message', text: r.text, externalId: ids[0] }];
   }
 
   const commentId = source.externalId!;
   const out: Outbound[] = [];
   if (r.commentMode === 'private' || r.commentMode === 'public_and_private') {
-    const id = await graph.privateReply(r.pageToken, r.pageId, commentId, r.text);
+    const id = await graph.privateReply(r.pageToken, r.channel.externalId, commentId, r.text);
     out.push({ kind: 'private_reply', text: r.text, externalId: id });
   }
   if (r.commentMode === 'public' || r.commentMode === 'public_and_private') {
@@ -204,34 +213,45 @@ async function sendReply(
   return out;
 }
 
+/** A chat message on the channel's own platform: Messenger, Instagram DMs or WhatsApp. */
+function sendChatText(deps: WorkerDeps, channel: { type: string; externalId: string }, token: string, to: string, text: string): Promise<string[]> {
+  if (channel.type === 'whatsapp') return deps.graph.sendWhatsAppText(token, channel.externalId, to, text);
+  return deps.graph.sendText(token, to, text, channel.type === 'instagram' ? INSTAGRAM_MAX_TEXT : undefined);
+}
+
+function sendChatImage(deps: WorkerDeps, channel: { type: string; externalId: string }, token: string, to: string, url: string): Promise<string> {
+  if (channel.type === 'whatsapp') return deps.graph.sendWhatsAppImage(token, channel.externalId, to, url);
+  return deps.graph.sendImage(token, to, url, { instagram: channel.type === 'instagram' });
+}
+
 async function customerPsid(deps: WorkerDeps, conversationId: string): Promise<string> {
   const conversation = await deps.db.query.conversations.findFirst({
     where: eq(conversations.id, conversationId),
     with: { customer: { with: { identities: true } } },
   });
   const psid = conversation?.customer.identities.find((i) => i.channelId === conversation.channelId)?.externalId;
-  if (!psid) throw new Error('Customer has no Messenger id on this page');
+  if (!psid) throw new Error('Customer has no chat id on this channel');
   return psid;
 }
 
 /**
- * Product photos after the reply's text, one Messenger message each. The text
+ * Product photos after the reply's text, one chat message each. The text
  * already reached the customer, so a photo that fails is logged and saved as
  * failed rather than retrying the whole reply.
  */
 async function sendPhotos(
   deps: WorkerDeps,
-  r: { pageToken: string; channelId: string; source: { workspaceId: string; conversationId: string; channelId: string; id: string }; urls: string[] },
+  r: { pageToken: string; channel: { id: string; type: string; externalId: string }; source: { workspaceId: string; conversationId: string; channelId: string; id: string }; urls: string[] },
 ): Promise<void> {
   const psid = await customerPsid(deps, r.source.conversationId);
   for (const url of r.urls) {
     let externalId: string | undefined;
     try {
-      externalId = await deps.graph.sendImage(r.pageToken, psid, url);
+      externalId = await sendChatImage(deps, r.channel, r.pageToken, psid, url);
     } catch (err) {
       deps.log.warn({ err, url }, 'Product photo failed to send');
       if (err instanceof GraphApiError && err.tokenInvalid) {
-        await deps.db.update(channels).set({ status: 'token_expired', lastError: err.message }).where(eq(channels.id, r.channelId));
+        await deps.db.update(channels).set({ status: 'token_expired', lastError: err.message }).where(eq(channels.id, r.channel.id));
         return;
       }
     }

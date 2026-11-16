@@ -17,13 +17,31 @@ export interface HandoffRules {
   keywords: string[];
 }
 
-/** The customer-facing bot. One per workspace in Phase 1. */
+/** Extra details a channel keeps: the Instagram account's page, the WhatsApp account and number. */
+export interface ChannelMeta {
+  /** Instagram: the Facebook page the account is linked to; its token answers DMs. */
+  pageId?: string;
+  pageName?: string;
+  /** Instagram: the @username. */
+  username?: string;
+  /** WhatsApp: the WhatsApp Business Account the number belongs to. */
+  wabaId?: string;
+  /** WhatsApp: the number as Meta shows it, e.g. "+880 1712-345678". */
+  displayPhoneNumber?: string;
+}
+
+/**
+ * A customer-facing bot. Each shop has one per channel type: the main one for
+ * Facebook, and optionally its own for WhatsApp and for Instagram.
+ */
 export const agents = pgTable(
   'agents',
   {
     id: id(),
     workspaceId: uuid().notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
     name: text().notNull(),
+    /** The kind of channel this bot answers. Channels without a bot of their own type stay with staff. */
+    channelType: channelTypeEnum().notNull().default('facebook_page'),
     systemInstruction: text().notNull().default(''),
     tone: text().notNull().default('friendly'),
     languages: text().array().notNull().default(['bn', 'en']),
@@ -55,6 +73,7 @@ export const channels = pgTable(
     accessTokenEncrypted: text(),
     status: channelStatusEnum().notNull().default('connected'),
     lastError: text(),
+    meta: jsonb().$type<ChannelMeta>().notNull().default({}),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

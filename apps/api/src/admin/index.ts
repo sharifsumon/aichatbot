@@ -17,7 +17,7 @@ import type { AdminUser } from './session.ts';
 
 export interface AdminDeps {
   db: Db;
-  graph: Pick<GraphClient, 'sendText' | 'replyToComment'>;
+  graph: Pick<GraphClient, 'sendText' | 'sendWhatsAppText' | 'replyToComment'>;
   encryptionKey: string;
   cookies: CookieSettings;
   /** The admin panel's own address; requests that change things must come from it. */

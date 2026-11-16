@@ -42,6 +42,8 @@ In the Meta app's dashboard (developers.facebook.com):
 2. Add **Messenger**, and set the webhook callback URL to `${API_URL}/webhooks/meta` with `META_VERIFY_TOKEN` as the verify token. Subscribe to the `messages`, `messaging_postbacks` and `feed` fields.
 3. Under App settings → Basic, set the data deletion callback URL to `${API_URL}/webhooks/meta/data-deletion` and the deauthorize callback URL to `${API_URL}/webhooks/meta/deauthorize`.
 4. Copy the App ID and App Secret into `META_APP_ID` and `META_APP_SECRET`.
+5. For Instagram DMs: add **Instagram** (Instagram API with Facebook Login), and in **Webhooks** pick the `Instagram` object, set the same callback URL and verify token, and subscribe to `messages`. Shops connect an account in Settings → Channels; the first time, Facebook asks for `instagram_basic` and `instagram_manage_messages`.
+6. For WhatsApp: add **WhatsApp**, and in **Webhooks** pick the `WhatsApp Business Account` object, set the same callback URL and verify token, and subscribe to `messages`. Shops connect a number in Settings → Channels, either with Embedded Signup (set `META_WA_CONFIG_ID`) or by pasting the number's phone number ID, WhatsApp Business Account ID and a permanent system user token.
 
 In development mode only people with a role on the app (admins, developers, testers) can sign in and only their pages can be connected. Other shops need App Review for the permissions in `packages/meta/src/oauth.ts`.
 

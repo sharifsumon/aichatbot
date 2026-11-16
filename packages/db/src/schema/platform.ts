@@ -54,6 +54,10 @@ export interface PlanLimits {
   aiCreditsPerMonth: number;
   knowledgeBaseMb: number;
   staffSeats: number;
+  /** WhatsApp numbers a shop may connect. Missing on plans saved before WhatsApp: none. */
+  whatsappNumbers?: number;
+  /** Instagram accounts a shop may connect. Missing on plans saved before Instagram: none. */
+  instagramAccounts?: number;
 }
 
 export const plans = pgTable('plans', {

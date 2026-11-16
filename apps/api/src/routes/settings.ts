@@ -1,9 +1,10 @@
 import { and, asc, eq, ne } from 'drizzle-orm';
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { normaliseBdPhone } from '@agently/commerce';
 import { activities, agents, channels, workspaces, type Db } from '@agently/db';
-import { ALL_ROLES, MANAGERS, requireRole } from './guard.ts';
+import { limitsFor } from '@agently/billing';
+import { ALL_ROLES, MANAGERS, isUuid, requireRole } from './guard.ts';
 import { parseBody } from './validate.ts';
 
 const money = z
@@ -95,26 +96,150 @@ export const settingsRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db }
     return reply.code(204).send();
   });
 
+  // The main (Facebook) bot. Kept for the dashboard and older screens; /agents/:agentId does the same for any bot.
   app.get<{ Params: { workspaceId: string } }>('/workspaces/:workspaceId/agent', async (req, reply) => {
     if (!(await requireRole(db, req, reply, ALL_ROLES))) return reply;
-    const agent = await firstAgent(db, req.params.workspaceId);
+    const agent = await mainAgent(db, req.params.workspaceId);
     if (!agent) return reply.code(404).send({ error: 'Agent not found' });
     return { agent: agentOf(agent) };
   });
 
   app.patch<{ Params: { workspaceId: string } }>('/workspaces/:workspaceId/agent', async (req, reply) => {
     if (!(await requireRole(db, req, reply, MANAGERS))) return reply;
-    const agent = await firstAgent(db, req.params.workspaceId);
+    const agent = await mainAgent(db, req.params.workspaceId);
     if (!agent) return reply.code(404).send({ error: 'Agent not found' });
-    const body = await parseBody(agentBody, req.body, reply);
+    return updateAgent(agent, req.body, req.user.id, reply);
+  });
+
+  /** Every bot in the shop (one per channel type), with the channels it answers and the plan's limit. */
+  app.get<{ Params: { workspaceId: string } }>('/workspaces/:workspaceId/agents', async (req, reply) => {
+    if (!(await requireRole(db, req, reply, ALL_ROLES))) return reply;
+    const { workspaceId } = req.params;
+    const [rows, chans, limits] = await Promise.all([
+      db.query.agents.findMany({ where: eq(agents.workspaceId, workspaceId), orderBy: asc(agents.createdAt) }),
+      db
+        .select({ id: channels.id, type: channels.type, name: channels.name, status: channels.status, agentId: channels.agentId })
+        .from(channels)
+        .where(and(eq(channels.workspaceId, workspaceId), ne(channels.status, 'disconnected'))),
+      limitsFor(db, workspaceId),
+    ]);
+    return {
+      agents: rows.map((a) => ({
+        ...agentOf(a),
+        channels: chans.filter((c) => c.agentId === a.id || (!c.agentId && c.type === a.channelType)).map(({ agentId: _a, ...c }) => c),
+      })),
+      // Channel types with a channel connected but no bot of their own: their chats wait for staff.
+      unanswered: [...new Set(chans.filter((c) => !rows.some((a) => a.channelType === c.type)).map((c) => c.type))],
+      limit: limits.agents,
+    };
+  });
+
+  /** A new bot for WhatsApp or Instagram, starting from the main bot's settings. */
+  app.post<{ Params: { workspaceId: string } }>('/workspaces/:workspaceId/agents', async (req, reply) => {
+    if (!(await requireRole(db, req, reply, MANAGERS))) return reply;
+    const body = await parseBody(newAgentBody, req.body, reply);
+    if (!body) return reply;
+    const { workspaceId } = req.params;
+    const [existing, limits, main, ws] = await Promise.all([
+      db.query.agents.findMany({ columns: { id: true, channelType: true }, where: eq(agents.workspaceId, workspaceId) }),
+      limitsFor(db, workspaceId),
+      mainAgent(db, workspaceId),
+      db.query.workspaces.findFirst({ columns: { name: true }, where: eq(workspaces.id, workspaceId) }),
+    ]);
+    const label = AGENT_CHANNEL[body.channelType];
+    if (existing.some((a) => a.channelType === body.channelType)) {
+      return reply.code(409).send({ error: `This shop already has a ${label} agent` });
+    }
+    if (existing.length >= limits.agents) {
+      return reply.code(402).send({
+        error: `Your plan allows ${limits.agents} ${limits.agents === 1 ? 'agent' : 'agents'}. Upgrade to add a ${label} agent.`,
+        limit: 'agents',
+      });
+    }
+
+    const agent = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(agents)
+        .values({
+          workspaceId,
+          channelType: body.channelType,
+          name: body.name ?? `${ws!.name} ${label} assistant`,
+          ...(main && {
+            systemInstruction: main.systemInstruction,
+            tone: main.tone,
+            languages: main.languages,
+            handoffEnabled: main.handoffEnabled,
+            handoffRules: main.handoffRules,
+          }),
+          // Comments are a Facebook thing; this bot only answers chats.
+          commentReplyMode: 'off',
+        })
+        .returning();
+      // It answers every channel of its type in the shop.
+      await tx.update(channels).set({ agentId: created!.id }).where(and(eq(channels.workspaceId, workspaceId), eq(channels.type, body.channelType)));
+      await tx.insert(activities).values({
+        workspaceId,
+        type: 'agent.created',
+        text: `${created!.name} added for ${label}`,
+        actorUserId: req.user.id,
+        data: { agentId: created!.id },
+      });
+      return created!;
+    });
+    return reply.code(201).send({ agent: agentOf(agent) });
+  });
+
+  app.get<{ Params: AgentParams }>('/workspaces/:workspaceId/agents/:agentId', async (req, reply) => {
+    if (!(await requireRole(db, req, reply, ALL_ROLES))) return reply;
+    const agent = await agentById(db, req.params);
+    if (!agent) return reply.code(404).send({ error: 'Agent not found' });
+    return { agent: agentOf(agent) };
+  });
+
+  app.patch<{ Params: AgentParams }>('/workspaces/:workspaceId/agents/:agentId', async (req, reply) => {
+    if (!(await requireRole(db, req, reply, MANAGERS))) return reply;
+    const agent = await agentById(db, req.params);
+    if (!agent) return reply.code(404).send({ error: 'Agent not found' });
+    return updateAgent(agent, req.body, req.user.id, reply);
+  });
+
+  /** Removes a WhatsApp or Instagram bot; its chats then wait for staff. The main bot stays. */
+  app.delete<{ Params: AgentParams }>('/workspaces/:workspaceId/agents/:agentId', async (req, reply) => {
+    if (!(await requireRole(db, req, reply, MANAGERS))) return reply;
+    const agent = await agentById(db, req.params);
+    if (!agent) return reply.code(404).send({ error: 'Agent not found' });
+    if (agent.channelType === 'facebook_page') return reply.code(409).send({ error: 'The main Facebook agent can be paused but not removed' });
+    // Channels pointing at it are set back to none by the foreign key.
+    await db.delete(agents).where(eq(agents.id, agent.id));
+    await db.insert(activities).values({
+      workspaceId: agent.workspaceId,
+      type: 'agent.deleted',
+      text: `${agent.name} removed`,
+      actorUserId: req.user.id,
+      data: { agentId: agent.id },
+    });
+    return reply.code(204).send();
+  });
+
+  async function updateAgent(agent: typeof agents.$inferSelect, raw: unknown, userId: string, reply: FastifyReply) {
+    const body = await parseBody(agentBody, raw, reply);
     if (!body) return reply;
 
     if (body.status === 'live' && agent.status !== 'live') {
-      // Live means answering customers, which needs a page to answer on.
-      const page = await db.query.channels.findFirst({
-        where: and(eq(channels.workspaceId, agent.workspaceId), eq(channels.status, 'connected'), ne(channels.type, 'widget')),
-      });
-      if (!page) return reply.code(409).send({ error: 'Connect a Facebook page before turning the agent on' });
+      // Live means answering customers, which needs a channel of its type to answer on.
+      const where =
+        agent.channelType === 'facebook_page'
+          ? and(eq(channels.workspaceId, agent.workspaceId), eq(channels.status, 'connected'), ne(channels.type, 'widget'))
+          : and(eq(channels.workspaceId, agent.workspaceId), eq(channels.status, 'connected'), eq(channels.type, agent.channelType));
+      const page = await db.query.channels.findFirst({ where });
+      if (!page) {
+        return reply.code(409).send({
+          error:
+            agent.channelType === 'facebook_page'
+              ? 'Connect a Facebook page before turning the agent on'
+              : `Connect ${agent.channelType === 'whatsapp' ? 'a WhatsApp number' : 'an Instagram account'} in Settings before turning this agent on`,
+        });
+      }
     }
 
     const [updated] = await db.update(agents).set(body).where(eq(agents.id, agent.id)).returning();
@@ -123,16 +248,31 @@ export const settingsRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db }
         workspaceId: agent.workspaceId,
         type: `agent.${body.status}`,
         text: body.status === 'live' ? `${agent.name} is live` : body.status === 'paused' ? `${agent.name} is paused` : `${agent.name} is back in setup`,
-        actorUserId: req.user.id,
+        actorUserId: userId,
         data: { agentId: agent.id },
       });
     }
     return { agent: agentOf(updated!) };
-  });
+  }
 };
 
-const firstAgent = (db: Db, workspaceId: string) =>
-  db.query.agents.findFirst({ where: eq(agents.workspaceId, workspaceId), orderBy: asc(agents.createdAt) });
+type AgentParams = { workspaceId: string; agentId: string };
+
+const AGENT_CHANNEL = { whatsapp: 'WhatsApp', instagram: 'Instagram' } as const;
+
+const newAgentBody = z
+  .object({ channelType: z.enum(['whatsapp', 'instagram']), name: z.string().trim().min(1).max(80).optional() })
+  .strict();
+
+/** The shop's main bot: its Facebook one (the first made, for shops from before per-channel bots). */
+const mainAgent = async (db: Db, workspaceId: string) =>
+  (await db.query.agents.findFirst({
+    where: and(eq(agents.workspaceId, workspaceId), eq(agents.channelType, 'facebook_page')),
+    orderBy: asc(agents.createdAt),
+  })) ?? db.query.agents.findFirst({ where: eq(agents.workspaceId, workspaceId), orderBy: asc(agents.createdAt) });
+
+const agentById = (db: Db, p: AgentParams) =>
+  isUuid(p.agentId) ? db.query.agents.findFirst({ where: and(eq(agents.id, p.agentId), eq(agents.workspaceId, p.workspaceId)) }) : undefined;
 
 function settingsOf(ws: Ws) {
   return {

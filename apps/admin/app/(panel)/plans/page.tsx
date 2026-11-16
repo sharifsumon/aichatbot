@@ -10,6 +10,8 @@ import type { Limits, Plan } from '@/lib/types';
 const LIMIT_FIELDS: { key: keyof Limits; label: string }[] = [
   { key: 'aiCreditsPerMonth', label: 'AI credits a month' },
   { key: 'pages', label: 'Facebook pages' },
+  { key: 'whatsappNumbers', label: 'WhatsApp numbers' },
+  { key: 'instagramAccounts', label: 'Instagram accounts' },
   { key: 'agents', label: 'Bots' },
   { key: 'staffSeats', label: 'Staff seats' },
   { key: 'knowledgeBaseMb', label: 'Knowledge base (MB)' },
@@ -38,13 +40,15 @@ export default function PlansPage() {
         {done && <Notice tone="ok">{done}</Notice>}
         {error && <Notice tone="error">{error}</Notice>}
         <div className="table-wrap">
-          <table style={{ minWidth: 900 }}>
+          <table style={{ minWidth: 1050 }}>
             <thead>
               <tr>
                 <th>Plan</th>
                 <th>Price</th>
                 <th>AI credits</th>
                 <th>Pages</th>
+                <th>WhatsApp</th>
+                <th>Instagram</th>
                 <th>Staff</th>
                 <th>Knowledge base</th>
                 <th>Shops</th>
@@ -65,6 +69,8 @@ export default function PlansPage() {
                   <td>{p.trialDays ? `Free for ${p.trialDays} days` : `${bdt(p.priceBdt)} · ${usd(p.priceUsd, 0)} a month`}</td>
                   <td className="num">{num(p.limits.aiCreditsPerMonth)}</td>
                   <td className="num">{p.limits.pages}</td>
+                  <td className="num">{p.limits.whatsappNumbers ?? 0}</td>
+                  <td className="num">{p.limits.instagramAccounts ?? 0}</td>
                   <td className="num">{p.limits.staffSeats}</td>
                   <td className="num">{num(p.limits.knowledgeBaseMb)} MB</td>
                   <td className="num">{num(p.tenants)}</td>
@@ -108,6 +114,8 @@ function PlanDialog({ plan, onClose, onDone }: { plan?: Plan; onClose: () => voi
   const [limits, setLimits] = useState<Record<keyof Limits, string>>({
     aiCreditsPerMonth: String(plan?.limits.aiCreditsPerMonth ?? 2000),
     pages: String(plan?.limits.pages ?? 1),
+    whatsappNumbers: String(plan?.limits.whatsappNumbers ?? 0),
+    instagramAccounts: String(plan?.limits.instagramAccounts ?? 0),
     agents: String(plan?.limits.agents ?? 1),
     staffSeats: String(plan?.limits.staffSeats ?? 2),
     knowledgeBaseMb: String(plan?.limits.knowledgeBaseMb ?? 50),

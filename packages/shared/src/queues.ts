@@ -10,14 +10,15 @@ export const QUEUES = {
   billing: 'billing',
 } as const;
 
-export type ChannelKind = 'facebook_page';
+/** Channels that receive customer messages through Meta's webhooks. */
+export type ChannelKind = 'facebook_page' | 'instagram' | 'whatsapp';
 
 /** A customer message or comment, normalised from the channel's webhook payload. */
 export interface InboundJob {
   channel: ChannelKind;
-  /** Page id for Facebook. */
+  /** Page id for Facebook, Instagram account id, or WhatsApp phone number id. */
   channelExternalId: string;
-  /** Messenger PSID, or the commenter's id for comments. */
+  /** Messenger PSID, Instagram-scoped id, WhatsApp number (wa_id), or the commenter's id for comments. */
   senderExternalId: string;
   senderName?: string;
   /** Message id (mid) or comment id; used to drop Meta's retries. */

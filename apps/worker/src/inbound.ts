@@ -1,5 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import { channels, conversations, customerIdentities, customers, messages, products, type Db, type MessageMeta } from '@agently/db';
+import { normaliseBdPhone } from '@agently/commerce';
 import type { InboundJob } from '@agently/shared';
 import type { WorkerDeps } from './deps.ts';
 
@@ -16,7 +17,7 @@ export async function handleInbound(deps: WorkerDeps, job: InboundJob): Promise<
     where: and(eq(channels.type, job.channel), eq(channels.externalId, job.channelExternalId)),
   });
   if (!channel || channel.status === 'disconnected') {
-    log.warn({ pageId: job.channelExternalId }, 'Message for a page that is not connected');
+    log.warn({ channel: job.channel, externalId: job.channelExternalId }, 'Message for a channel that is not connected');
     return 'unknown_channel';
   }
 
@@ -83,9 +84,11 @@ async function findOrCreateCustomer(
   const existing = await tx.query.customerIdentities.findFirst({ where: identityWhere });
   if (existing) return existing.customerId;
 
+  // A WhatsApp sender id is their phone number, which orders can use straight away.
+  const phone = job.channel === 'whatsapp' ? normaliseBdPhone(job.senderExternalId) : null;
   const [customer] = await tx
     .insert(customers)
-    .values({ workspaceId: channel.workspaceId, name: job.senderName })
+    .values({ workspaceId: channel.workspaceId, name: job.senderName, ...(phone && { phone }) })
     .returning({ id: customers.id });
   const [identity] = await tx
     .insert(customerIdentities)

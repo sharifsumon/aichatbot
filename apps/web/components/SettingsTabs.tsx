@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { InstagramPicker, WhatsAppConnect } from '@/components/ChannelConnect';
 import { PagePicker } from '@/components/PagePicker';
 import { useShop } from '@/components/Shell';
 import { DayChart, Dialog, Empty, Loading, Meter, Notice, Pill, ShopStatusPill, Toggle } from '@/components/ui';
 import { useApi, useLoad } from '@/lib/api';
 import { bdt, date, daysLeft, num, usd } from '@/lib/format';
-import type { Billing, Channel, Role, Settings, Team } from '@/lib/types';
+import type { Billing, Channel, ChannelUsage, CountedChannel, Role, Settings, Team } from '@/lib/types';
 
 function useSettings() {
   const { ws, reloadHome, reloadMe } = useShop();
@@ -222,13 +223,24 @@ const CHANNEL_STATUS: Record<Channel['status'], { label: string; tone: 'green' |
   disconnected: { label: 'Disconnected', tone: 'red' },
 };
 
+const CHANNEL_KIND: Record<CountedChannel, { title: string; one: string; aOne: string; many: string }> = {
+  facebook_page: { title: 'Facebook pages', one: 'Facebook page', aOne: 'a Facebook page', many: 'Facebook pages' },
+  whatsapp: { title: 'WhatsApp', one: 'WhatsApp number', aOne: 'a WhatsApp number', many: 'WhatsApp numbers' },
+  instagram: { title: 'Instagram', one: 'Instagram account', aOne: 'an Instagram account', many: 'Instagram accounts' },
+};
+
+/** Facebook pages, WhatsApp numbers and Instagram accounts the bots answer on. */
 export function PagesTab() {
   const { ws, shop, reloadHome } = useShop();
   const api = useApi();
   const { data, error, reload } = useLoad<{ channels: Channel[] }>(`${ws}/channels`);
-  const [done, setDone] = useState<string>();
+  const plan = useLoad<ChannelUsage>(`${ws}/channels/usage`);
+  const [done, setDone] = useState<ReactNode>();
   const [problem, setProblem] = useState<string>();
-  const [adding, setAdding] = useState(false);
+  // After "Continue with Facebook" for Instagram, come back with that picker open.
+  const [adding, setAdding] = useState<CountedChannel | undefined>(() =>
+    typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('connect') === 'instagram' ? 'instagram' : undefined,
+  );
 
   async function disconnect(c: Channel) {
     if (!window.confirm(`Disconnect ${c.name}? The bot stops replying there until you connect it again.`)) return;
@@ -236,53 +248,108 @@ export function PagesTab() {
       await api(`${ws}/channels/${c.id}/disconnect`, { method: 'POST' });
       setDone(`${c.name} disconnected.`);
       reload();
+      plan.reload();
       reloadHome();
     } catch (e) {
       setProblem((e as Error).message);
     }
   }
 
+  const connected = (name: string, hasAgent: boolean, kind: CountedChannel) => {
+    setDone(
+      hasAgent ? (
+        `${name} connected.`
+      ) : (
+        <>
+          {name} connected. Messages arrive in your inbox. To let the bot answer them, <a href="/agent">add {kind === 'instagram' ? 'an' : 'a'} {CHANNEL_KIND[kind].title} agent</a> in Chat Agent.
+        </>
+      ),
+    );
+    setAdding(undefined);
+    reload();
+    plan.reload();
+    reloadHome();
+  };
+
+  const kinds: CountedChannel[] = ['facebook_page', 'whatsapp', 'instagram'];
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <Status saved={done} error={problem ?? error} />
-      <Section title="Connected pages" note="The bot answers messages and comments on these pages.">
-        {!data ? (
-          <Loading />
-        ) : data.channels.length === 0 ? (
-          <Empty>No page connected yet.</Empty>
-        ) : (
-          data.channels.map((c) => (
-            <div key={c.id} className="page-row">
-              <div>
-                <strong>{c.name}</strong>
-                <span className="sub">{c.type === 'facebook_page' ? 'Facebook page' : c.type}</span>
-                {c.lastError && c.status !== 'connected' && <span className="sub" style={{ color: 'var(--red)' }}>{c.lastError}</span>}
+      <Status saved={undefined} error={problem ?? error} />
+      {done && <Notice tone="ok">{done}</Notice>}
+      {kinds.map((kind) => {
+        const names = CHANNEL_KIND[kind];
+        const mine = data?.channels.filter((c) => c.type === kind) ?? [];
+        const u = plan.data?.usage[kind];
+        const full = !!u && u.used >= u.limit && !mine.some((c) => c.status !== 'connected');
+        return (
+          <Section
+            key={kind}
+            title={names.title}
+            note={
+              u
+                ? u.limit === 0
+                  ? `Not in your plan. Upgrade to Starter or above to connect ${names.aOne}.`
+                  : `${u.used} of ${u.limit} ${u.limit === 1 ? names.one : names.many} on your plan.`
+                : undefined
+            }
+          >
+            {!data ? (
+              <Loading />
+            ) : mine.length === 0 ? (
+              <Empty>No {names.one} connected yet.</Empty>
+            ) : (
+              mine.map((c) => (
+                <div key={c.id} className="page-row">
+                  <div>
+                    <strong>{c.name}</strong>
+                    <span className="sub">{names.one}</span>
+                    {c.lastError && c.status !== 'connected' && <span className="sub" style={{ color: 'var(--red)' }}>{c.lastError}</span>}
+                  </div>
+                  <Pill tone={CHANNEL_STATUS[c.status].tone}>{CHANNEL_STATUS[c.status].label}</Pill>
+                  <button type="button" className="btn sm" onClick={() => disconnect(c)}>
+                    Disconnect
+                  </button>
+                </div>
+              ))
+            )}
+            {adding === kind ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {kind === 'facebook_page' && (
+                  <PagePicker
+                    shopId={shop.id}
+                    onConnected={(name) => {
+                      setDone(`${name} connected.`);
+                      reload();
+                      plan.reload();
+                      reloadHome();
+                    }}
+                  />
+                )}
+                {kind === 'instagram' && <InstagramPicker shopId={shop.id} onConnected={(name, hasAgent) => connected(name, hasAgent, 'instagram')} />}
+                {kind === 'whatsapp' && plan.data && (
+                  <WhatsAppConnect shopId={shop.id} signup={plan.data.whatsappSignup} onConnected={(name, hasAgent) => connected(name, hasAgent, 'whatsapp')} />
+                )}
+                <button type="button" className="btn link" style={{ alignSelf: 'flex-start' }} onClick={() => setAdding(undefined)}>
+                  Close
+                </button>
               </div>
-              <Pill tone={CHANNEL_STATUS[c.status].tone}>{CHANNEL_STATUS[c.status].label}</Pill>
-              <button type="button" className="btn sm" onClick={() => disconnect(c)}>
-                Disconnect
-              </button>
-            </div>
-          ))
-        )}
-        {!adding && (
-          <button type="button" className="btn" style={{ alignSelf: 'flex-start' }} onClick={() => setAdding(true)}>
-            {data?.channels.some((c) => c.status !== 'connected') ? 'Reconnect or add a page' : 'Connect a page'}
-          </button>
-        )}
-      </Section>
-      {adding && (
-        <Section title="Your Facebook pages" note="Pick the page to connect. Reconnecting a page that needs it fixes the connection.">
-          <PagePicker
-            shopId={shop.id}
-            onConnected={(name) => {
-              setDone(`${name} connected.`);
-              reload();
-              reloadHome();
-            }}
-          />
-        </Section>
-      )}
+            ) : (
+              (kind === 'facebook_page' || (u && u.limit > 0)) && (
+                <button type="button" className="btn" style={{ alignSelf: 'flex-start' }} disabled={full} onClick={() => setAdding(kind)}>
+                  {mine.some((c) => c.status !== 'connected') ? `Reconnect or add ${names.aOne}` : `Connect ${names.aOne}`}
+                </button>
+              )
+            )}
+            {full && u!.limit > 0 && (
+              <span className="sub">
+                {u!.limit === 1 ? `Your plan includes 1 ${names.one}, and it is in use.` : `All ${u!.limit} ${names.many} on your plan are in use.`} Disconnect one or upgrade to add
+                another.
+              </span>
+            )}
+          </Section>
+        );
+      })}
     </div>
   );
 }
@@ -485,6 +552,9 @@ export function BillingTab() {
         <Meter used={b.credits.used} total={b.credits.granted} label={`AI replies this month: ${num(b.credits.used)} of ${num(b.credits.granted)}`} />
         <div className="grid2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
           <Meter used={b.usage.pages.used} total={b.usage.pages.limit} label={`Facebook pages: ${b.usage.pages.used} of ${b.usage.pages.limit}`} />
+          <Meter used={b.usage.whatsapp.used} total={b.usage.whatsapp.limit} label={`WhatsApp numbers: ${b.usage.whatsapp.used} of ${b.usage.whatsapp.limit}`} />
+          <Meter used={b.usage.instagram.used} total={b.usage.instagram.limit} label={`Instagram accounts: ${b.usage.instagram.used} of ${b.usage.instagram.limit}`} />
+          <Meter used={b.usage.agents.used} total={b.usage.agents.limit} label={`Chat agents: ${b.usage.agents.used} of ${b.usage.agents.limit}`} />
           <Meter used={b.usage.staffSeats.used} total={b.usage.staffSeats.limit} label={`Team seats: ${b.usage.staffSeats.used} of ${b.usage.staffSeats.limit}`} />
           <Meter used={kb.usedBytes} total={kb.limitBytes} label={`Knowledge base: ${(kb.usedBytes / 1048576).toFixed(1)} of ${Math.round(kb.limitBytes / 1048576)} MB`} />
         </div>
@@ -516,6 +586,16 @@ export function BillingTab() {
                 <li>
                   {p.limits.pages} Facebook page{p.limits.pages === 1 ? '' : 's'}
                 </li>
+                {p.limits.whatsappNumbers > 0 && (
+                  <li>
+                    {p.limits.whatsappNumbers} WhatsApp number{p.limits.whatsappNumbers === 1 ? '' : 's'}
+                  </li>
+                )}
+                {p.limits.instagramAccounts > 0 && (
+                  <li>
+                    {p.limits.instagramAccounts} Instagram account{p.limits.instagramAccounts === 1 ? '' : 's'}
+                  </li>
+                )}
                 <li>
                   {p.limits.staffSeats} team seat{p.limits.staffSeats === 1 ? '' : 's'}
                 </li>

@@ -94,7 +94,7 @@ Next: ${NEXT_STEP[c.openOrder.step]}\n`
     : '';
 
   return `You are ${c.agentName}, the sales and support assistant for ${c.shopName}, an online shop in Bangladesh.
-Tone: ${c.tone}. Keep replies short, like a helpful shop assistant in Messenger.
+Tone: ${c.tone}. Keep replies short, like a helpful shop assistant in a chat app.
 ${LANGUAGE_RULE[c.language]}
 ${c.kind === 'comment' ? 'This is a comment on a public Facebook post. Keep it to one or two sentences and never share the customer\'s personal details.' : ''}${c.postProduct ? `\nThe customer came from your post about ${c.postProduct.title} [code ${c.postProduct.code}]. Questions like "price?" or "available?" mean this product unless the customer names another.` : ''}
 

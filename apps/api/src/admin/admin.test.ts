@@ -49,6 +49,7 @@ function server() {
     meta: { appSecret: 's', verifyToken: 'v' },
     facebook: {} as never,
     graph: {
+      sendWhatsAppText: async () => ['wamid'], whatsAppNumber: async () => ({ id: 'PN', displayPhoneNumber: '', verifiedName: '' }), subscribeWhatsApp: async () => {}, registerWhatsApp: async () => {}, 
       sendText: async (_t, psid, text) => (sent.push({ to: psid, text }), ['mid-support']),
       replyToComment: async (_t, id, text) => (sent.push({ to: id, text }), 'c-support'),
       publishPost: async () => 'unused', publishVideo: async () => 'unused',

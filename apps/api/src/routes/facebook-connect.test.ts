@@ -43,6 +43,9 @@ function setup(fbUser: { id: string; name: string; email?: string }, pages: Face
     subscribePage: async (pageId) => void calls.push(`subscribe ${pageId}`),
     unsubscribePage: async (pageId) => void calls.push(`unsubscribe ${pageId}`),
     parseSignedRequest: (s) => (s.startsWith('valid:') ? { user_id: s.slice(6) } : null),
+    instagramAccounts: async () => [],
+    subscribeInstagramPage: async () => {},
+    exchangeSignupCode: async () => 'unused',
   };
   const app = buildServer({
     db,
@@ -50,7 +53,7 @@ function setup(fbUser: { id: string; name: string; email?: string }, pages: Face
     inbound: { add: async () => {} },
     meta: { appSecret: 's', verifyToken: 'v' },
     facebook,
-    graph: { sendText: async () => ['mid'], replyToComment: async () => 'cid', publishPost: async () => 'unused', publishVideo: async () => 'unused' },
+    graph: { sendWhatsAppText: async () => ['wamid'], whatsAppNumber: async () => ({ id: 'PN', displayPhoneNumber: '', verifiedName: '' }), subscribeWhatsApp: async () => {}, registerWhatsApp: async () => {}, sendText: async () => ['mid'], replyToComment: async () => 'cid', publishPost: async () => 'unused', publishVideo: async () => 'unused' },
     encryptionKey: key,
     urls: { web: WEB, api: 'https://api.agently.test' },
     cookies: { secure: true },

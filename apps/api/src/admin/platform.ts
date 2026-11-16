@@ -19,6 +19,8 @@ const limits = z.object({
   aiCreditsPerMonth: z.number().int().min(0).max(10_000_000),
   knowledgeBaseMb: z.number().int().min(0).max(1_000_000),
   staffSeats: z.number().int().min(1).max(1000),
+  whatsappNumbers: z.number().int().min(0).max(1000).default(0),
+  instagramAccounts: z.number().int().min(0).max(1000).default(0),
 });
 
 const planBody = z
