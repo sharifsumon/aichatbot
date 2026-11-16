@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
+import { AddModelDialog } from '@/components/AddModelDialog';
 import { AddToProduct } from '@/components/AddToProduct';
 import { useShop } from '@/components/Shell';
 import { Icon } from '@/components/icons';
@@ -59,6 +60,7 @@ export default function MediaLibraryPage() {
   const [error, setError] = useState<string>();
   const [deleting, setDeleting] = useState(false);
   const [zoom, setZoom] = useState<number>();
+  const [addingModel, setAddingModel] = useState(false);
   const api = useApi();
   const models = useLoad<{ models: Model[] }>(manager ? `${ws}/try-on/models` : null);
   const images = useLoad<{ images: TryOnImage[] }>(manager ? `${ws}/try-on` : null);
@@ -175,18 +177,25 @@ export default function MediaLibraryPage() {
         </div>
 
         {tab === 'images' && (
-          <Chips
-            label="Show"
-            value={source}
-            onChange={(v) => {
-              setSource(v);
-              setPicked([]);
-            }}
-            options={[
-              { value: 'all', label: 'All' },
-              { value: 'models', label: 'Models' },
-            ]}
-          />
+          <div className="lib-filter">
+            <Chips
+              label="Show"
+              value={source}
+              onChange={(v) => {
+                setSource(v);
+                setPicked([]);
+              }}
+              options={[
+                { value: 'all', label: 'All' },
+                { value: 'models', label: 'Models' },
+              ]}
+            />
+            {source === 'models' && (
+              <button type="button" className="btn primary" onClick={() => setAddingModel(true)}>
+                + Add new model
+              </button>
+            )}
+          </div>
         )}
 
         {done && <Notice tone="ok">{done}</Notice>}
@@ -210,7 +219,11 @@ export default function MediaLibraryPage() {
         )}
         {tab === 'images' && source !== 'all' && models.data && shownModels.length === 0 && (
           <Empty>
-            No models yet. <Link href="/model-images?add=model">Add your model</Link>.
+            No models yet.{' '}
+            <button type="button" className="btn link" onClick={() => setAddingModel(true)}>
+              Add your model
+            </button>
+            .
           </Empty>
         )}
         {tab === 'images' && source !== 'all' && shownModels.length > 0 && (
@@ -350,6 +363,17 @@ export default function MediaLibraryPage() {
           index={zoom}
           onIndex={setZoom}
           onClose={() => setZoom(undefined)}
+        />
+      )}
+      {addingModel && (
+        <AddModelDialog
+          ws={ws}
+          onClose={() => setAddingModel(false)}
+          onSaved={() => {
+            setAddingModel(false);
+            setDone('Model added. It is in the Models list and ready to use in Generate image.');
+            models.reload();
+          }}
         />
       )}
       {adding && (

@@ -794,3 +794,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
 .lb-nav.next { right: 12px; top: 50%; transform: translateY(-50%); }
 .lb-count { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); color: #fff; font-size: 13px; opacity: .8; }
 @media (max-width: 720px) { .lightbox { padding: 60px 8px; } .lb-nav.prev, .lb-nav.next { top: auto; bottom: 8px; transform: none; } }
+/* Media library: filter chips on the left, "Add new model" on the right. */
+.lib-filter { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.dialog.add-model .garment { width: 100%; }
