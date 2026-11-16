@@ -56,6 +56,7 @@ export default function MediaLibraryPage() {
   const [done, setDone] = useState<string>();
   const [error, setError] = useState<string>();
   const [deleting, setDeleting] = useState(false);
+  const [zoom, setZoom] = useState<number>();
   const api = useApi();
   const models = useLoad<{ models: Model[] }>(manager ? `${ws}/try-on/models` : null);
   const images = useLoad<{ images: TryOnImage[] }>(manager ? `${ws}/try-on` : null);
@@ -215,7 +216,7 @@ export default function MediaLibraryPage() {
 
         <div className="results lib-cards">
           {tab === 'images'
-            ? shownImages.map((i) => {
+            ? shownImages.map((i, idx) => {
                 const url = i.resultImageUrl!;
                 const n = picked.indexOf(i.id);
                 return (
@@ -229,6 +230,11 @@ export default function MediaLibraryPage() {
                     >
                       <img src={url} alt="" loading="lazy" />
                       <span className="lib-check">{n >= 0 ? n + 1 : ''}</span>
+                    </button>
+                    <button type="button" className="lib-zoom" aria-label="Enlarge image" title="Enlarge" onClick={() => setZoom(idx)}>
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+                      </svg>
                     </button>
                     <div className="info">
                       <button
@@ -308,6 +314,9 @@ export default function MediaLibraryPage() {
         </div>
       )}
 
+      {zoom !== undefined && shownImages[zoom] && (
+        <Lightbox urls={shownImages.map((i) => i.resultImageUrl!)} index={zoom} onIndex={setZoom} onClose={() => setZoom(undefined)} />
+      )}
       {adding && (
         <AddToProduct
           url={adding}
@@ -321,5 +330,41 @@ export default function MediaLibraryPage() {
         />
       )}
     </>
+  );
+}
+
+/** Full-screen view of one image, with previous/next (arrow keys too) and close (Esc or a tap outside). */
+function Lightbox({ urls, index, onIndex, onClose }: { urls: string[]; index: number; onIndex: (i: number) => void; onClose: () => void }) {
+  const many = urls.length > 1;
+  const go = (d: number) => onIndex((index + d + urls.length) % urls.length);
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      else if (e.key === 'ArrowRight' && many) onIndex((index + 1) % urls.length);
+      else if (e.key === 'ArrowLeft' && many) onIndex((index - 1 + urls.length) % urls.length);
+    };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, [index, many, onClose, onIndex, urls.length]);
+  return (
+    <div className="lightbox" role="dialog" aria-modal="true" aria-label="Image" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <img src={urls[index]} alt="" />
+      <button type="button" className="lb-close" aria-label="Close" onClick={onClose}>
+        ×
+      </button>
+      {many && (
+        <>
+          <button type="button" className="lb-nav prev" aria-label="Previous image" onClick={() => go(-1)}>
+            ‹
+          </button>
+          <button type="button" className="lb-nav next" aria-label="Next image" onClick={() => go(1)}>
+            ›
+          </button>
+          <span className="lb-count">
+            {index + 1} / {urls.length}
+          </span>
+        </>
+      )}
+    </div>
   );
 }

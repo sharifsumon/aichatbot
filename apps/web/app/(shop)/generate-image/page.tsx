@@ -614,7 +614,7 @@ export default function GenerateImagePage() {
                   ))}
                 </div>
               )}
-              <div className="gen-grid">
+              <div className="gen-stack">
                 {styleOptions && (
                   <label className="field">
                     Custom Prompt (optional)
@@ -629,9 +629,10 @@ export default function GenerateImagePage() {
                           : 'e.g. a woman relaxing by a pool, taking a sip from the can, sunny day'
                       }
                     />
+                    <small>Write in English for best results. Keep it tasteful: the AI refuses suggestive photos.</small>
                   </label>
                 )}
-                <label className="field">
+                <label className="field gen-count">
                   Number of images
                   <select value={count} onChange={(e) => setCount(Number(e.target.value))}>
                     {[1, 2, 3, 4].map((n) => (
@@ -644,7 +645,6 @@ export default function GenerateImagePage() {
                   {credits > 0 && <small>Each image uses {credits} credits.</small>}
                 </label>
               </div>
-              {styleOptions && <small className="muted">Write in English for best results. Keep it tasteful: the AI refuses suggestive photos.</small>}
             </section>
 
             <div className="gen-actions">
