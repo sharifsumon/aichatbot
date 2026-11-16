@@ -15,6 +15,8 @@ type Source = 'all' | 'ai' | 'own';
 
 interface Model {
   id: string;
+  name: string;
+  imageUrl: string;
   own?: boolean;
 }
 interface TryOnImage {
@@ -84,10 +86,10 @@ export default function MediaLibraryPage() {
     return () => clearInterval(t);
   }, [makingVideos, reloadVideos]);
 
-  const ownIds = useMemo(() => new Set((models.data?.models ?? []).filter((m) => m.own).map((m) => m.id)), [models.data]);
-  const isOwn = (i: TryOnImage) => !!i.characterId && ownIds.has(i.characterId);
+  // "AI models" lists our model characters and "Your models" the ones this shop uploaded; generated images only show under "Generated".
   const readyImages = (images.data?.images ?? []).filter((i) => i.status === 'succeeded' && i.resultImageUrl);
-  const shownImages = readyImages.filter((i) => source === 'all' || (source === 'own' ? isOwn(i) : !isOwn(i)));
+  const shownImages = source === 'all' ? readyImages : [];
+  const shownModels = useMemo(() => (models.data?.models ?? []).filter((m) => (source === 'own' ? m.own : !m.own)), [models.data, source]);
   const readyVideos = (videos.data?.videos ?? []).filter((v) => v.status === 'succeeded' && v.resultVideoUrl);
 
   // Picked items by id, in the order they were picked.
@@ -181,7 +183,7 @@ export default function MediaLibraryPage() {
               setPicked([]);
             }}
             options={[
-              { value: 'all', label: 'All' },
+              { value: 'all', label: 'Generated' },
               { value: 'ai', label: 'AI models' },
               { value: 'own', label: 'Your models' },
             ]}
@@ -202,11 +204,43 @@ export default function MediaLibraryPage() {
           </div>
         )}
 
-        {tab === 'images' && images.data && shownImages.length === 0 && (
+        {tab === 'images' && source === 'all' && images.data && readyImages.length === 0 && (
           <Empty>
-            {source === 'own' ? 'No images made with your own models yet.' : 'No images yet.'}{' '}
-            <Link href={source === 'own' ? '/model-images?add=model' : '/generate-image'}>{source === 'own' ? 'Add your model' : 'Make your first one'}</Link>.
+            No images yet. <Link href="/generate-image">Make your first one</Link>.
           </Empty>
+        )}
+        {tab === 'images' && source !== 'all' && models.data && shownModels.length === 0 && (
+          <Empty>
+            {source === 'own' ? (
+              <>
+                You haven&apos;t added a model yet. <Link href="/model-images?add=model">Add your model</Link>.
+              </>
+            ) : (
+              'No AI models yet.'
+            )}
+          </Empty>
+        )}
+        {tab === 'images' && source !== 'all' && shownModels.length > 0 && (
+          <div className="results lib-cards">
+            {shownModels.map((m, idx) => (
+              <div key={m.id} className="result">
+                <div className="ph">
+                  <img src={m.imageUrl} alt="" loading="lazy" />
+                </div>
+                <button type="button" className="lib-zoom" aria-label="Enlarge image" title="Enlarge" onClick={() => setZoom(idx)}>
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+                  </svg>
+                </button>
+                <div className="info">
+                  <strong>{m.name}</strong>
+                  <Link href={`/generate-image?model=${m.id}`} className="btn sm primary">
+                    Use this model
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
         {tab === 'videos' && videos.data && readyVideos.length === 0 && (
           <Empty>
@@ -314,8 +348,13 @@ export default function MediaLibraryPage() {
         </div>
       )}
 
-      {zoom !== undefined && shownImages[zoom] && (
-        <Lightbox urls={shownImages.map((i) => i.resultImageUrl!)} index={zoom} onIndex={setZoom} onClose={() => setZoom(undefined)} />
+      {zoom !== undefined && (source === 'all' ? shownImages[zoom] : shownModels[zoom]) && (
+        <Lightbox
+          urls={source === 'all' ? shownImages.map((i) => i.resultImageUrl!) : shownModels.map((m) => m.imageUrl)}
+          index={zoom}
+          onIndex={setZoom}
+          onClose={() => setZoom(undefined)}
+        />
       )}
       {adding && (
         <AddToProduct
