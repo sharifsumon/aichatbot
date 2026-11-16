@@ -775,3 +775,22 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px
 .lib-cards .result { position: relative; }
 .lib-cards .result .info strong { font-size: 13px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dialog.photo-pick { max-width: 760px; }
+/* Generate image Format: Custom Prompt full width, Number of images on its own line below. */
+.gen-stack { display: flex; flex-direction: column; gap: 12px; }
+.gen-stack .field { width: 100%; }
+.gen-stack .field textarea { width: 100%; }
+.gen-stack .gen-count { max-width: 280px; }
+@media (max-width: 720px) { .gen-stack .gen-count { max-width: none; } }
+/* Media library: enlarge button on each image, and the full-screen view. */
+.lib-zoom { position: absolute; top: 8px; right: 8px; z-index: 3; width: 32px; height: 32px; border-radius: 50%; border: 0; padding: 0; background: rgba(255, 255, 255, .92); color: var(--ink); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 1px 4px rgba(15, 23, 42, .2); }
+.lib-zoom:hover { background: #fff; color: var(--brand); }
+@media (max-width: 720px) { .lib-zoom { width: 36px; height: 36px; top: 6px; right: 6px; } }
+.lightbox { position: fixed; inset: 0; z-index: 1000; background: rgba(10, 12, 20, .92); display: flex; align-items: center; justify-content: center; padding: 56px 64px; }
+.lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px; box-shadow: 0 10px 40px rgba(0, 0, 0, .5); }
+.lightbox button { position: absolute; border: 0; background: rgba(255, 255, 255, .14); color: #fff; border-radius: 50%; width: 44px; height: 44px; font-size: 28px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.lightbox button:hover { background: rgba(255, 255, 255, .26); }
+.lb-close { top: 12px; right: 12px; }
+.lb-nav.prev { left: 12px; top: 50%; transform: translateY(-50%); }
+.lb-nav.next { right: 12px; top: 50%; transform: translateY(-50%); }
+.lb-count { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); color: #fff; font-size: 13px; opacity: .8; }
+@media (max-width: 720px) { .lightbox { padding: 60px 8px; } .lb-nav.prev, .lb-nav.next { top: auto; bottom: 8px; transform: none; } }
