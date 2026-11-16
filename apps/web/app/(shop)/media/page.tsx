@@ -11,7 +11,7 @@ import { useApi, useLoad } from '@/lib/api';
 import { sendToPost } from '@/lib/postMedia';
 
 type Tab = 'images' | 'videos';
-type Source = 'all' | 'ai' | 'own';
+type Source = 'all' | 'models';
 
 interface Model {
   id: string;
@@ -86,10 +86,10 @@ export default function MediaLibraryPage() {
     return () => clearInterval(t);
   }, [makingVideos, reloadVideos]);
 
-  // "AI models" lists our model characters and "Your models" the ones this shop uploaded; generated images only show under "Generated".
+  // "All" lists every generated image; "Models" lists the model characters (ours and the shop's own), never generated images.
   const readyImages = (images.data?.images ?? []).filter((i) => i.status === 'succeeded' && i.resultImageUrl);
   const shownImages = source === 'all' ? readyImages : [];
-  const shownModels = useMemo(() => (models.data?.models ?? []).filter((m) => (source === 'own' ? m.own : !m.own)), [models.data, source]);
+  const shownModels = useMemo(() => [...(models.data?.models ?? [])].sort((a, b) => Number(!!b.own) - Number(!!a.own)), [models.data]);
   const readyVideos = (videos.data?.videos ?? []).filter((v) => v.status === 'succeeded' && v.resultVideoUrl);
 
   // Picked items by id, in the order they were picked.
@@ -183,9 +183,8 @@ export default function MediaLibraryPage() {
               setPicked([]);
             }}
             options={[
-              { value: 'all', label: 'Generated' },
-              { value: 'ai', label: 'AI models' },
-              { value: 'own', label: 'Your models' },
+              { value: 'all', label: 'All' },
+              { value: 'models', label: 'Models' },
             ]}
           />
         )}
@@ -211,13 +210,7 @@ export default function MediaLibraryPage() {
         )}
         {tab === 'images' && source !== 'all' && models.data && shownModels.length === 0 && (
           <Empty>
-            {source === 'own' ? (
-              <>
-                You haven&apos;t added a model yet. <Link href="/model-images?add=model">Add your model</Link>.
-              </>
-            ) : (
-              'No AI models yet.'
-            )}
+            No models yet. <Link href="/model-images?add=model">Add your model</Link>.
           </Empty>
         )}
         {tab === 'images' && source !== 'all' && shownModels.length > 0 && (
@@ -233,7 +226,10 @@ export default function MediaLibraryPage() {
                   </svg>
                 </button>
                 <div className="info">
-                  <strong>{m.name}</strong>
+                  <strong>
+                    {m.name}
+                    {m.own ? ' · Yours' : ''}
+                  </strong>
                   <Link href={`/generate-image?model=${m.id}`} className="btn sm primary">
                     Use this model
                   </Link>
