@@ -1,4 +1,4 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import type { FastifyPluginAsync } from 'fastify';
@@ -29,11 +29,12 @@ import { billingRoutes } from './billing.ts';
 import { homeRoutes } from './home.ts';
 import { tryOnRoutes, type TryOnDeps } from './tryon.ts';
 import { videoRoutes, type VideoDeps } from './video.ts';
+import { channelRoutes, type ChannelDeps } from './channels.ts';
 import { limitsFor, pagesInUse } from '@agently/billing';
 
-export type DashboardDeps = InboxDeps & CatalogDeps & KnowledgeDeps & FacebookPostDeps & PagePostDeps & TryOnDeps & VideoDeps & {
+export type DashboardDeps = InboxDeps & CatalogDeps & KnowledgeDeps & FacebookPostDeps & PagePostDeps & TryOnDeps & VideoDeps & ChannelDeps & {
   db: Db;
-  facebook: Pick<FacebookApp, 'pages' | 'subscribePage' | 'unsubscribePage'>;
+  facebook: Pick<FacebookApp, 'pages' | 'subscribePage' | 'unsubscribePage'> & ChannelDeps['facebook'];
   encryptionKey: string;
   urls: { web: string };
   cookies: CookieSettings;
@@ -83,6 +84,7 @@ export const dashboardApiRoutes: FastifyPluginAsync<DashboardDeps> = async (app,
   app.register(homeRoutes, childDeps);
   app.register(tryOnRoutes, childDeps);
   app.register(videoRoutes, childDeps);
+  app.register(channelRoutes, childDeps);
 
   /** Sign out from the dashboard (same origin rules as every other change). */
   app.post('/logout', async (req, reply) => {
@@ -175,7 +177,10 @@ export const dashboardApiRoutes: FastifyPluginAsync<DashboardDeps> = async (app,
       return reply.code(502).send({ error: 'Facebook did not let us connect this page. Try again in a minute.' });
     }
 
-    const agent = await db.query.agents.findFirst({ where: eq(agents.workspaceId, workspaceId), orderBy: asc(agents.createdAt) });
+    const agent = await db.query.agents.findFirst({
+      where: and(eq(agents.workspaceId, workspaceId), eq(agents.channelType, 'facebook_page')),
+      orderBy: asc(agents.createdAt),
+    });
     const values = {
       workspaceId,
       agentId: agent?.id ?? null,
@@ -205,7 +210,14 @@ export const dashboardApiRoutes: FastifyPluginAsync<DashboardDeps> = async (app,
     });
     if (!channel) return reply.code(404).send({ error: 'Channel not found' });
 
-    if (channel.type === 'facebook_page' && channel.accessTokenEncrypted) {
+    // A connected Instagram account gets its DMs through its page's subscription, so keep that one.
+    const pageServesInstagram =
+      channel.type === 'facebook_page' &&
+      (await db.query.channels.findFirst({
+        columns: { id: true },
+        where: and(eq(channels.type, 'instagram'), eq(channels.status, 'connected'), sql`${channels.meta}->>'pageId' = ${channel.externalId}`),
+      }));
+    if (channel.type === 'facebook_page' && channel.accessTokenEncrypted && !pageServesInstagram) {
       // Best effort: if the token is already revoked, Meta has stopped sending events anyway.
       await deps.facebook
         .unsubscribePage(channel.externalId, decryptSecret(channel.accessTokenEncrypted, deps.encryptionKey))

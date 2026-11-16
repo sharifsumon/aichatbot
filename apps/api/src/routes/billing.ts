@@ -1,6 +1,6 @@
 import { and, asc, eq, gte, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
-import { DEFAULT_LIMITS, creditSummary, pagesInUse, planFor, seatsInUse } from '@agently/billing';
+import { DEFAULT_LIMITS, channelLimit, channelsInUse, creditSummary, pagesInUse, planFor, seatsInUse } from '@agently/billing';
 import { agents, plans, usageRecords, workspaces, type Db } from '@agently/db';
 import { MANAGERS, requireRole } from './guard.ts';
 import { usedBytes } from './knowledge.ts';
@@ -17,7 +17,7 @@ export const billingRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db })
     if (!(await requireRole(db, req, reply, MANAGERS))) return reply;
     const { workspaceId } = req.params;
     const now = new Date();
-    const [ws, plan, credits, pages, seats, kbBytes, agentCount, available] = await Promise.all([
+    const [ws, plan, credits, pages, seats, kbBytes, agentCount, available, whatsapp, instagram] = await Promise.all([
       db.query.workspaces.findFirst({ where: eq(workspaces.id, workspaceId) }),
       planFor(db, workspaceId),
       creditSummary(db, workspaceId, now),
@@ -26,6 +26,8 @@ export const billingRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db })
       usedBytes(db, workspaceId),
       db.select({ n: sql<number>`count(*)::int` }).from(agents).where(eq(agents.workspaceId, workspaceId)),
       db.select().from(plans).where(eq(plans.active, true)).orderBy(asc(plans.priceBdt)),
+      channelsInUse(db, workspaceId, 'whatsapp'),
+      channelsInUse(db, workspaceId, 'instagram'),
     ]);
     const limits = plan?.limits ?? DEFAULT_LIMITS;
     const trialEnded = ws!.status === 'trial' && !!ws!.trialEndsAt && ws!.trialEndsAt <= now;
@@ -41,13 +43,22 @@ export const billingRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db })
       credits,
       usage: {
         pages: { used: pages, limit: limits.pages },
+        whatsapp: { used: whatsapp, limit: channelLimit(limits, 'whatsapp') },
+        instagram: { used: instagram, limit: channelLimit(limits, 'instagram') },
         agents: { used: agentCount[0]?.n ?? 0, limit: limits.agents },
         staffSeats: { used: seats.members + seats.pendingInvites, limit: limits.staffSeats },
         knowledgeBase: { usedBytes: kbBytes, limitBytes: limits.knowledgeBaseMb * 1024 * 1024 },
       },
       plans: available
         .filter((p) => !p.trialDays)
-        .map((p) => ({ key: p.key, name: p.name, priceBdt: p.priceBdt, priceUsd: p.priceUsd, limits: p.limits, current: p.id === plan?.id })),
+        .map((p) => ({
+          key: p.key,
+          name: p.name,
+          priceBdt: p.priceBdt,
+          priceUsd: p.priceUsd,
+          limits: { ...p.limits, whatsappNumbers: channelLimit(p.limits, 'whatsapp'), instagramAccounts: channelLimit(p.limits, 'instagram') },
+          current: p.id === plan?.id,
+        })),
       topUp: TOP_UP,
       // Upgrades and top-ups need the payment gateways; until then the Agently team changes plans.
       paymentsAvailable: false,

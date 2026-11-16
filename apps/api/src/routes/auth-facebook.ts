@@ -2,7 +2,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { authAccounts, users, type Db } from '@agently/db';
-import type { FacebookApp } from '@agently/meta';
+import { INSTAGRAM_SCOPES, type FacebookApp } from '@agently/meta';
 import { encryptSecret } from '@agently/shared';
 import { endSession, startSession, type CookieSettings } from '../auth/session.ts';
 
@@ -23,21 +23,23 @@ const STATE_COOKIE = 'agently_fb_state';
 export const facebookAuthRoutes: FastifyPluginAsync<AuthDeps> = async (app, deps) => {
   const redirectUri = `${deps.urls.api}/auth/facebook/callback`;
 
-  app.get('/auth/facebook', async (_req, reply) => {
+  // ?with=instagram also asks for the Instagram messaging permissions, then returns to Settings.
+  app.get<{ Querystring: { with?: string } }>('/auth/facebook', async (req, reply) => {
     // The state ties the callback to this browser, so nobody can log a victim into their own account.
     const state = randomBytes(24).toString('base64url');
-    reply.setCookie(STATE_COOKIE, state, {
+    const instagram = req.query.with === 'instagram';
+    reply.setCookie(STATE_COOKIE, instagram ? `${state}:instagram` : state, {
       path: '/auth/facebook',
       httpOnly: true,
       sameSite: 'lax',
       secure: deps.cookies.secure,
       maxAge: 600,
     });
-    return reply.redirect(deps.facebook.loginUrl(redirectUri, state));
+    return reply.redirect(deps.facebook.loginUrl(redirectUri, state, instagram ? INSTAGRAM_SCOPES : []));
   });
 
   app.get<{ Querystring: { code?: string; state?: string; error?: string } }>('/auth/facebook/callback', async (req, reply) => {
-    const expected = req.cookies[STATE_COOKIE];
+    const [expected, wanted] = (req.cookies[STATE_COOKIE] ?? '').split(':');
     reply.clearCookie(STATE_COOKIE, { path: '/auth/facebook' });
     const { code, state, error } = req.query;
     if (error || !code) return reply.redirect(`${deps.urls.web}/?error=facebook_cancelled`);
@@ -61,7 +63,7 @@ export const facebookAuthRoutes: FastifyPluginAsync<AuthDeps> = async (app, deps
       tokenExpiresAt: token.expiresAt,
     });
     await startSession(deps.db, reply, userId, deps.cookies);
-    return reply.redirect(`${deps.urls.web}/`);
+    return reply.redirect(wanted === 'instagram' ? `${deps.urls.web}/settings?tab=pages&connect=instagram` : `${deps.urls.web}/`);
   });
 
   app.post('/auth/logout', async (req, reply) => {

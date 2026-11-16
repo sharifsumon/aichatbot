@@ -99,6 +99,13 @@
       "when": 1794732104625,
       "tag": "0013_shop_model_gender_optional",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794810112232,
+      "tag": "0014_whatsapp_instagram",
+      "breakpoints": true
     }
   ]
 }

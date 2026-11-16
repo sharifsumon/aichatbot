@@ -32,6 +32,9 @@ export interface Limits {
   aiCreditsPerMonth: number;
   knowledgeBaseMb: number;
   staffSeats: number;
+  /** Missing on plans saved before WhatsApp and Instagram: none. */
+  whatsappNumbers?: number;
+  instagramAccounts?: number;
 }
 
 export interface Plan {

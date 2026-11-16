@@ -23,7 +23,7 @@ export const ORDER_TOOLS: ToolDefinition[] = [
   {
     name: 'send_product_photos',
     description:
-      "Send the product's photos to the customer in Messenger, right after your reply. With a colour, sends that colour's photos; " +
+      "Send the product's photos to the customer in this chat, right after your reply. With a colour, sends that colour's photos; " +
       'without one, the main photo.',
     parameters: {
       type: 'object',

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { verifyMetaSignature } from './signature.ts';
-import { parsePageWebhook } from './webhook.ts';
+import { parseMetaWebhook, parsePageWebhook } from './webhook.ts';
 import { GraphApiError, GraphClient, splitText } from './graph.ts';
 
 test('verifies the signature over the raw body', () => {
@@ -72,6 +72,79 @@ test('m.me links: the ref arrives with Get Started for a new chat, or as a refer
 
 test('ignores non-page payloads', () => {
   assert.deepEqual(parsePageWebhook({ object: 'instagram', entry: [] }), []);
+  assert.deepEqual(parseMetaWebhook({ object: 'user', entry: [] }), []);
+});
+
+test('parses Instagram DMs, skipping echoes', () => {
+  const jobs = parseMetaWebhook({
+    object: 'instagram',
+    entry: [
+      {
+        id: 'IG1',
+        time: 1,
+        messaging: [
+          { sender: { id: 'IGSID' }, recipient: { id: 'IG1' }, timestamp: 20, message: { mid: 'ig-m1', text: 'price?' } },
+          { sender: { id: 'IG1' }, recipient: { id: 'IGSID' }, timestamp: 21, message: { mid: 'ig-m2', text: 'hi', is_echo: true } },
+          { sender: { id: 'IGSID' }, recipient: { id: 'IG1' }, timestamp: 22, message: { mid: 'ig-m3', attachments: [{ type: 'image', payload: { url: 'https://x/y.jpg' } }] } },
+        ],
+      },
+    ],
+  });
+  assert.deepEqual(
+    jobs.map((j) => [j.channel, j.channelExternalId, j.senderExternalId, j.externalId, j.text, j.attachments.length]),
+    [
+      ['instagram', 'IG1', 'IGSID', 'ig-m1', 'price?', 0],
+      ['instagram', 'IG1', 'IGSID', 'ig-m3', '', 1],
+    ],
+  );
+});
+
+test('parses WhatsApp messages with the sender name, skipping statuses', () => {
+  const jobs = parseMetaWebhook({
+    object: 'whatsapp_business_account',
+    entry: [
+      {
+        id: 'WABA',
+        time: 1,
+        changes: [
+          {
+            field: 'messages',
+            value: {
+              messaging_product: 'whatsapp',
+              metadata: { phone_number_id: 'PN1', display_phone_number: '8801700000000' },
+              contacts: [{ wa_id: '8801712345678', profile: { name: 'Karim' } }],
+              messages: [
+                { from: '8801712345678', id: 'wamid.1', timestamp: '1761850000', type: 'text', text: { body: 'দাম কত?' } },
+                { from: '8801712345678', id: 'wamid.2', timestamp: '1761850001', type: 'image', image: { id: 'media1', caption: 'this one' } },
+              ],
+            },
+          },
+          { field: 'messages', value: { metadata: { phone_number_id: 'PN1' }, statuses: [{ id: 'wamid.0', status: 'read' }] } as never },
+        ],
+      },
+    ],
+  });
+  assert.deepEqual(
+    jobs.map((j) => [j.channel, j.channelExternalId, j.senderExternalId, j.senderName, j.externalId, j.text, j.attachments.map((a) => a.type), j.timestamp]),
+    [
+      ['whatsapp', 'PN1', '8801712345678', 'Karim', 'wamid.1', 'দাম কত?', [], 1761850000000],
+      ['whatsapp', 'PN1', '8801712345678', 'Karim', 'wamid.2', 'this one', ['image'], 1761850001000],
+    ],
+  );
+});
+
+test('WhatsApp replies go to the phone number id, split at 4096 characters', async () => {
+  const calls: { url: string; body: { to: string; text: { body: string } } }[] = [];
+  const graph = new GraphClient({
+    version: 'v23.0',
+    fetch: (async (url: string, init: RequestInit) => {
+      calls.push({ url, body: JSON.parse(init.body as string) });
+      return new Response(JSON.stringify({ messages: [{ id: `wamid.${calls.length}` }] }));
+    }) as typeof fetch,
+  });
+  const ids = await graph.sendWhatsAppText('TOKEN', 'PN1', '8801712345678', 'word '.repeat(1000));
+  assert.deepEqual(ids, ['wamid.1', 'wamid.2']);
+  assert.ok(calls.every((c) => c.url === 'https://graph.facebook.com/v23.0/PN1/messages' && c.body.to === '8801712345678' && c.body.text.body.length <= 4096));
 });
 
 test('splits long text on word boundaries', () => {

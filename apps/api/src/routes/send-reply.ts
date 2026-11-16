@@ -1,17 +1,20 @@
 import { and, desc, eq } from 'drizzle-orm';
 import { channels, conversations, customerIdentities, messages, type Db } from '@agently/db';
-import { GraphApiError, type GraphClient } from '@agently/meta';
+import { GraphApiError, INSTAGRAM_MAX_TEXT, type GraphClient } from '@agently/meta';
 import { decryptSecret } from '@agently/shared';
 
-/** Meta lets a page answer a Messenger customer for 24 hours after their last message. */
+/** Meta lets a business answer a customer for 24 hours after their last message (Messenger, Instagram and WhatsApp alike). */
 export const REPLY_WINDOW_MS = 24 * 3600 * 1000;
 export const MAX_REPLY = 2000;
 
 export interface SendDeps {
   db: Db;
-  graph: Pick<GraphClient, 'sendText' | 'replyToComment'>;
+  graph: Pick<GraphClient, 'sendText' | 'sendWhatsAppText' | 'replyToComment'>;
   encryptionKey: string;
 }
+
+const PLATFORM: Record<string, string> = { facebook_page: 'Facebook', instagram: 'Instagram', whatsapp: 'WhatsApp' };
+const CHANNEL_WORD: Record<string, string> = { facebook_page: 'page', instagram: 'Instagram account', whatsapp: 'WhatsApp number' };
 
 export function canReply(lastCustomerMessageAt: Date | null): boolean {
   return !!lastCustomerMessageAt && Date.now() - lastCustomerMessageAt.getTime() < REPLY_WINDOW_MS;
@@ -44,7 +47,7 @@ export async function sendHumanReply(
 
   const channel = await db.query.channels.findFirst({ where: eq(channels.id, conversation.channelId) });
   if (!channel?.accessTokenEncrypted || channel.status !== 'connected') {
-    return { ok: false, status: 409, error: 'This page is not connected. Reconnect it to reply.' };
+    return { ok: false, status: 409, error: `This ${CHANNEL_WORD[channel?.type ?? 'facebook_page'] ?? 'channel'} is not connected. Reconnect it to reply.` };
   }
   const latestInbound =
     toComment ??
@@ -55,7 +58,7 @@ export async function sendHumanReply(
   const isComment = !!toComment || (latestInbound as { kind?: string } | undefined)?.kind === 'comment';
   if (isComment && !latestInbound?.externalId) return { ok: false, status: 409, error: 'This comment can no longer be answered' };
   if (!isComment && !canReply(conversation.lastCustomerMessageAt)) {
-    return { ok: false, status: 409, error: "Facebook only allows replies within 24 hours of the customer's last message." };
+    return { ok: false, status: 409, error: `${PLATFORM[channel.type] ?? 'Facebook'} only allows replies within 24 hours of the customer's last message.` };
   }
 
   const token = decryptSecret(channel.accessTokenEncrypted, deps.encryptionKey);
@@ -67,15 +70,18 @@ export async function sendHumanReply(
       const identity = await db.query.customerIdentities.findFirst({
         where: and(eq(customerIdentities.customerId, conversation.customerId), eq(customerIdentities.channelId, channel.id)),
       });
-      if (!identity) return { ok: false, status: 409, error: 'This customer has no Messenger id on this page' };
-      [externalId] = await deps.graph.sendText(token, identity.externalId, text);
+      if (!identity) return { ok: false, status: 409, error: `This customer has no ${PLATFORM[channel.type] ?? 'Messenger'} id on this ${CHANNEL_WORD[channel.type] ?? 'channel'}` };
+      [externalId] =
+        channel.type === 'whatsapp'
+          ? await deps.graph.sendWhatsAppText(token, channel.externalId, identity.externalId, text)
+          : await deps.graph.sendText(token, identity.externalId, text, channel.type === 'instagram' ? INSTAGRAM_MAX_TEXT : undefined);
     }
   } catch (err) {
     if (err instanceof GraphApiError) {
       if (err.tokenInvalid) {
         await db.update(channels).set({ status: 'token_expired', lastError: err.message }).where(eq(channels.id, channel.id));
       }
-      return { ok: false, status: 502, error: `Facebook refused the message: ${err.message}` };
+      return { ok: false, status: 502, error: `${PLATFORM[channel.type] ?? 'Facebook'} refused the message: ${err.message}` };
     }
     throw err;
   }

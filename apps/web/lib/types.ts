@@ -191,6 +191,22 @@ export interface Agent {
   handoffRules: { minConfidence: number; onComplaint: boolean; onHumanRequest: boolean; keywords: string[] };
   commentReplyMode: 'off' | 'public' | 'private' | 'public_and_private';
   status: AgentStatus;
+  /** The channel type this bot answers: the main one is Facebook. */
+  channelType: 'facebook_page' | 'whatsapp' | 'instagram';
+}
+
+export interface AgentList {
+  agents: (Agent & { channels: { id: string; type: Channel['type']; name: string; status: Channel['status'] }[] })[];
+  /** Channel types with something connected but no bot of their own. */
+  unanswered: Channel['type'][];
+  limit: number;
+}
+
+export type CountedChannel = 'facebook_page' | 'whatsapp' | 'instagram';
+
+export interface ChannelUsage {
+  usage: Record<CountedChannel, { used: number; limit: number }>;
+  whatsappSignup: { appId: string; configId: string; version: string } | null;
 }
 
 export interface Settings {
@@ -232,6 +248,8 @@ export interface Limits {
   aiCreditsPerMonth: number;
   knowledgeBaseMb: number;
   staffSeats: number;
+  whatsappNumbers: number;
+  instagramAccounts: number;
 }
 
 export interface Billing {
@@ -243,6 +261,8 @@ export interface Billing {
   credits: CreditSummary;
   usage: {
     pages: { used: number; limit: number };
+    whatsapp: { used: number; limit: number };
+    instagram: { used: number; limit: number };
     agents: { used: number; limit: number };
     staffSeats: { used: number; limit: number };
     knowledgeBase: { usedBytes: number; limitBytes: number };

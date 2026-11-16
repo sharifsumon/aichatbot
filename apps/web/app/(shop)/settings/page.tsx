@@ -9,7 +9,7 @@ import { Loading, Notice } from '@/components/ui';
 
 const TABS = [
   { key: 'shop', label: 'Shop profile' },
-  { key: 'pages', label: 'Facebook pages' },
+  { key: 'pages', label: 'Channels' },
   { key: 'payments', label: 'Payments and delivery' },
   { key: 'team', label: 'Team' },
   { key: 'subscription', label: 'Subscription' },

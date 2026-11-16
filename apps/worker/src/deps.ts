@@ -8,7 +8,7 @@ import type { Logger } from 'pino';
 export interface WorkerDeps {
   db: Db;
   ai: AIProvider;
-  graph: Pick<GraphClient, 'sendText' | 'sendImage' | 'replyToComment' | 'privateReply' | 'checkPageToken'>;
+  graph: Pick<GraphClient, 'sendText' | 'sendImage' | 'sendWhatsAppText' | 'sendWhatsAppImage' | 'replyToComment' | 'privateReply' | 'checkPageToken' | 'whatsAppNumber'>;
   pricing: Pricing;
   encryptionKey: string;
   log: Logger;

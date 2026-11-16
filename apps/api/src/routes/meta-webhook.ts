@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { parsePageWebhook, verifyMetaSignature, type PageWebhookPayload } from '@agently/meta';
+import { parseMetaWebhook, verifyMetaSignature, type PageWebhookPayload } from '@agently/meta';
 import { jobIdFor, type InboundJob } from '@agently/shared';
 
 export interface MetaWebhookDeps {
@@ -10,7 +10,7 @@ export interface MetaWebhookDeps {
 }
 
 /**
- * One endpoint for every connected page. It only checks, splits and queues;
+ * One endpoint for every connected page, Instagram account and WhatsApp number. It only checks, splits and queues;
  * the worker does the slow work, so Meta always gets its 200 well within its timeout.
  */
 export const metaWebhookRoutes: FastifyPluginAsync<MetaWebhookDeps> = async (app, { inbound, meta }) => {
@@ -41,7 +41,8 @@ export const metaWebhookRoutes: FastifyPluginAsync<MetaWebhookDeps> = async (app
       return reply.code(400).send();
     }
 
-    const jobs = parsePageWebhook(payload);
+    // Facebook pages, Instagram accounts and WhatsApp numbers all post here.
+    const jobs = parseMetaWebhook(payload);
     // Meta retries deliveries, so the job id is the message or comment id:
     // BullMQ ignores an add whose id it has already seen.
     await Promise.all(

@@ -20,9 +20,23 @@ export type ServerDeps = HealthDeps &
     db: Db;
     facebook: Pick<
       FacebookApp,
-      'loginUrl' | 'exchangeCode' | 'me' | 'pages' | 'subscribePage' | 'unsubscribePage' | 'parseSignedRequest'
+      | 'loginUrl'
+      | 'exchangeCode'
+      | 'me'
+      | 'pages'
+      | 'subscribePage'
+      | 'unsubscribePage'
+      | 'parseSignedRequest'
+      | 'instagramAccounts'
+      | 'subscribeInstagramPage'
+      | 'exchangeSignupCode'
     >;
-    graph: Pick<GraphClient, 'sendText' | 'replyToComment' | 'publishPost' | 'publishVideo'>;
+    graph: Pick<
+      GraphClient,
+      'sendText' | 'sendWhatsAppText' | 'replyToComment' | 'publishPost' | 'publishVideo' | 'whatsAppNumber' | 'subscribeWhatsApp' | 'registerWhatsApp'
+    >;
+    /** WhatsApp Embedded Signup (META_WA_CONFIG_ID); without it shops paste their number's details. */
+    whatsappSignup?: { appId: string; configId: string; version: string };
     encryptionKey: string;
     /** `admin` is the super admin panel's address; without it /admin is not served. */
     urls: { web: string; api: string; admin?: string };

@@ -34,6 +34,10 @@ const app = buildServer({
   facebook: new FacebookApp({ appId: env.META_APP_ID, appSecret: env.META_APP_SECRET, version: env.META_GRAPH_VERSION }),
   graph: new GraphClient({ version: env.META_GRAPH_VERSION }),
   encryptionKey: env.ENCRYPTION_KEY,
+  // WhatsApp Embedded Signup needs a Login for Business configuration made in the Meta app.
+  whatsappSignup: process.env.META_WA_CONFIG_ID
+    ? { appId: env.META_APP_ID, configId: process.env.META_WA_CONFIG_ID, version: env.META_GRAPH_VERSION }
+    : undefined,
   urls: { web: env.WEB_URL, api: env.API_URL, admin: env.ADMIN_URL || undefined },
   cookies: { secure: env.API_URL.startsWith('https://'), domain: env.COOKIE_DOMAIN || undefined },
   storage,

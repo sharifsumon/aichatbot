@@ -1,4 +1,4 @@
-import { and, eq, isNotNull } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull } from 'drizzle-orm';
 import { activities, channels } from '@agently/db';
 import { GraphApiError } from '@agently/meta';
 import { decryptSecret } from '@agently/shared';
@@ -12,13 +12,16 @@ import type { WorkerDeps } from './deps.ts';
  */
 export async function checkPageTokens(deps: Pick<WorkerDeps, 'db' | 'graph' | 'encryptionKey' | 'log'>): Promise<{ checked: number; expired: number }> {
   const rows = await deps.db
-    .select({ id: channels.id, workspaceId: channels.workspaceId, name: channels.name, token: channels.accessTokenEncrypted })
+    .select({ id: channels.id, type: channels.type, externalId: channels.externalId, workspaceId: channels.workspaceId, name: channels.name, token: channels.accessTokenEncrypted })
     .from(channels)
-    .where(and(eq(channels.type, 'facebook_page'), eq(channels.status, 'connected'), isNotNull(channels.accessTokenEncrypted)));
+    .where(and(inArray(channels.type, ['facebook_page', 'instagram', 'whatsapp']), eq(channels.status, 'connected'), isNotNull(channels.accessTokenEncrypted)));
   let expired = 0;
   for (const ch of rows) {
     try {
-      await deps.graph.checkPageToken(decryptSecret(ch.token!, deps.encryptionKey));
+      const token = decryptSecret(ch.token!, deps.encryptionKey);
+      // Instagram answers with its page's token; WhatsApp with the number's own.
+      if (ch.type === 'whatsapp') await deps.graph.whatsAppNumber(token, ch.externalId);
+      else await deps.graph.checkPageToken(token);
     } catch (err) {
       // Outages and rate limits say nothing about the token; check again next hour.
       if (!(err instanceof GraphApiError) || !err.tokenInvalid) {
@@ -30,7 +33,7 @@ export async function checkPageTokens(deps: Pick<WorkerDeps, 'db' | 'graph' | 'e
       await deps.db.insert(activities).values({
         workspaceId: ch.workspaceId,
         type: 'channel.token_expired',
-        text: `${ch.name} needs reconnecting: Facebook stopped sending its messages`,
+        text: `${ch.name} needs reconnecting: ${ch.type === 'whatsapp' ? 'WhatsApp' : ch.type === 'instagram' ? 'Instagram' : 'Facebook'} stopped sending its messages`,
         data: { channelId: ch.id },
       });
     }

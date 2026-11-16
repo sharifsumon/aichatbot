@@ -37,9 +37,123 @@ interface FeedChange {
   };
 }
 
+/** WhatsApp Cloud API: one `messages` change per batch of messages to a phone number. */
+interface WhatsAppChange {
+  field: string;
+  value: {
+    messaging_product?: string;
+    metadata?: { phone_number_id: string; display_phone_number?: string };
+    contacts?: { wa_id: string; profile?: { name?: string } }[];
+    messages?: WhatsAppMessage[];
+  };
+}
+
+interface WhatsAppMessage {
+  from: string;
+  id: string;
+  /** Unix seconds, as a string. */
+  timestamp: string;
+  type: string;
+  text?: { body: string };
+  image?: { id: string; caption?: string };
+  video?: { id: string; caption?: string };
+  document?: { id: string; caption?: string; filename?: string };
+  audio?: { id: string };
+  sticker?: { id: string };
+  button?: { text?: string; payload?: string };
+  interactive?: { button_reply?: { title?: string }; list_reply?: { title?: string } };
+  location?: { latitude: number; longitude: number; name?: string; address?: string };
+}
+
 export interface PageWebhookPayload {
   object: string;
-  entry?: { id: string; time: number; messaging?: MessagingEvent[]; changes?: FeedChange[] }[];
+  entry?: { id: string; time: number; messaging?: MessagingEvent[]; changes?: (FeedChange | WhatsAppChange)[] }[];
+}
+
+/**
+ * Every webhook Agently's Meta app receives: Facebook pages, Instagram
+ * accounts and WhatsApp numbers all post to the same callback URL.
+ */
+export function parseMetaWebhook(payload: PageWebhookPayload): InboundJob[] {
+  if (payload.object === 'page') return parsePageWebhook(payload);
+  if (payload.object === 'instagram') return parseInstagramWebhook(payload);
+  if (payload.object === 'whatsapp_business_account') return parseWhatsAppWebhook(payload);
+  return [];
+}
+
+/**
+ * Instagram DMs (Messenger Platform for Instagram). Same shape as Messenger,
+ * with the Instagram account id as the entry id and Instagram-scoped sender ids.
+ */
+export function parseInstagramWebhook(payload: PageWebhookPayload): InboundJob[] {
+  if (payload.object !== 'instagram') return [];
+  const jobs: InboundJob[] = [];
+  for (const entry of payload.entry ?? []) {
+    for (const event of entry.messaging ?? []) {
+      const m = event.message;
+      // Echoes are the account's own messages, sent by the bot, staff or the Instagram app.
+      if (!m || m.is_echo || event.sender.id === entry.id) continue;
+      jobs.push({
+        channel: 'instagram',
+        channelExternalId: entry.id,
+        senderExternalId: event.sender.id,
+        externalId: m.mid,
+        kind: 'message',
+        text: m.text ?? '',
+        attachments: (m.attachments ?? []).map((a) => ({ type: a.type, url: a.payload?.url })),
+        timestamp: event.timestamp,
+      });
+    }
+  }
+  return jobs;
+}
+
+/** WhatsApp Cloud API messages. Delivery and read statuses are skipped. */
+export function parseWhatsAppWebhook(payload: PageWebhookPayload): InboundJob[] {
+  if (payload.object !== 'whatsapp_business_account') return [];
+  const jobs: InboundJob[] = [];
+  for (const entry of payload.entry ?? []) {
+    for (const change of (entry.changes ?? []) as WhatsAppChange[]) {
+      const v = change.value;
+      if (change.field !== 'messages' || !v?.metadata?.phone_number_id) continue;
+      for (const m of v.messages ?? []) {
+        const name = v.contacts?.find((c) => c.wa_id === m.from)?.profile?.name;
+        const media = m.image ?? m.video ?? m.document;
+        jobs.push({
+          channel: 'whatsapp',
+          channelExternalId: v.metadata.phone_number_id,
+          senderExternalId: m.from,
+          ...(name ? { senderName: name } : {}),
+          externalId: m.id,
+          kind: 'message',
+          text: whatsAppText(m),
+          // WhatsApp sends media ids, not links; the type is enough for the inbox and the bot.
+          attachments: media || m.audio || m.sticker ? [{ type: m.type }] : [],
+          timestamp: Number(m.timestamp) * 1000 || Date.now(),
+        });
+      }
+    }
+  }
+  return jobs;
+}
+
+function whatsAppText(m: WhatsAppMessage): string {
+  switch (m.type) {
+    case 'text':
+      return m.text?.body ?? '';
+    case 'image':
+    case 'video':
+    case 'document':
+      return m[m.type]?.caption ?? '';
+    case 'button':
+      return m.button?.text ?? m.button?.payload ?? '';
+    case 'interactive':
+      return m.interactive?.button_reply?.title ?? m.interactive?.list_reply?.title ?? '';
+    case 'location':
+      return m.location ? [m.location.name, m.location.address].filter(Boolean).join(', ') || `Location ${m.location.latitude},${m.location.longitude}` : '';
+    default:
+      return '';
+  }
 }
 
 /**
@@ -84,7 +198,7 @@ export function parsePageWebhook(payload: PageWebhookPayload): InboundJob[] {
       });
     }
 
-    for (const change of entry.changes ?? []) {
+    for (const change of (entry.changes ?? []) as FeedChange[]) {
       const v = change.value;
       if (change.field !== 'feed' || v.item !== 'comment' || v.verb !== 'add') continue;
       if (!v.comment_id || !v.from || v.from.id === entry.id) continue;

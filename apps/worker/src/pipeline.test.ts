@@ -40,6 +40,7 @@ let db: Db;
 let close: () => Promise<void>;
 let sent: { psid: string; text: string }[];
 let sentImages: { psid: string; url: string }[];
+let sentWhatsApp: { phoneNumberId: string; to: string; text: string }[];
 let prompts: ChatRequest[];
 let queued: ReplyJob[];
 let aiImpl: AIProvider['chat'];
@@ -64,6 +65,12 @@ function deps(): WorkerDeps {
         sentImages.push({ psid, url });
         return `img-out-${randomBytes(6).toString('hex')}`;
       },
+      sendWhatsAppText: async (_token, phoneNumberId, to, text) => {
+        sentWhatsApp.push({ phoneNumberId, to, text });
+        return [`wamid-out-${sentWhatsApp.length}`];
+      },
+      sendWhatsAppImage: async () => `wamid-img-${randomBytes(6).toString('hex')}`,
+      whatsAppNumber: async (_token, id) => ({ id, displayPhoneNumber: '', verifiedName: '' }),
       checkPageToken: async () => {},
       replyToComment: async () => 'c-out',
       privateReply: async () => 'p-out',
@@ -113,6 +120,7 @@ after(async () => {
 beforeEach(() => {
   sent = [];
   sentImages = [];
+  sentWhatsApp = [];
   prompts = [];
   queued = [];
   aiImpl = async (req) => {
@@ -330,4 +338,42 @@ test('a post\'s Order now link opens the chat on that product, and the bot answe
   const rows = await db.select().from(messages).where(and(eq(messages.workspaceId, ws.id), eq(messages.externalId, `referral-${page}-2`)));
   assert.equal(rows[0]!.text, 'Hi');
   assert.equal(rows[0]!.meta.referral?.productId, undefined);
+});
+
+test('WhatsApp: answered by the WhatsApp agent on the number, never by the Facebook one', { skip }, async () => {
+  const page = `page-${randomBytes(4).toString('hex')}`;
+  const ws = await makeShop(page);
+  const phoneNumberId = String(Date.now()) + String(randomBytes(2).readUInt16BE());
+  await db.insert(channels).values({
+    workspaceId: ws.id,
+    type: 'whatsapp',
+    externalId: phoneNumberId,
+    name: '+880 1700-000000',
+    accessTokenEncrypted: encryptSecret('wa-token', key),
+  });
+  const job = (mid: string, text: string): InboundJob => ({
+    channel: 'whatsapp',
+    channelExternalId: phoneNumberId,
+    senderExternalId: '8801712345678',
+    senderName: 'Karim',
+    externalId: mid,
+    kind: 'message',
+    text,
+    attachments: [],
+    timestamp: Date.now(),
+  });
+
+  // No WhatsApp agent yet: the message is saved for staff, and the live Facebook agent stays out of it.
+  assert.equal(await handleInbound(deps(), job(`wamid.${phoneNumberId}.1`, 'dam koto?')), 'saved');
+  assert.equal(await handleReply(deps(), queued[0]!, { finalAttempt: false }), 'skipped_agent_not_live');
+  const [msg] = await db.select().from(messages).where(eq(messages.id, queued[0]!.messageId));
+  const customer = await db.query.conversations.findFirst({ where: eq(conversations.id, msg!.conversationId), with: { customer: true } });
+  assert.equal(customer!.customer.phone, '01712345678');
+  assert.equal(customer!.customer.name, 'Karim');
+
+  await db.insert(agents).values({ workspaceId: ws.id, name: 'Mina WhatsApp', channelType: 'whatsapp', status: 'live' });
+  assert.equal(await handleInbound(deps(), job(`wamid.${phoneNumberId}.2`, 'shirt ache?')), 'saved');
+  assert.equal(await handleReply(deps(), queued[1]!, { finalAttempt: false }), 'sent');
+  assert.deepEqual(sentWhatsApp, [{ phoneNumberId, to: '8801712345678', text: 'Cotton Shirt ৳850, Blue L in stock.' }]);
+  assert.equal(sent.length, 0);
 });

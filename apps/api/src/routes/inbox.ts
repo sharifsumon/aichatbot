@@ -7,7 +7,7 @@ import { ALL_ROLES, isUuid, makeCursor, pageLimit, parseCursor, requireRole } fr
 
 export interface InboxDeps {
   db: Db;
-  graph: Pick<GraphClient, 'sendText' | 'replyToComment'>;
+  graph: Pick<GraphClient, 'sendText' | 'sendWhatsAppText' | 'replyToComment'>;
   encryptionKey: string;
 }
 

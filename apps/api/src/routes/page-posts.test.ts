@@ -35,6 +35,7 @@ function server(fail?: GraphApiError) {
     meta: { appSecret: 's', verifyToken: 'v' },
     facebook: {} as never,
     graph: {
+      sendWhatsAppText: async () => ['wamid'], whatsAppNumber: async () => ({ id: 'PN', displayPhoneNumber: '', verifiedName: '' }), subscribeWhatsApp: async () => {}, registerWhatsApp: async () => {}, 
       sendText: async () => ['mid'],
       replyToComment: async () => 'cid',
       publishPost: async (_token, pageId, post) => {

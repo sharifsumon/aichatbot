@@ -20,12 +20,17 @@ export default function PrivacyPage() {
       <ul>
         <li>When you continue with Facebook we receive your name, your Facebook user ID and, if you allow it, your email address.</li>
         <li>We receive a list of the Facebook pages you manage, and an access token for each page you connect. Tokens are stored encrypted.</li>
+        <li>
+          If you connect Instagram or WhatsApp, we receive the Instagram professional accounts linked to your pages, or your WhatsApp Business number&apos;s ID and an
+          access token for it. These are stored encrypted too.
+        </li>
         <li>We keep your shop&apos;s settings, products, knowledge base and team members so the service works.</li>
       </ul>
 
       <h2>Customers who message a shop</h2>
       <ul>
         <li>We receive the messages and comments people send to a connected page, with their name and Facebook page-scoped ID.</li>
+        <li>On a connected Instagram account we receive direct messages with the sender&apos;s Instagram-scoped ID; on a connected WhatsApp number, messages with the sender&apos;s phone number and WhatsApp profile name.</li>
         <li>If a customer orders, we keep what they share for the order: name, phone number, delivery address and any bKash or Nagad transaction ID.</li>
         <li>This data belongs to the shop. It is shown only to that shop&apos;s team and, when the shop asks for help, to Agently support. Support access is logged.</li>
       </ul>

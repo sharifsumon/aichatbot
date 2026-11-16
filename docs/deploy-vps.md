@@ -103,6 +103,8 @@ At developers.facebook.com, open your app:
    - Set the deauthorize callback URL to `https://api.example.com/webhooks/meta/deauthorize`.
    - Add `example.com` to the App domains.
 3. **Facebook Login → Settings:** add `https://api.example.com/auth/facebook/callback` as a valid OAuth redirect URI.
+4. **Instagram (for Instagram DMs):** add the Instagram product (API setup with Facebook Login). Under **Webhooks**, choose the `Instagram` object, use the same callback URL and verify token, and subscribe to `messages`.
+5. **WhatsApp (for WhatsApp numbers):** add the WhatsApp product. Under **Webhooks**, choose the `WhatsApp Business Account` object, use the same callback URL and verify token, and subscribe to `messages`. For one-click connecting, create a WhatsApp Embedded Signup configuration under **Facebook Login for Business → Configurations** and put its ID in `META_WA_CONFIG_ID` in `.env`.
 
 The app stays in development mode. Only people with a role on it get replies from the bot, so add the accounts you will test with under **App roles → Roles** (as testers or admins).
 
