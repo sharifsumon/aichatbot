@@ -44,6 +44,10 @@ export function TenantActionDialog({ action, tenant, onClose, onDone }: { action
   const api = useApi();
   const [credits, setCredits] = useState('500');
   const [note, setNote] = useState('');
+  // A paid top-up pack, or a goodwill adjustment.
+  const [topUp, setTopUp] = useState(true);
+  const settings = useLoad<{ settings: { 'credits.topUp'?: { credits: number } } }>(action === 'credits' ? '/settings' : null);
+  const pack = settings.data?.settings['credits.topUp']?.credits;
   const [days, setDays] = useState('7');
   const [reason, setReason] = useState('');
   const [planKey, setPlanKey] = useState(tenant.planKey ?? '');
@@ -60,7 +64,8 @@ export function TenantActionDialog({ action, tenant, onClose, onDone }: { action
           const n = Number.parseInt(credits, 10);
           if (!Number.isFinite(n) || n === 0) return 'Enter a number of credits (use a minus sign to take credits back).';
           if (note.trim().length < 3) return 'Add a short note for the audit log.';
-          await api(`${path}/credits`, { method: 'POST', body: { credits: n, note: note.trim() } });
+          if (topUp && n < 0) return 'A top-up adds credits. Untick it to take credits back.';
+          await api(`${path}/credits`, { method: 'POST', body: { credits: n, note: note.trim(), topUp } });
           onDone(n > 0 ? `Added ${n.toLocaleString('en')} credits to ${tenant.name}.` : `Took back ${Math.abs(n).toLocaleString('en')} credits from ${tenant.name}.`);
         }}
       >
@@ -68,6 +73,17 @@ export function TenantActionDialog({ action, tenant, onClose, onDone }: { action
           Credits
           <input type="number" inputMode="numeric" min={-100000} max={100000} step={1} required value={credits} onChange={(e) => setCredits(e.target.value)} />
           <small>One credit is one AI reply. They last until the end of this month. A negative number takes credits back.</small>
+        </label>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={topUp}
+            onChange={(e) => {
+              setTopUp(e.target.checked);
+              if (e.target.checked && pack) setCredits(String(pack));
+            }}
+          />
+          Paid top-up{pack ? ` (pack: ${pack.toLocaleString('en')} credits)` : ''}: also pays for AI images and video beyond the shop&apos;s plan
         </label>
         <label className="field">
           Note for the audit log

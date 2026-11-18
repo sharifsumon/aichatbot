@@ -422,3 +422,49 @@ test('a plan without an image allowance is limited only by credits', { skip }, a
   const allowance = await app.inject({ method: 'GET', url: `/api/workspaces/${ws.id}/media-allowance`, ...auth });
   assert.deepEqual(allowance.json().images, { used: 0, limit: null });
 });
+
+test('past the plan images, top-up credits pay for more; adjustments do not', { skip }, async () => {
+  const { app } = server(fakeTryOn());
+  const { ws, auth } = await shop(1000);
+  const [plan] = await db
+    .insert(plans)
+    .values({ key: `test-${randomBytes(4).toString('hex')}`, name: 'Starter test', priceBdt: '990', priceUsd: '9', limits: { pages: 1, agents: 3, aiCreditsPerMonth: 2000, knowledgeBaseMb: 100, staffSeats: 2, imagesPerMonth: 1, videoSecondsPerMonth: 10 } })
+    .returning();
+  await db.update(workspaces).set({ planId: plan!.id }).where(eq(workspaces.id, ws.id));
+  const f = form({}, { name: 'bag.jpg', type: 'image/jpeg', body: JPEG });
+  const up = await app.inject({ method: 'POST', url: `/api/workspaces/${ws.id}/uploads/images`, ...auth, headers: { ...auth.headers, ...f.headers }, payload: f.payload });
+  const garmentImageUrl = up.json().url as string;
+  const make = async () => {
+    const r = await app.inject({ method: 'POST', url: `/api/workspaces/${ws.id}/try-on`, ...auth, payload: { garmentImageUrl, shot: 'product' } });
+    if (r.statusCode === 202) await waitFor(app, `/api/workspaces/${ws.id}/try-on/${r.json().image.id}`, auth);
+    return r;
+  };
+
+  assert.equal((await make()).statusCode, 202);
+  // The shop has 1,000 plan credits, but those don't pay past the plan's allowance.
+  const refused = await make();
+  assert.equal(refused.statusCode, 402);
+  assert.match(refused.json().error, /Top up credits/);
+
+  // A finance admin adds a paid top-up of 25 credits: enough for 2 more images at 10 each.
+  const finance = await admin('super_admin');
+  const bad = await app.inject({ method: 'POST', url: `/admin/tenants/${ws.id}/credits`, ...finance, payload: { credits: -5, note: 'oops', topUp: true } });
+  assert.equal(bad.statusCode, 400);
+  const added = await app.inject({ method: 'POST', url: `/admin/tenants/${ws.id}/credits`, ...finance, payload: { credits: 25, note: 'Paid by bKash', topUp: true } });
+  assert.equal(added.statusCode, 201, added.body);
+  let allowance = await app.inject({ method: 'GET', url: `/api/workspaces/${ws.id}/media-allowance`, ...auth });
+  assert.equal(allowance.json().topUpCredits, 25);
+
+  assert.equal((await make()).statusCode, 202);
+  assert.equal((await make()).statusCode, 202);
+  assert.equal((await make()).statusCode, 402);
+  allowance = await app.inject({ method: 'GET', url: `/api/workspaces/${ws.id}/media-allowance`, ...auth });
+  assert.deepEqual(allowance.json().images, { used: 1, limit: 1 });
+  assert.equal(allowance.json().topUpCredits, 5);
+  const billing = await app.inject({ method: 'GET', url: `/api/workspaces/${ws.id}/billing`, ...auth });
+  assert.equal(billing.json().usage.topUpCredits, 5);
+
+  // A goodwill adjustment adds reply credits only.
+  await app.inject({ method: 'POST', url: `/admin/tenants/${ws.id}/credits`, ...finance, payload: { credits: 100, note: 'Sorry for the outage' } });
+  assert.equal((await make()).statusCode, 402);
+});

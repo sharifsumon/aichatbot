@@ -271,7 +271,7 @@ export const modelVideos = pgTable(
 
 /**
  * What each AI image or video took from the plan's monthly allowance: 1 per
- * image, seconds per video. Kept apart from the images and videos, so removing
+ * image, seconds per video, plus any part beyond it paid with top-up credits. Kept apart from the images and videos, so removing
  * one from the Media library doesn't give its share back. A failed one's row
  * is deleted; a finished video's amount becomes its real length.
  */
@@ -282,8 +282,12 @@ export const mediaUsage = pgTable(
     workspaceId: uuid().notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
     /** image or video */
     kind: text().notNull(),
-    /** Images: 1. Videos: seconds, rounded up. */
+    /** Taken from the plan's allowance. Images: 1. Videos: seconds, rounded up. */
     amount: integer().notNull(),
+    /** Beyond the plan's allowance, paid with top-up credits. Images: 1. Videos: seconds. */
+    extra: integer().notNull().default(0),
+    /** Top-up credits the extra part used. */
+    extraCredits: integer().notNull().default(0),
     /** The try_on_images or model_videos row; not a foreign key, so it outlives a removed one. */
     sourceId: uuid().notNull(),
     createdAt: createdAt(),

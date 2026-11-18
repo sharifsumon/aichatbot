@@ -371,3 +371,31 @@ test('a talking video longer than the seconds left is cut to fit; a failed one g
   assert.equal(long.statusCode, 400);
 
 });
+
+test('video past the plan seconds is paid with top-up credits, split across both', { skip }, async () => {
+  const { video } = fakeVideo();
+  // Each clip lasts as long as asked.
+  video.walk = async (req: unknown) => ({ video: { bytes: new Uint8Array([4, 5]), contentType: 'video/mp4' }, durationSec: (req as { seconds: number }).seconds, costUsd: 0.7 });
+  const { app } = server(video);
+  const { ws, auth } = await shop(5000);
+  await onPlan(ws.id, 10);
+  const photo = await uploadPhoto(app, ws.id, auth);
+  const walk = async (seconds: number) => {
+    const r = await app.inject({ method: 'POST', url: `/api/workspaces/${ws.id}/videos`, ...auth, payload: { sourceImageUrl: photo, mode: 'walk', speak: false, seconds } });
+    if (r.statusCode === 202) await waitFor(app, `/api/workspaces/${ws.id}/videos/${r.json().video.id}`, auth);
+    return r;
+  };
+  assert.equal((await walk(5)).statusCode, 202);
+  // 5 plan seconds left, no top-up: 10 seconds is too long.
+  assert.equal((await walk(10)).statusCode, 400);
+
+  // A top-up of 75 credits pays for 5 seconds more at 15 a second.
+  await db.insert(creditGrants).values({ workspaceId: ws.id, reason: 'topup', credits: 75, expiresAt: new Date(Date.now() + 30 * 864e5) });
+  assert.equal((await walk(10)).statusCode, 202);
+  const allowance = await app.inject({ method: 'GET', url: `/api/workspaces/${ws.id}/media-allowance`, ...auth });
+  assert.deepEqual(allowance.json().videoSeconds, { used: 10, limit: 10 });
+  assert.equal(allowance.json().topUpCredits, 0);
+  const third = await walk(5);
+  assert.equal(third.statusCode, 402);
+  assert.match(third.json().error, /Top up credits/);
+});
