@@ -250,6 +250,8 @@ These are placeholder plans to build and test against; every number is editable 
 
 Top-up pack: 1,000 extra AI credits for ৳300 / $3, valid until the end of the billing month.
 
+**AI images and video:** the free trial and Starter include 4 AI product images and 10 seconds of AI video a month (two 5-second videos, or one of 10). Growth and Pro set no cap. Images and video also use AI credits. A failed image or video gives its share back; removing one from the Media library does not. On a capped plan a video can't be longer than the seconds left, and a longer AI result is cut to fit.
+
 **Payments:** a shop's billing country picks the gateway: Bangladesh pays in BDT through SSLCommerz or bKash, every other country pays in USD through Stripe.
 
 **When credits run out:** the bot stops replying to customers. Incoming messages still land in the shop's inbox so staff can answer by hand. The owner sees a warning at 80% and 100% used, then a dashboard banner and a reminder to top up their credits every day until they buy a top-up or upgrade (the daily interval is my assumption). Buying credits switches the bot back on at once.

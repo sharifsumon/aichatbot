@@ -250,6 +250,16 @@ export interface Limits {
   staffSeats: number;
   whatsappNumbers: number;
   instagramAccounts: number;
+  /** AI images and seconds of AI video a month; null when the plan sets no cap. */
+  imagesPerMonth: number | null;
+  videoSecondsPerMonth: number | null;
+}
+
+/** AI images and seconds of AI video made this month against the plan; limit null means no cap. */
+export interface MediaAllowance {
+  images: { used: number; limit: number | null };
+  videoSeconds: { used: number; limit: number | null };
+  periodEnd: string;
 }
 
 export interface Billing {
@@ -266,6 +276,8 @@ export interface Billing {
     agents: { used: number; limit: number };
     staffSeats: { used: number; limit: number };
     knowledgeBase: { usedBytes: number; limitBytes: number };
+    images: MediaAllowance['images'];
+    videoSeconds: MediaAllowance['videoSeconds'];
   };
   plans: { key: string; name: string; priceBdt: string; priceUsd: string; limits: Limits; current: boolean }[];
   topUp: { credits: number; priceBdt: string; priceUsd: string };

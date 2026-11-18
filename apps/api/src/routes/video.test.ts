@@ -11,6 +11,7 @@ import {
   modelCharacters,
   platformSessions,
   platformUsers,
+  plans,
   sessions,
   usageRecords,
   users,
@@ -88,6 +89,7 @@ function server(video?: ReturnType<typeof fakeVideo>['video']) {
     media: {
       lastFrame: async () => new Uint8Array([0xff, 0xd8, 0xff, 1]),
       concat: async (clips) => new Uint8Array(clips.flatMap((c) => [...c])),
+      trim: async (_v, seconds) => new Uint8Array([9, seconds]),
     },
   });
   return { app, objects };
@@ -299,4 +301,73 @@ test('a 30-second walk and talk is made as 3 clips, each from the last frame, th
   assert.equal(done.credits, 15 * 15);
   assert.deepEqual([...objects.get((done.resultVideoUrl as string).slice(FILES.length))!.body], [4, 5, 4, 5, 4, 5]);
   assert.equal((await app.inject({ method: 'POST', url: `/api/workspaces/${ws.id}/videos`, ...auth, payload: { sourceImageUrl: photo, mode: 'walk', script: 'hi', seconds: 25 } })).statusCode, 400);
+});
+
+async function onPlan(wsId: string, videoSecondsPerMonth: number) {
+  const [plan] = await db
+    .insert(plans)
+    .values({ key: `test-${randomBytes(4).toString('hex')}`, name: 'Starter test', priceBdt: '990', priceUsd: '9', limits: { pages: 1, agents: 3, aiCreditsPerMonth: 2000, knowledgeBaseMb: 100, staffSeats: 2, imagesPerMonth: 4, videoSecondsPerMonth } })
+    .returning();
+  await db.update(workspaces).set({ planId: plan!.id }).where(eq(workspaces.id, wsId));
+}
+
+test('10 seconds of video a month: two 5-second videos fit, a third is refused, too long is refused', { skip }, async () => {
+  const { video } = fakeVideo();
+  const { app } = server(video);
+  const { ws, auth } = await shop(5000);
+  await onPlan(ws.id, 10);
+  const photo = await uploadPhoto(app, ws.id, auth);
+  const walk = (seconds: number) => app.inject({ method: 'POST', url: `/api/workspaces/${ws.id}/videos`, ...auth, payload: { sourceImageUrl: photo, mode: 'walk', speak: false, seconds } });
+
+  const tooLong = await walk(15);
+  assert.equal(tooLong.statusCode, 400);
+  assert.equal(tooLong.json().limit, 'videoSeconds');
+
+  const first = await walk(5);
+  assert.equal(first.statusCode, 202, first.body);
+  await waitFor(app, `/api/workspaces/${ws.id}/videos/${first.json().video.id}`, auth);
+  const second = await walk(5);
+  assert.equal(second.statusCode, 202, second.body);
+  await waitFor(app, `/api/workspaces/${ws.id}/videos/${second.json().video.id}`, auth);
+
+  const third = await walk(5);
+  assert.equal(third.statusCode, 402);
+  assert.match(third.json().error, /10 seconds of AI video a month/);
+  const allowance = await app.inject({ method: 'GET', url: `/api/workspaces/${ws.id}/media-allowance`, ...auth });
+  assert.deepEqual(allowance.json().videoSeconds, { used: 10, limit: 10 });
+
+  // Removing a video doesn't give its seconds back.
+  await app.inject({ method: 'DELETE', url: `/api/workspaces/${ws.id}/videos/${first.json().video.id}`, ...auth });
+  assert.equal((await walk(5)).statusCode, 402);
+});
+
+test('a talking video longer than the seconds left is cut to fit; a failed one gives its seconds back', { skip }, async () => {
+  const { video } = fakeVideo();
+  const { app, objects } = server(video);
+  const { ws, auth } = await shop(5000);
+  await onPlan(ws.id, 5);
+  const photo = await uploadPhoto(app, ws.id, auth);
+
+  // A failed video gives its seconds back.
+  const failing = server(fakeVideo(true).video).app;
+  const lost = await failing.inject({ method: 'POST', url: `/api/workspaces/${ws.id}/videos`, ...auth, payload: { sourceImageUrl: photo, script: 'Hi!' } });
+  assert.equal(lost.statusCode, 202, lost.body);
+  assert.equal((await waitFor(failing, `/api/workspaces/${ws.id}/videos/${lost.json().video.id}`, auth)).status, 'failed');
+  let allowance = await app.inject({ method: 'GET', url: `/api/workspaces/${ws.id}/media-allowance`, ...auth });
+  assert.equal(allowance.json().videoSeconds.used, 0);
+
+  // About 3 seconds of script, but the AI returns 6.2 seconds: cut to the 3 held for it.
+  const talk = await app.inject({ method: 'POST', url: `/api/workspaces/${ws.id}/videos`, ...auth, payload: { sourceImageUrl: photo, script: 'New Eid collection!' } });
+  assert.equal(talk.statusCode, 202, talk.body);
+  const done = await waitFor(app, `/api/workspaces/${ws.id}/videos/${talk.json().video.id}`, auth);
+  assert.equal(done.status, 'succeeded', done.error);
+  assert.equal(done.durationSec, 3);
+  assert.deepEqual([...objects.get((done.resultVideoUrl as string).slice(FILES.length))!.body], [9, 3]);
+  allowance = await app.inject({ method: 'GET', url: `/api/workspaces/${ws.id}/media-allowance`, ...auth });
+  assert.equal(allowance.json().videoSeconds.used, 3);
+
+  // A script longer than the 2 seconds left is refused.
+  const long = await app.inject({ method: 'POST', url: `/api/workspaces/${ws.id}/videos`, ...auth, payload: { sourceImageUrl: photo, script: 'Our brand new Eid collection is finally here for everyone!' } });
+  assert.equal(long.statusCode, 400);
+
 });

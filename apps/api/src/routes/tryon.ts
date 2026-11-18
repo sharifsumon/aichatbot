@@ -3,7 +3,7 @@ import { and, asc, desc, eq, isNull, lt, or, sql } from 'drizzle-orm';
 import type { FastifyBaseLogger, FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { GARMENT_CATEGORIES, TRYON_ASPECTS, TRYON_SHOTS, TRYON_STYLES, TryOnError, tryOnPrompt, type TryOnProvider, type TryOnStyle } from '@agently/ai';
-import { creditsRemaining, recordUsage } from '@agently/billing';
+import { creditsRemaining, limitsFor, mediaLimits, mediaUsed, recordUsage, releaseMedia, takeMedia, withMediaLock } from '@agently/billing';
 import { modelCharacters, platformSettings, tryOnImages, type Db } from '@agently/db';
 import { workspaceKey, type ObjectStore } from '@agently/storage';
 import { ALL_ROLES, MANAGERS, isUuid, requireRole } from './guard.ts';
@@ -228,7 +228,11 @@ export const tryOnRoutes: FastifyPluginAsync<TryOnDeps> = async (app, deps) => {
       .where(and(eq(tryOnImages.workspaceId, workspaceId), eq(tryOnImages.status, 'pending')));
     if ((running?.n ?? 0) >= MAX_RUNNING) return reply.code(429).send({ error: `${MAX_RUNNING} images are already being made. Wait for one to finish.` });
 
-    const [image] = await db
+    // The plan's monthly image allowance, checked and taken under a lock so two requests can't both take the last one.
+    const imageLimit = mediaLimits(await limitsFor(db, workspaceId)).images;
+    const image = await withMediaLock(db, workspaceId, async (tx) => {
+      if (imageLimit !== null && (await mediaUsed(tx, workspaceId, 'image')) >= imageLimit) return undefined;
+      const [row] = await tx
       .insert(tryOnImages)
       .values({
         workspaceId,
@@ -241,9 +245,15 @@ export const tryOnRoutes: FastifyPluginAsync<TryOnDeps> = async (app, deps) => {
         createdByUserId: req.user.id,
       })
       .returning();
+      await takeMedia(tx, { workspaceId, kind: 'image', amount: 1, sourceId: row!.id });
+      return row!;
+    });
+    if (!image) {
+      return reply.code(402).send({ error: `Your plan includes ${imageLimit} AI image${imageLimit === 1 ? '' : 's'} a month, and they are used up. Upgrade to make more.`, limit: 'images' });
+    }
 
     // In the background, so a slow AI never holds the request past the proxy's timeout.
-    void run({ db, storage, publicFileUrl, tryOn, log: req.log }, image!.id, workspaceId, {
+    void run({ db, storage, publicFileUrl, tryOn, log: req.log }, image.id, workspaceId, {
       modelKey: character?.imageKey,
       modelUrl: character?.imageUrl,
       garmentKey,
@@ -254,7 +264,7 @@ export const tryOnRoutes: FastifyPluginAsync<TryOnDeps> = async (app, deps) => {
       productName: body.productName || undefined,
       credits: cost,
     });
-    return reply.code(202).send({ image: view(image!) });
+    return reply.code(202).send({ image: view(image) });
   });
 
   /** Removes an image from the list. A copy already added to a product stays there. */
@@ -303,6 +313,7 @@ export async function run(
   } catch (err) {
     deps.log.warn({ err, imageId }, 'Try-on failed');
     const message = err instanceof TryOnError ? err.userMessage : 'Something went wrong making this image. Try again.';
+    await releaseMedia(db, [imageId]).catch(() => undefined);
     await recordUsage(db, { workspaceId, model: usageModel, aiReplies: 0, inputTokens: 0, outputTokens: 0, costUsd: 0, failed: true }).catch(() => undefined);
     await db
       .update(tryOnImages)
@@ -319,10 +330,12 @@ function typeOf(key: string): string {
 }
 
 async function failStale(db: Db, workspaceId: string) {
-  await db
+  const lost = await db
     .update(tryOnImages)
     .set({ status: 'failed', error: 'This image was interrupted. Try again.', finishedAt: new Date() })
-    .where(and(eq(tryOnImages.workspaceId, workspaceId), eq(tryOnImages.status, 'pending'), lt(tryOnImages.createdAt, new Date(Date.now() - STALE_MS))));
+    .where(and(eq(tryOnImages.workspaceId, workspaceId), eq(tryOnImages.status, 'pending'), lt(tryOnImages.createdAt, new Date(Date.now() - STALE_MS))))
+    .returning({ id: tryOnImages.id });
+  await releaseMedia(db, lost.map((i) => i.id));
 }
 
 function view(i: typeof tryOnImages.$inferSelect) {

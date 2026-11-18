@@ -12,6 +12,8 @@ export interface Media {
   lastFrame(video: Uint8Array): Promise<Uint8Array>;
   /** Joins clips (same model, same size) into one MP4 with sound. */
   concat(clips: Uint8Array[]): Promise<Uint8Array>;
+  /** Cuts a video to its first `seconds` seconds. */
+  trim(video: Uint8Array, seconds: number): Promise<Uint8Array>;
 }
 
 async function inTemp<T>(fn: (dir: string) => Promise<T>): Promise<T> {
@@ -29,6 +31,17 @@ export const ffmpegMedia: Media = {
       await writeFile(join(dir, 'in.mp4'), video);
       await run('ffmpeg', ['-v', 'error', '-sseof', '-0.2', '-i', join(dir, 'in.mp4'), '-frames:v', '1', '-q:v', '2', '-update', '1', '-y', join(dir, 'last.jpg')], { timeout: 60_000 });
       return new Uint8Array(await readFile(join(dir, 'last.jpg')));
+    }),
+
+  trim: (video, seconds) =>
+    inTemp(async (dir) => {
+      await writeFile(join(dir, 'in.mp4'), video);
+      const out = join(dir, 'out.mp4');
+      // Re-encoded, so the cut lands exactly on time rather than on the next keyframe.
+      await run('ffmpeg', ['-v', 'error', '-i', join(dir, 'in.mp4'), '-t', String(seconds), '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-c:a', 'aac', '-movflags', '+faststart', '-y', out], {
+        timeout: 120_000,
+      });
+      return new Uint8Array(await readFile(out));
     }),
 
   concat: (clips) =>
