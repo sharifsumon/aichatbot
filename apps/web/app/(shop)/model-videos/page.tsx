@@ -114,8 +114,11 @@ export default function ModelVideosPage() {
     if (pending === false) reloadAllowance();
   }, [pending, reloadAllowance]);
 
-  // Seconds of video left this month on a plan with an allowance; null when the plan has no cap.
-  const secondsLeft = allowance.data && allowance.data.videoSeconds.limit !== null ? Math.max(0, allowance.data.videoSeconds.limit - allowance.data.videoSeconds.used) : null;
+  // Seconds the plan has left this month (null when the plan has no cap), plus what top-up credits pay for.
+  const planSecondsLeft = allowance.data && allowance.data.videoSeconds.limit !== null ? Math.max(0, allowance.data.videoSeconds.limit - allowance.data.videoSeconds.used) : null;
+  const perSec = setup.data?.creditsPerSecond ?? 0;
+  const topUpSeconds = allowance.data && perSec > 0 ? Math.floor(allowance.data.topUpCredits / perSec) : 0;
+  const secondsLeft = planSecondsLeft === null ? null : planSecondsLeft + topUpSeconds;
   const lengths = secondsLeft === null ? WALK_SECONDS : WALK_SECONDS.filter((n) => n <= secondsLeft);
   useEffect(() => {
     // Keep the chosen length within what the plan has left.
@@ -234,9 +237,11 @@ export default function ModelVideosPage() {
         {setup.data && !setup.data.enabled && <Notice tone="warn">Videos with models are not switched on for Agently yet.</Notice>}
         {allowance.data && allowance.data.videoSeconds.limit !== null && (
           <Notice tone={secondsLeft ? 'info' : 'warn'}>
-            {secondsLeft
-              ? `Your plan includes ${allowance.data.videoSeconds.limit} seconds of AI video a month. ${allowance.data.videoSeconds.used} used, ${secondsLeft} left until ${date(allowance.data.periodEnd)}.`
-              : `This month's ${allowance.data.videoSeconds.limit} seconds of AI video are used up. More arrive on ${date(allowance.data.periodEnd)}, or upgrade your plan in Settings → Billing.`}
+            {planSecondsLeft
+              ? `Your plan includes ${allowance.data.videoSeconds.limit} seconds of AI video a month. ${allowance.data.videoSeconds.used} used, ${planSecondsLeft} left until ${date(allowance.data.periodEnd)}.${topUpSeconds ? ` Top-up credits pay for ${topUpSeconds} seconds more.` : ''}`
+              : topUpSeconds
+                ? `This month's ${allowance.data.videoSeconds.limit} plan seconds are used up. More video uses top-up credits (${perSec} a second): ${allowance.data.topUpCredits} left, enough for ${topUpSeconds} seconds.`
+                : `This month's ${allowance.data.videoSeconds.limit} seconds of AI video are used up. Top up credits to make more, or upgrade, in Settings → Billing. Your plan's seconds come back on ${date(allowance.data.periodEnd)}.`}
           </Notice>
         )}
         {done && <Notice tone="ok">{done}</Notice>}
@@ -410,7 +415,7 @@ export default function ModelVideosPage() {
                 {overAllowance
                   ? secondsLeft
                     ? `Only ${secondsLeft} seconds of video are left this month. Shorten the script to about ${secondsLeft * CHARS_PER_SECOND} characters.`
-                    : "This month's video seconds are used up."
+                    : "This month's video seconds are used up. Top up credits to make more."
                   : !photo
                     ? 'Choose a photo first.'
                     : voiceSource === 'recording'

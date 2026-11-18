@@ -291,11 +291,14 @@ export default function GenerateImagePage() {
   const [note, setNote] = useState('');
   const [count, setCount] = useState(1);
   const allowance = useLoad<MediaAllowance>(manager ? `${ws}/media-allowance` : null);
-  // Images left this month on a plan with an allowance; null when the plan has no cap.
-  const imagesLeft = allowance.data && allowance.data.images.limit !== null ? Math.max(0, allowance.data.images.limit - allowance.data.images.used) : null;
+  // Images the plan has left this month (null when the plan has no cap), and how many more top-up credits pay for.
+  const planImagesLeft = allowance.data && allowance.data.images.limit !== null ? Math.max(0, allowance.data.images.limit - allowance.data.images.used) : null;
+  const perImage = setup.data?.creditsPerImage ?? 0;
+  const topUpImages = allowance.data && perImage > 0 ? Math.floor(allowance.data.topUpCredits / perImage) : 0;
+  const imagesLeft = planImagesLeft === null ? null : planImagesLeft + topUpImages;
   const counts = [1, 2, 3, 4].filter((n) => imagesLeft === null || n <= imagesLeft);
   useEffect(() => {
-    // Keep the number of images within what the plan has left.
+    // Keep the number of images within what is left.
     if (imagesLeft !== null && imagesLeft > 0 && count > imagesLeft) setCount(imagesLeft);
   }, [imagesLeft, count]);
   const [prompt, setPrompt] = useState<string>();
@@ -477,9 +480,11 @@ export default function GenerateImagePage() {
         {setup.data && !setup.data.enabled && <Notice tone="warn">Making images is not switched on for Agently yet. It will be soon.</Notice>}
         {allowance.data && allowance.data.images.limit !== null && (
           <Notice tone={imagesLeft ? 'info' : 'warn'}>
-            {imagesLeft
-              ? `Your plan includes ${allowance.data.images.limit} AI images a month. ${allowance.data.images.used} used, ${imagesLeft} left until ${date(allowance.data.periodEnd)}.`
-              : `This month's ${allowance.data.images.limit} AI images are used up. More arrive on ${date(allowance.data.periodEnd)}, or upgrade your plan in Settings → Billing.`}
+            {planImagesLeft
+              ? `Your plan includes ${allowance.data.images.limit} AI images a month. ${allowance.data.images.used} used, ${planImagesLeft} left until ${date(allowance.data.periodEnd)}.${topUpImages ? ` Top-up credits pay for ${topUpImages} more.` : ''}`
+              : topUpImages
+                ? `This month's ${allowance.data.images.limit} plan images are used up. More images use top-up credits (${perImage} each): ${allowance.data.topUpCredits} left, enough for ${topUpImages}.`
+                : `This month's ${allowance.data.images.limit} AI images are used up. Top up credits to make more, or upgrade, in Settings → Billing. Your plan's images come back on ${date(allowance.data.periodEnd)}.`}
           </Notice>
         )}
         {done && <Notice tone="ok">{done}</Notice>}
@@ -671,7 +676,7 @@ export default function GenerateImagePage() {
               </Link>
               <div className="gen-go">
                 {!ready && (
-                  <small className="muted">{imagesLeft === 0 ? "This month's images are used up." : !garment ? 'Upload the product photo first.' : 'Choose a model above.'}</small>
+                  <small className="muted">{imagesLeft === 0 ? "This month's images are used up. Top up credits to make more." : !garment ? 'Upload the product photo first.' : 'Choose a model above.'}</small>
                 )}
                 {credits > 0 && <span className="gen-cost">{credits * count} credits</span>}
                 <button type="button" className="btn primary lg" disabled={!ready || starting || uploading || !setup.data?.enabled} onClick={generate}>

@@ -1,12 +1,18 @@
 import { and, asc, eq, gte, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { DEFAULT_LIMITS, channelLimit, channelsInUse, creditSummary, limitsFor, mediaAllowance, mediaLimits, pagesInUse, planFor, seatsInUse } from '@agently/billing';
-import { agents, plans, usageRecords, workspaces, type Db } from '@agently/db';
+import { agents, plans, platformSettings, usageRecords, workspaces, type Db } from '@agently/db';
 import { ALL_ROLES, MANAGERS, requireRole } from './guard.ts';
 import { usedBytes } from './knowledge.ts';
 
-/** The demo top-up pack from the spec; becomes a platform setting with the payment gateways. */
+/** The top-up pack when the super admin has not set credits.topUp in Platform settings. */
 export const TOP_UP = { credits: 1000, priceBdt: '300.00', priceUsd: '3.00' };
+
+async function topUpPack(db: Db): Promise<typeof TOP_UP> {
+  const row = await db.query.platformSettings.findFirst({ where: eq(platformSettings.key, 'credits.topUp') });
+  const v = row?.value as { credits?: number; priceBdt?: string; priceUsd?: string } | undefined;
+  return v?.credits ? { credits: v.credits, priceBdt: String(v.priceBdt ?? TOP_UP.priceBdt), priceUsd: String(v.priceUsd ?? TOP_UP.priceUsd) } : TOP_UP;
+}
 
 /**
  * Billing page: the plan, AI credits this month with the 80% / 100% warning,
@@ -51,6 +57,7 @@ export const billingRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db })
         knowledgeBase: { usedBytes: kbBytes, limitBytes: limits.knowledgeBaseMb * 1024 * 1024 },
         images: media.images,
         videoSeconds: media.videoSeconds,
+        topUpCredits: media.topUpCredits,
       },
       plans: available
         .filter((p) => !p.trialDays)
@@ -68,7 +75,7 @@ export const billingRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db })
           },
           current: p.id === plan?.id,
         })),
-      topUp: TOP_UP,
+      topUp: await topUpPack(db),
       // Upgrades and top-ups need the payment gateways; until then the Agently team changes plans.
       paymentsAvailable: false,
     };

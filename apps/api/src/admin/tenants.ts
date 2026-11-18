@@ -27,7 +27,15 @@ const STATUSES = ['trial', 'active', 'past_due', 'suspended'] as const;
 const suspendBody = z.object({ reason: z.string().trim().min(3).max(500) }).strict();
 const extendBody = z.object({ days: z.number().int().min(1).max(90) }).strict();
 const planBody = z.object({ planKey: z.string().trim().min(1).max(60) }).strict();
-const creditsBody = z.object({ credits: z.number().int().min(-100_000).max(100_000).refine((n) => n !== 0, 'must not be 0'), note: z.string().trim().min(3).max(300) }).strict();
+const creditsBody = z
+  .object({
+    credits: z.number().int().min(-100_000).max(100_000).refine((n) => n !== 0, 'must not be 0'),
+    note: z.string().trim().min(3).max(300),
+    /** A top-up the shop paid for: it can also pay for images and video beyond the plan's allowance. */
+    topUp: z.boolean().default(false),
+  })
+  .strict()
+  .refine((b) => !b.topUp || b.credits > 0, { message: 'A top-up adds credits', path: ['credits'] });
 
 type Params = { workspaceId: string };
 
@@ -237,12 +245,15 @@ export const adminTenantRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { d
     if (!body) return reply;
     const [grant] = await db
       .insert(creditGrants)
-      .values({ workspaceId: ws.id, reason: 'adjustment', credits: body.credits, expiresAt: billingMonth().end, grantedByPlatformUserId: req.admin.id })
+      .values({ workspaceId: ws.id, reason: body.topUp ? 'topup' : 'adjustment', credits: body.credits, expiresAt: billingMonth().end, grantedByPlatformUserId: req.admin.id })
       .returning();
     if (body.credits > 0) {
-      await db.insert(activities).values({ workspaceId: ws.id, type: 'credits.added', text: `Agently added ${body.credits.toLocaleString('en')} AI credits`, data: { grantId: grant!.id } });
+      const text = body.topUp
+        ? `Your top-up of ${body.credits.toLocaleString('en')} AI credits was added. It also pays for images and video beyond your plan.`
+        : `Agently added ${body.credits.toLocaleString('en')} AI credits`;
+      await db.insert(activities).values({ workspaceId: ws.id, type: 'credits.added', text, data: { grantId: grant!.id, topUp: body.topUp } });
     }
-    await audit(db, req, 'tenant.credits_adjusted', { workspaceId: ws.id, targetType: 'credit_grant', targetId: grant!.id, data: { credits: body.credits, note: body.note } });
+    await audit(db, req, 'tenant.credits_adjusted', { workspaceId: ws.id, targetType: 'credit_grant', targetId: grant!.id, data: { credits: body.credits, note: body.note, topUp: body.topUp } });
     return reply.code(201).send({ credits: await creditSummary(db, ws.id) });
   });
 };

@@ -617,7 +617,9 @@ export function BillingTab() {
           ))}
         </div>
         <span className="sub">
-          Extra replies: {num(b.topUp.credits)} for {b.currency === 'BDT' ? bdt(b.topUp.priceBdt) : usd(b.topUp.priceUsd, 0)}.
+          Top-up: {num(b.topUp.credits)} credits for {b.currency === 'BDT' ? bdt(b.topUp.priceBdt) : usd(b.topUp.priceUsd, 0)}, until the end of the month. Top-up credits pay for more replies,
+          and for AI images and video after your plan&apos;s monthly allowance is used.
+          {b.usage.topUpCredits > 0 && ` You have ${num(b.usage.topUpCredits)} top-up credits left.`}
         </span>
       </Section>
     </div>

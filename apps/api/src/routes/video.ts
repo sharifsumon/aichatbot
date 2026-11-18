@@ -18,7 +18,7 @@ import {
   type VideoStyle,
   type VideoVoice,
 } from '@agently/ai';
-import { creditsRemaining, limitsFor, mediaLimits, mediaUsed, recordUsage, releaseMedia, settleMedia, takeMedia, withMediaLock } from '@agently/billing';
+import { creditsRemaining, limitsFor, mediaLimits, mediaUsed, recordUsage, releaseMedia, settleMedia, takeMedia, topUpCreditsLeft, withMediaLock } from '@agently/billing';
 import { modelCharacters, modelVideos, platformSettings, type Db } from '@agently/db';
 import { decryptSecret } from '@agently/shared';
 import { workspaceKey, type ObjectStore } from '@agently/storage';
@@ -44,6 +44,8 @@ export interface VideoDeps {
 export const WALK_SECONDS = [5, 10, 15, 20, 30, 45, 60] as const;
 /** About 60 seconds of speech. */
 const MAX_TALK_SCRIPT = 900;
+/** The longest a talking video from a recording is expected to be. */
+const MAX_RECORDING_SEC = 60;
 
 /** Credits one second of video uses when the super admin has not set video.creditsPerSecond. */
 export const DEFAULT_VIDEO_CREDITS_PER_SECOND = 15;
@@ -223,20 +225,8 @@ export const videoRoutes: FastifyPluginAsync<VideoDeps> = async (app, deps) => {
       return reply.code(400).send({ error: `Keep the script under ${MAX_TALK_SCRIPT} characters (about 60 seconds of speech).` });
     }
 
-    // On a plan with a monthly allowance of video seconds, a video can be no longer than what is left.
     const secondsLimit = mediaLimits(await limitsFor(db, workspaceId)).videoSeconds;
     const talkScriptSec = body.mode === 'talk' && !body.audioUrl ? Math.max(3, Math.ceil(body.script!.length / CHARS_PER_SECOND)) : 0;
-    if (secondsLimit !== null) {
-      const left = Math.max(0, secondsLimit - (await mediaUsed(db, workspaceId, 'video')));
-      const allowance = `Your plan includes ${secondsLimit} seconds of AI video a month`;
-      if (left <= 0) return reply.code(402).send({ error: `${allowance}, and they are used up. Upgrade to make more.`, limit: 'videoSeconds' });
-      if (body.mode === 'walk' && body.seconds > left) {
-        return reply.code(400).send({ error: `${allowance}, and ${left} seconds are left. Choose a shorter video.`, limit: 'videoSeconds' });
-      }
-      if (talkScriptSec > left) {
-        return reply.code(400).send({ error: `${allowance}, and ${left} seconds are left. Shorten the script to about ${left * CHARS_PER_SECOND} characters.`, limit: 'videoSeconds' });
-      }
-    }
 
     const perSecond = await videoCreditsPerSecond(db);
     const estimateSec = body.mode === 'walk' ? body.seconds : body.audioUrl ? ASSUMED_RECORDING_SEC : talkScriptSec;
@@ -251,16 +241,30 @@ export const videoRoutes: FastifyPluginAsync<VideoDeps> = async (app, deps) => {
       .where(and(eq(modelVideos.workspaceId, workspaceId), eq(modelVideos.status, 'pending')));
     if ((running?.n ?? 0) >= MAX_RUNNING) return reply.code(429).send({ error: `${MAX_RUNNING} videos are already being made. Wait for one to finish.` });
 
-    // The seconds held against the allowance while the video is made. On a plan with a cap, a longer result is cut to this length.
+    // The seconds held while the video is made: first from the plan's monthly allowance, then
+    // paid with top-up credits. On a plan with a cap, a longer result is cut to this length.
     let maxSeconds: number | undefined;
-    let held = estimateSec;
-    const row = await withMediaLock(db, workspaceId, async (tx) => {
+    const take = { amount: estimateSec, extra: 0, extraCredits: 0 };
+    const result = await withMediaLock(db, workspaceId, async (tx) => {
       if (secondsLimit !== null) {
-        const left = secondsLimit - (await mediaUsed(tx, workspaceId, 'video'));
-        // A recording's length is unknown until the video is made, so it may use what is left.
-        const wanted = body.mode === 'walk' ? body.seconds : body.audioUrl ? left : talkScriptSec;
-        if (left <= 0 || wanted > left) return undefined;
-        maxSeconds = held = wanted;
+        const left = Math.max(0, secondsLimit - (await mediaUsed(tx, workspaceId, 'video')));
+        const topUpSec = perSecond > 0 ? Math.floor((await topUpCreditsLeft(tx, workspaceId)) / perSecond) : MAX_RECORDING_SEC;
+        const canMake = left + topUpSec;
+        // A recording's length is unknown until the video is made, so it may use what can be made.
+        const wanted = body.mode === 'walk' ? body.seconds : body.audioUrl ? Math.min(MAX_RECORDING_SEC, canMake) : talkScriptSec;
+        const allowance = `Your plan includes ${secondsLimit} seconds of AI video a month`;
+        if (canMake <= 0) {
+          return { refused: { status: 402, error: `${allowance}, and they are used up. Top up credits to make more, or upgrade.` } };
+        }
+        if (wanted > canMake) {
+          const have = `${left} second${left === 1 ? '' : 's'} of your plan${topUpSec ? ` and ${topUpSec} from top-up credits` : ''} ${left + topUpSec === 1 ? 'is' : 'are'} left`;
+          const fix = body.mode === 'walk' ? 'Choose a shorter video' : `Shorten the script to about ${canMake * CHARS_PER_SECOND} characters`;
+          return { refused: { status: 400, error: `${allowance}; ${have}. ${fix}, or top up credits.` } };
+        }
+        maxSeconds = wanted;
+        take.amount = Math.min(wanted, left);
+        take.extra = wanted - take.amount;
+        take.extraCredits = take.extra * perSecond;
       }
       const options = {
         gesture: body.gesture,
@@ -286,10 +290,11 @@ export const videoRoutes: FastifyPluginAsync<VideoDeps> = async (app, deps) => {
         createdByUserId: req.user.id,
       })
       .returning();
-      await takeMedia(tx, { workspaceId, kind: 'video', amount: held, sourceId: created!.id });
-      return created!;
+      await takeMedia(tx, { workspaceId, kind: 'video', ...take, sourceId: created!.id });
+      return { row: created! };
     });
-    if (!row) return reply.code(402).send({ error: `Your plan's ${secondsLimit} seconds of AI video this month are used up. Upgrade to make more.`, limit: 'videoSeconds' });
+    if ('refused' in result && result.refused) return reply.code(result.refused.status).send({ error: result.refused.error, limit: 'videoSeconds' });
+    const { row } = result;
 
     // In the background: videos take minutes, far past the proxy's timeout.
     void runVideo({ db, storage, publicFileUrl, video, media: deps.media ?? ffmpegMedia, log: req.log }, row.id, workspaceId, {
@@ -374,7 +379,7 @@ export async function runVideo(
     // Recorded before the video shows as done, so whoever sees it done also sees it paid for.
     await recordUsage(db, { workspaceId, model: usageModel, aiReplies: credits, inputTokens: 0, outputTokens: 0, costUsd: result.costUsd });
     // The allowance counts the real length, rounded up.
-    await settleMedia(db, videoId, Math.ceil(result.durationSec || job.seconds));
+    await settleMedia(db, videoId, Math.ceil(result.durationSec || job.seconds), job.creditsPerSecond);
     await db
       .update(modelVideos)
       .set({

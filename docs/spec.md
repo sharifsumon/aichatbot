@@ -250,7 +250,7 @@ These are placeholder plans to build and test against; every number is editable 
 
 Top-up pack: 1,000 extra AI credits for ৳300 / $3, valid until the end of the billing month.
 
-**AI images and video:** the free trial and Starter include 4 AI product images and 10 seconds of AI video a month (two 5-second videos, or one of 10). Growth and Pro set no cap. Images and video also use AI credits. A failed image or video gives its share back; removing one from the Media library does not. On a capped plan a video can't be longer than the seconds left, and a longer AI result is cut to fit.
+**AI images and video:** Starter includes 20 AI product images and 50 seconds of AI video a month (five 10-second videos). That is 950 of its 2,000 credits, so at least 1,050 stay for replies. The free trial includes 4 images and 10 seconds. Growth and Pro set no cap. Images and video also use AI credits. A failed image or video gives its share back; removing one from the Media library does not. On a capped plan a video can't be longer than the seconds left, and a longer AI result is cut to fit. After the allowance, top-up credits pay for more images (10 credits each) and video (15 credits a second); plan credits only pay for replies. Until online payment, finance adds a paid top-up from the tenant's "Add credits" dialog.
 
 **Payments:** a shop's billing country picks the gateway: Bangladesh pays in BDT through SSLCommerz or bKash, every other country pays in USD through Stripe.
 

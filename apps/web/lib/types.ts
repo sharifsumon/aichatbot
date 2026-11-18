@@ -259,6 +259,8 @@ export interface Limits {
 export interface MediaAllowance {
   images: { used: number; limit: number | null };
   videoSeconds: { used: number; limit: number | null };
+  /** Top-up credits left to pay for images and video beyond the plan's allowance. */
+  topUpCredits: number;
   periodEnd: string;
 }
 
@@ -278,6 +280,7 @@ export interface Billing {
     knowledgeBase: { usedBytes: number; limitBytes: number };
     images: MediaAllowance['images'];
     videoSeconds: MediaAllowance['videoSeconds'];
+    topUpCredits: number;
   };
   plans: { key: string; name: string; priceBdt: string; priceUsd: string; limits: Limits; current: boolean }[];
   topUp: { credits: number; priceBdt: string; priceUsd: string };
