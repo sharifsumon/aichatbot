@@ -557,6 +557,16 @@ export function BillingTab() {
           <Meter used={b.usage.agents.used} total={b.usage.agents.limit} label={`Chat agents: ${b.usage.agents.used} of ${b.usage.agents.limit}`} />
           <Meter used={b.usage.staffSeats.used} total={b.usage.staffSeats.limit} label={`Team seats: ${b.usage.staffSeats.used} of ${b.usage.staffSeats.limit}`} />
           <Meter used={kb.usedBytes} total={kb.limitBytes} label={`Knowledge base: ${(kb.usedBytes / 1048576).toFixed(1)} of ${Math.round(kb.limitBytes / 1048576)} MB`} />
+          {b.usage.images.limit !== null && (
+            <Meter used={b.usage.images.used} total={b.usage.images.limit} label={`AI images this month: ${b.usage.images.used} of ${b.usage.images.limit}`} />
+          )}
+          {b.usage.videoSeconds.limit !== null && (
+            <Meter
+              used={b.usage.videoSeconds.used}
+              total={b.usage.videoSeconds.limit}
+              label={`AI video this month: ${b.usage.videoSeconds.used} of ${b.usage.videoSeconds.limit} seconds`}
+            />
+          )}
         </div>
       </Section>
       <Section title="AI replies, last 30 days">
@@ -600,6 +610,8 @@ export function BillingTab() {
                   {p.limits.staffSeats} team seat{p.limits.staffSeats === 1 ? '' : 's'}
                 </li>
                 <li>{p.limits.knowledgeBaseMb} MB knowledge base</li>
+                <li>{p.limits.imagesPerMonth === null ? 'AI product images' : `${p.limits.imagesPerMonth} AI product image${p.limits.imagesPerMonth === 1 ? '' : 's'} a month`}</li>
+                <li>{p.limits.videoSecondsPerMonth === null ? 'AI product videos' : `${p.limits.videoSecondsPerMonth} seconds of AI video a month`}</li>
               </ul>
             </div>
           ))}

@@ -21,6 +21,10 @@ const limits = z.object({
   staffSeats: z.number().int().min(1).max(1000),
   whatsappNumbers: z.number().int().min(0).max(1000).default(0),
   instagramAccounts: z.number().int().min(0).max(1000).default(0),
+  /** Left out (or null): no monthly cap on AI images; credits still apply. */
+  imagesPerMonth: z.number().int().min(0).max(100_000).nullish().transform((v) => v ?? undefined),
+  /** Left out (or null): no monthly cap on seconds of AI video; credits still apply. */
+  videoSecondsPerMonth: z.number().int().min(0).max(1_000_000).nullish().transform((v) => v ?? undefined),
 });
 
 const planBody = z

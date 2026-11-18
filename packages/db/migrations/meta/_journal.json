@@ -106,6 +106,13 @@
       "when": 1794810112232,
       "tag": "0014_whatsapp_instagram",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1794979803850,
+      "tag": "0015_plan_media_allowance",
+      "breakpoints": true
     }
   ]
 }

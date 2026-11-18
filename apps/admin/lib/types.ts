@@ -35,6 +35,9 @@ export interface Limits {
   /** Missing on plans saved before WhatsApp and Instagram: none. */
   whatsappNumbers?: number;
   instagramAccounts?: number;
+  /** AI images and seconds of AI video a month. Missing: no cap beyond AI credits. */
+  imagesPerMonth?: number;
+  videoSecondsPerMonth?: number;
 }
 
 export interface Plan {

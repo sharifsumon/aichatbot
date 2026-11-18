@@ -1,8 +1,8 @@
 import { and, asc, eq, gte, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
-import { DEFAULT_LIMITS, channelLimit, channelsInUse, creditSummary, pagesInUse, planFor, seatsInUse } from '@agently/billing';
+import { DEFAULT_LIMITS, channelLimit, channelsInUse, creditSummary, limitsFor, mediaAllowance, mediaLimits, pagesInUse, planFor, seatsInUse } from '@agently/billing';
 import { agents, plans, usageRecords, workspaces, type Db } from '@agently/db';
-import { MANAGERS, requireRole } from './guard.ts';
+import { ALL_ROLES, MANAGERS, requireRole } from './guard.ts';
 import { usedBytes } from './knowledge.ts';
 
 /** The demo top-up pack from the spec; becomes a platform setting with the payment gateways. */
@@ -30,6 +30,7 @@ export const billingRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db })
       channelsInUse(db, workspaceId, 'instagram'),
     ]);
     const limits = plan?.limits ?? DEFAULT_LIMITS;
+    const media = await mediaAllowance(db, workspaceId, limits, now);
     const trialEnded = ws!.status === 'trial' && !!ws!.trialEndsAt && ws!.trialEndsAt <= now;
     // BD shops pay in taka through SSLCommerz or bKash; everyone else in dollars through Stripe.
     const currency = ws!.billingCountry === 'BD' ? 'BDT' : 'USD';
@@ -48,6 +49,8 @@ export const billingRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db })
         agents: { used: agentCount[0]?.n ?? 0, limit: limits.agents },
         staffSeats: { used: seats.members + seats.pendingInvites, limit: limits.staffSeats },
         knowledgeBase: { usedBytes: kbBytes, limitBytes: limits.knowledgeBaseMb * 1024 * 1024 },
+        images: media.images,
+        videoSeconds: media.videoSeconds,
       },
       plans: available
         .filter((p) => !p.trialDays)
@@ -56,13 +59,25 @@ export const billingRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db })
           name: p.name,
           priceBdt: p.priceBdt,
           priceUsd: p.priceUsd,
-          limits: { ...p.limits, whatsappNumbers: channelLimit(p.limits, 'whatsapp'), instagramAccounts: channelLimit(p.limits, 'instagram') },
+          limits: {
+            ...p.limits,
+            whatsappNumbers: channelLimit(p.limits, 'whatsapp'),
+            instagramAccounts: channelLimit(p.limits, 'instagram'),
+            imagesPerMonth: mediaLimits(p.limits).images,
+            videoSecondsPerMonth: mediaLimits(p.limits).videoSeconds,
+          },
           current: p.id === plan?.id,
         })),
       topUp: TOP_UP,
       // Upgrades and top-ups need the payment gateways; until then the Agently team changes plans.
       paymentsAvailable: false,
     };
+  });
+
+  /** AI images and seconds of AI video left this month, for the Generate image and video pages. Any team member may see it. */
+  app.get<{ Params: { workspaceId: string } }>('/workspaces/:workspaceId/media-allowance', async (req, reply) => {
+    if (!(await requireRole(db, req, reply, ALL_ROLES))) return reply;
+    return mediaAllowance(db, req.params.workspaceId, await limitsFor(db, req.params.workspaceId));
   });
 
   /** AI replies per day for the usage chart; at most 90 days. */

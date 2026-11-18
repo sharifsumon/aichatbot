@@ -5,7 +5,9 @@ import { AddToProduct } from '@/components/AddToProduct';
 import { useShop } from '@/components/Shell';
 import { Chips, Empty, Loading, Notice, Pill, TopBar } from '@/components/ui';
 import { ApiError, useApi, useLoad, useUpload } from '@/lib/api';
+import { date } from '@/lib/format';
 import { shrinkImage } from '@/lib/image';
+import type { MediaAllowance } from '@/lib/types';
 
 type Mode = 'talk' | 'walk';
 interface Setup {
@@ -68,6 +70,7 @@ export default function ModelVideosPage() {
   const setup = useLoad<Setup>(`${ws}/videos/setup`);
   const tryOn = useLoad<{ images: { id: string; status: string; resultImageUrl: string | null }[] }>(`${ws}/try-on`);
   const characters = useLoad<{ models: { id: string; name: string; imageUrl: string }[] }>(`${ws}/try-on/models`);
+  const allowance = useLoad<MediaAllowance>(manager ? `${ws}/media-allowance` : null);
   const [videos, setVideos] = useState<Video[]>();
   const [photo, setPhoto] = useState<string>();
   const [uploaded, setUploaded] = useState<Photo[]>([]);
@@ -105,6 +108,19 @@ export default function ModelVideosPage() {
     const t = setInterval(loadVideos, 5000);
     return () => clearInterval(t);
   }, [pending, loadVideos]);
+  // A finished video counts its real length, which can differ from the seconds held for it.
+  const reloadAllowance = allowance.reload;
+  useEffect(() => {
+    if (pending === false) reloadAllowance();
+  }, [pending, reloadAllowance]);
+
+  // Seconds of video left this month on a plan with an allowance; null when the plan has no cap.
+  const secondsLeft = allowance.data && allowance.data.videoSeconds.limit !== null ? Math.max(0, allowance.data.videoSeconds.limit - allowance.data.videoSeconds.used) : null;
+  const lengths = secondsLeft === null ? WALK_SECONDS : WALK_SECONDS.filter((n) => n <= secondsLeft);
+  useEffect(() => {
+    // Keep the chosen length within what the plan has left.
+    if (secondsLeft !== null && seconds > secondsLeft && lengths.length) setSeconds(lengths[lengths.length - 1]!);
+  }, [secondsLeft, seconds, lengths]);
 
   // Options that don't fit the mode fall back to the default.
   useEffect(() => {
@@ -155,7 +171,8 @@ export default function ModelVideosPage() {
 
   const perSecond = setup.data?.creditsPerSecond ?? 0;
   const estimateSec = mode === 'walk' ? seconds : voiceSource === 'recording' ? null : Math.max(3, Math.ceil(script.trim().length / CHARS_PER_SECOND));
-  const ready = !!photo && (!speaks || (voiceSource === 'recording' ? !!recording : !!script.trim()));
+  const overAllowance = secondsLeft !== null && (secondsLeft <= 0 || (estimateSec !== null && estimateSec > secondsLeft));
+  const ready = !!photo && (!speaks || (voiceSource === 'recording' ? !!recording : !!script.trim())) && !overAllowance;
 
   async function generate() {
     if (!photo) return;
@@ -176,6 +193,7 @@ export default function ModelVideosPage() {
         },
       });
       setVideos((cur) => [r.video, ...(cur ?? [])]);
+      allowance.reload();
       setDone(mode === 'walk' && seconds > 10 ? `Your video is being made in ${Math.ceil(seconds / 10)} clips. It can take ${Math.ceil(seconds / 10) * 3} to ${Math.ceil(seconds / 10) * 6} minutes; you can leave this page.` : 'Your video is being made. It usually takes 2 to 6 minutes; you can leave this page.');
       reloadHome();
     } catch (e) {
@@ -214,6 +232,13 @@ export default function ModelVideosPage() {
           Turn a model photo into a short product video. The model can walk and talk with the camera following, or talk to the camera from your script or your own voice.
         </p>
         {setup.data && !setup.data.enabled && <Notice tone="warn">Videos with models are not switched on for Agently yet.</Notice>}
+        {allowance.data && allowance.data.videoSeconds.limit !== null && (
+          <Notice tone={secondsLeft ? 'info' : 'warn'}>
+            {secondsLeft
+              ? `Your plan includes ${allowance.data.videoSeconds.limit} seconds of AI video a month. ${allowance.data.videoSeconds.used} used, ${secondsLeft} left until ${date(allowance.data.periodEnd)}.`
+              : `This month's ${allowance.data.videoSeconds.limit} seconds of AI video are used up. More arrive on ${date(allowance.data.periodEnd)}, or upgrade your plan in Settings → Billing.`}
+          </Notice>
+        )}
         {done && <Notice tone="ok">{done}</Notice>}
         {error && <Notice tone="error">{error}</Notice>}
 
@@ -284,7 +309,7 @@ export default function ModelVideosPage() {
                 <label className="field">
                   Length
                   <select value={seconds} onChange={(e) => setSeconds(Number(e.target.value))}>
-                    {WALK_SECONDS.map((n) => (
+                    {lengths.map((n) => (
                       <option key={n} value={n}>
                         {n} seconds{n > 10 ? ` (${Math.ceil(n / 10)} clips joined)` : ''}
                       </option>
@@ -380,7 +405,19 @@ export default function ModelVideosPage() {
                 ? 'Starting…'
                 : `Generate video${perSecond ? (estimateSec ? ` · about ${estimateSec * perSecond} credits` : ` · ${perSecond} credits a second`) : ''}`}
             </button>
-            {!ready && <small className="muted">{!photo ? 'Choose a photo first.' : voiceSource === 'recording' ? 'Upload a voice recording.' : 'Write what the model says.'}</small>}
+            {!ready && (
+              <small className="muted">
+                {overAllowance
+                  ? secondsLeft
+                    ? `Only ${secondsLeft} seconds of video are left this month. Shorten the script to about ${secondsLeft * CHARS_PER_SECOND} characters.`
+                    : "This month's video seconds are used up."
+                  : !photo
+                    ? 'Choose a photo first.'
+                    : voiceSource === 'recording'
+                      ? 'Upload a voice recording.'
+                      : 'Write what the model says.'}
+              </small>
+            )}
           </section>
         </div>
 
