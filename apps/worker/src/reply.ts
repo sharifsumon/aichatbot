@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq, gt, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, sql } from 'drizzle-orm';
 import { AIProviderError, costUsd } from '@agently/ai';
 import { activities, agents, channels, conversations, messages, productPosts, products, workspaces } from '@agently/db';
 import { GraphApiError, INSTAGRAM_MAX_TEXT } from '@agently/meta';
@@ -71,18 +71,19 @@ export async function handleReply(deps: WorkerDeps, job: ReplyJob, opts: { final
   // Website chat has no platform token: replies are saved and the visitor's widget picks them up.
   if (!channel || channel.status !== 'connected' || (channel.type !== 'widget' && !channel.accessTokenEncrypted)) return 'skipped_channel_unavailable';
 
-  // The channel's own bot; otherwise the shop's bot for this channel type. WhatsApp and
-  // Instagram without a bot of their own wait for staff rather than borrow Facebook's;
-  // website chat is answered by the main bot.
+  // The channel's own bot; otherwise the shop's oldest bot of this channel type (the same
+  // one Chat Agent edits). WhatsApp and Instagram without a bot of their own wait for staff
+  // rather than borrow Facebook's; website chat without its own bot uses the main Facebook bot.
+  const oldestOfType = (type: typeof channel.type) =>
+    db.query.agents.findFirst({
+      where: and(eq(agents.workspaceId, workspace.id), eq(agents.channelType, type)),
+      orderBy: [asc(agents.createdAt), asc(agents.id)],
+    });
   const agent = channel.agentId
-    ? await db.query.agents.findFirst({ where: eq(agents.id, channel.agentId) })
-    : await db.query.agents.findFirst({
-        where:
-          channel.type === 'facebook_page' || channel.type === 'widget'
-            ? eq(agents.workspaceId, workspace.id)
-            : and(eq(agents.workspaceId, workspace.id), eq(agents.channelType, channel.type)),
-        orderBy: agents.createdAt,
-      });
+    ? await db.query.agents.findFirst({ where: and(eq(agents.id, channel.agentId), eq(agents.workspaceId, workspace.id)) })
+    : channel.type === 'widget'
+      ? ((await oldestOfType('widget')) ?? (await oldestOfType('facebook_page')))
+      : await oldestOfType(channel.type);
   if (!agent || agent.status !== 'live') return 'skipped_agent_not_live';
   if (message.kind === 'comment' && agent.commentReplyMode === 'off') return 'skipped_comments_off';
 

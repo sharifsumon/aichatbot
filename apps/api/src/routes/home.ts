@@ -3,7 +3,6 @@ import type { FastifyPluginAsync } from 'fastify';
 import { creditSummary } from '@agently/billing';
 import {
   activities,
-  agents,
   channels,
   conversations,
   customers,
@@ -16,6 +15,7 @@ import {
 } from '@agently/db';
 import type { InboxDeps } from './inbox.ts';
 import { sendHumanReply } from './send-reply.ts';
+import { mainAgent } from './settings.ts';
 import { ALL_ROLES, isUuid, makeCursor, pageLimit, parseCursor, requireRole } from './guard.ts';
 
 /**
@@ -36,7 +36,7 @@ export const homeRoutes: FastifyPluginAsync<InboxDeps> = async (app, deps) => {
 
     const [ws, agent, pageRows, chats, orderStats, productCount, knowledgeCount, credits, feed] = await Promise.all([
       db.query.workspaces.findFirst({ where: eq(workspaces.id, workspaceId) }),
-      db.query.agents.findFirst({ where: eq(agents.workspaceId, workspaceId), orderBy: agents.createdAt }),
+      mainAgent(db, workspaceId),
       listChannels(db, workspaceId),
       db
         .select({ mode: conversations.mode, n: count })

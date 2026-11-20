@@ -196,7 +196,7 @@ export const channelRoutes: FastifyPluginAsync<ChannelDeps> = async (app, deps) 
     const agent = await db.query.agents.findFirst({
       columns: { id: true },
       where: and(eq(agents.workspaceId, workspaceId), eq(agents.channelType, c.type)),
-      orderBy: asc(agents.createdAt),
+      orderBy: [asc(agents.createdAt), asc(agents.id)],
     });
     const values = {
       workspaceId,

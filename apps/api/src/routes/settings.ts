@@ -116,7 +116,7 @@ export const settingsRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db }
     if (!(await requireRole(db, req, reply, ALL_ROLES))) return reply;
     const { workspaceId } = req.params;
     const [rows, chans, limits] = await Promise.all([
-      db.query.agents.findMany({ where: eq(agents.workspaceId, workspaceId), orderBy: asc(agents.createdAt) }),
+      db.query.agents.findMany({ where: eq(agents.workspaceId, workspaceId), orderBy: [asc(agents.createdAt), asc(agents.id)] }),
       db
         .select({ id: channels.id, type: channels.type, name: channels.name, status: channels.status, agentId: channels.agentId })
         .from(channels)
@@ -264,12 +264,12 @@ const newAgentBody = z
   .object({ channelType: z.enum(['whatsapp', 'instagram']), name: z.string().trim().min(1).max(80).optional() })
   .strict();
 
-/** The shop's main bot: its Facebook one (the first made, for shops from before per-channel bots). */
-const mainAgent = async (db: Db, workspaceId: string) =>
-  (await db.query.agents.findFirst({
+/** The shop's main bot: its oldest Facebook one. Facebook pages without a bot of their own use this one too. */
+export const mainAgent = (db: Pick<Db, 'query'>, workspaceId: string) =>
+  db.query.agents.findFirst({
     where: and(eq(agents.workspaceId, workspaceId), eq(agents.channelType, 'facebook_page')),
-    orderBy: asc(agents.createdAt),
-  })) ?? db.query.agents.findFirst({ where: eq(agents.workspaceId, workspaceId), orderBy: asc(agents.createdAt) });
+    orderBy: [asc(agents.createdAt), asc(agents.id)],
+  });
 
 const agentById = (db: Db, p: AgentParams) =>
   isUuid(p.agentId) ? db.query.agents.findFirst({ where: and(eq(agents.id, p.agentId), eq(agents.workspaceId, p.workspaceId)) }) : undefined;
