@@ -34,6 +34,25 @@ An AI sales and support agent for Facebook-first shops in Bangladesh. A shop tra
 
 Each knowledge source (file, text, Q&A, website, Google Sheet) is a job on the `knowledge` queue. The worker reads it, splits it into chunks (tables one row per line, Q&A one pair per chunk), embeds them, and swaps them in for the source's old chunks in one transaction. The source moves from queued to processing to ready, or to failed with a message the shop owner can act on ("Share the sheet as Anyone with the link"). Google Sheets are re-read every 6 hours. Website crawls stay on the same site, read at most 50 pages, and refuse private or internal addresses.
 
+## Website chat
+
+An optional channel a shop turns on in Settings → Website chat with its site's address. That creates a `widget` channel with a public key (`wk_…`), answered by the shop's main bot, and adds the site as a website knowledge source, so it is crawled like any other. The shop pastes the snippet on its site:
+
+```html
+<script src="${API_URL}/widget.js" data-agently-key="wk_…" async></script>
+```
+
+The script draws a chat bubble in a shadow root and keeps a random visitor id in the browser. It talks to the API without a session:
+
+| Route | What it does |
+| --- | --- |
+| `GET /widget.js` | The widget script |
+| `GET /widget/:key/config` | Shop name, welcome message, colour, whether the bot is on |
+| `POST /widget/:key/messages` | A visitor's message (`visitorId`, `text`); queued on `inbound` like a Messenger message. Rate limited per visitor and per IP |
+| `GET /widget/:key/messages?visitorId=&after=` | The visitor's conversation, for polling, and whether the bot is still writing |
+
+Chat calls answer only pages on the shop's site and its subdomains (checked by the Origin header). Replies, from the bot or from staff in the inbox, are saved and the widget picks them up; there is no 24-hour reply window.
+
 ## Set up the Meta app (development mode)
 
 In the Meta app's dashboard (developers.facebook.com):
@@ -78,6 +97,7 @@ The API serves the dashboard at `/api` with a session cookie set by `/auth/faceb
 | `GET` · `PATCH /api/workspaces/:id/settings` | Shop name, language, delivery charges, bKash and Nagad numbers, COD. At least one way to pay must stay on |
 | `POST /api/workspaces/:id/onboarding/complete` | Marks the setup checklist done |
 | `GET` · `PATCH /api/workspaces/:id/agent` | The AI agent: name, tone, instructions, handoff rules, comment replies, and `status` (going `live` needs a connected page) |
+| `GET` · `PUT /api/workspaces/:id/website` | Website chat: off until turned on; turning it on makes the widget (one per shop), adds the site to the knowledge base and returns the snippet |
 | `GET /api/workspaces/:id/members` | Team members, pending invites, and seats used against the plan |
 | `POST /api/workspaces/:id/invites` · `DELETE …/invites/:iid` | Creates an invite link (role `agent`, or `admin` by the owner; 7 days; shown once) or cancels it. 402 when every seat is taken |
 | `GET /api/invites/:token` · `POST …/accept` | Shows what an invite is for, and joins the shop with it (signed in with Facebook) |

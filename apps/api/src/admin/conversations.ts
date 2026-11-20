@@ -94,7 +94,7 @@ export const adminConversationRoutes: FastifyPluginAsync<SendDeps> = async (app,
     return {
       conversation: {
         ...rest,
-        canReply: canReply(conversation.lastCustomerMessageAt),
+        canReply: canReply(conversation.lastCustomerMessageAt, conversation.channel.type),
         customer: {
           id: customer.id,
           name: customer.name,

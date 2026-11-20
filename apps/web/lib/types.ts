@@ -288,3 +288,15 @@ export interface Billing {
 }
 
 export const MANAGERS: Role[] = ['owner', 'admin'];
+
+/** Website chat (Settings → Website chat). null until the shop turns it on for the first time. */
+export interface Website {
+  channelId: string;
+  enabled: boolean;
+  key: string;
+  url: string | null;
+  welcomeMessage: string;
+  color: string;
+  snippet: string;
+  knowledge: { id: string; status: 'queued' | 'processing' | 'ready' | 'failed'; error: string | null; lastSyncedAt: string | null; chunks: number } | null;
+}
