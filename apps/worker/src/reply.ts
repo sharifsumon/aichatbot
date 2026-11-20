@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { and, eq, gt, sql } from 'drizzle-orm';
 import { AIProviderError, costUsd } from '@agently/ai';
 import { activities, agents, channels, conversations, messages, productPosts, products, workspaces } from '@agently/db';
@@ -67,15 +68,17 @@ export async function handleReply(deps: WorkerDeps, job: ReplyJob, opts: { final
     db.query.channels.findFirst({ where: eq(channels.id, message.channelId) }),
   ]);
   if (!workspace || workspace.status === 'suspended') return 'skipped_suspended';
-  if (!channel?.accessTokenEncrypted || channel.status !== 'connected') return 'skipped_channel_unavailable';
+  // Website chat has no platform token: replies are saved and the visitor's widget picks them up.
+  if (!channel || channel.status !== 'connected' || (channel.type !== 'widget' && !channel.accessTokenEncrypted)) return 'skipped_channel_unavailable';
 
   // The channel's own bot; otherwise the shop's bot for this channel type. WhatsApp and
-  // Instagram without a bot of their own wait for staff rather than borrow Facebook's.
+  // Instagram without a bot of their own wait for staff rather than borrow Facebook's;
+  // website chat is answered by the main bot.
   const agent = channel.agentId
     ? await db.query.agents.findFirst({ where: eq(agents.id, channel.agentId) })
     : await db.query.agents.findFirst({
         where:
-          channel.type === 'facebook_page'
+          channel.type === 'facebook_page' || channel.type === 'widget'
             ? eq(agents.workspaceId, workspace.id)
             : and(eq(agents.workspaceId, workspace.id), eq(agents.channelType, channel.type)),
         orderBy: agents.createdAt,
@@ -86,7 +89,7 @@ export async function handleReply(deps: WorkerDeps, job: ReplyJob, opts: { final
   // When credits run out the bot goes quiet; the message is already in the inbox for staff.
   if ((await creditsRemaining(db, workspace.id)) <= 0) return 'skipped_no_credits';
 
-  const pageToken = decryptSecret(channel.accessTokenEncrypted, deps.encryptionKey);
+  const pageToken = channel.accessTokenEncrypted ? decryptSecret(channel.accessTokenEncrypted, deps.encryptionKey) : '';
   const commentMode = agent.commentReplyMode;
   const send = (text: string, language: ReplyLanguage) =>
     sendReply(deps, { pageToken, channel, source: message, commentMode, text, language });
@@ -213,13 +216,15 @@ async function sendReply(
   return out;
 }
 
-/** A chat message on the channel's own platform: Messenger, Instagram DMs or WhatsApp. */
+/** A chat message on the channel's own platform: Messenger, Instagram DMs or WhatsApp. Website chat only needs an id; the widget reads the saved message. */
 function sendChatText(deps: WorkerDeps, channel: { type: string; externalId: string }, token: string, to: string, text: string): Promise<string[]> {
+  if (channel.type === 'widget') return Promise.resolve([randomUUID()]);
   if (channel.type === 'whatsapp') return deps.graph.sendWhatsAppText(token, channel.externalId, to, text);
   return deps.graph.sendText(token, to, text, channel.type === 'instagram' ? INSTAGRAM_MAX_TEXT : undefined);
 }
 
 function sendChatImage(deps: WorkerDeps, channel: { type: string; externalId: string }, token: string, to: string, url: string): Promise<string> {
+  if (channel.type === 'widget') return Promise.resolve(randomUUID());
   if (channel.type === 'whatsapp') return deps.graph.sendWhatsAppImage(token, channel.externalId, to, url);
   return deps.graph.sendImage(token, to, url, { instagram: channel.type === 'instagram' });
 }

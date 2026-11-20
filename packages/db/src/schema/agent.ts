@@ -28,6 +28,13 @@ export interface ChannelMeta {
   wabaId?: string;
   /** WhatsApp: the number as Meta shows it, e.g. "+880 1712-345678". */
   displayPhoneNumber?: string;
+  /** Website chat: the shop's site; the widget only answers pages on it. */
+  websiteUrl?: string;
+  /** Website chat: the knowledge source that crawls the site. */
+  knowledgeSourceId?: string;
+  /** Website chat: the first thing the widget says, and its colour (#rrggbb). */
+  welcomeMessage?: string;
+  color?: string;
 }
 
 /**

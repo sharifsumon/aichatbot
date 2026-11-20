@@ -118,7 +118,7 @@ export const inboxRoutes: FastifyPluginAsync<InboxDeps> = async (app, deps) => {
       return {
         conversation: {
           ...conversation,
-          canReply: canReply(conversation.lastCustomerMessageAt),
+          canReply: canReply(conversation.lastCustomerMessageAt, conversation.channel.type),
         },
         orders: recent.map((o) => ({ ...o, items: items.filter((i) => i.orderId === o.id) })),
         history: { orders: history?.count ?? 0, total: history?.total ?? '0', firstOrderAt: history?.first ?? null },

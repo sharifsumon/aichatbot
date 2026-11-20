@@ -183,7 +183,7 @@ export default function AgentPage() {
               <div key={c.id} className="page-row">
                 <div>
                   <strong>{c.name}</strong>
-                  <span className="sub">{CHANNEL_THING[c.type as Agent['channelType']] ?? c.type}</span>
+                  <span className="sub">{c.type === 'widget' ? 'Website chat' : (CHANNEL_THING[c.type as Agent['channelType']] ?? c.type)}</span>
                 </div>
                 <Pill tone={c.status === 'connected' ? 'green' : 'amber'}>{c.status === 'connected' ? 'Connected' : 'Needs reconnecting'}</Pill>
               </div>

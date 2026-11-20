@@ -3,13 +3,14 @@
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
-import { BillingTab, PagesTab, PaymentsTab, ShopTab, TeamTab } from '@/components/SettingsTabs';
+import { BillingTab, PagesTab, PaymentsTab, ShopTab, TeamTab, WebsiteTab } from '@/components/SettingsTabs';
 import { useShop } from '@/components/Shell';
 import { Loading, Notice } from '@/components/ui';
 
 const TABS = [
   { key: 'shop', label: 'Shop profile' },
   { key: 'pages', label: 'Channels' },
+  { key: 'website', label: 'Website chat' },
   { key: 'payments', label: 'Payments and delivery' },
   { key: 'team', label: 'Team' },
   { key: 'subscription', label: 'Subscription' },
@@ -36,6 +37,8 @@ function Settings() {
           <Notice tone="info">Only the shop owner or an admin can change settings.</Notice>
         ) : tab === 'pages' ? (
           <PagesTab />
+        ) : tab === 'website' ? (
+          <WebsiteTab />
         ) : tab === 'payments' ? (
           <PaymentsTab />
         ) : tab === 'team' ? (
