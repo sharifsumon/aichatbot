@@ -14,6 +14,7 @@ import { healthRoutes, type HealthDeps } from './routes/health.ts';
 import { metaDataDeletionRoutes } from './routes/meta-data-deletion.ts';
 import { metaWebhookRoutes, type MetaWebhookDeps } from './routes/meta-webhook.ts';
 import { shareRoutes } from './routes/share.ts';
+import { widgetPublicRoutes } from './routes/widget-public.ts';
 
 export type ServerDeps = HealthDeps &
   MetaWebhookDeps & {
@@ -69,6 +70,8 @@ export function buildServer(deps: ServerDeps) {
   app.register(metaDataDeletionRoutes, { ...deps, prefix: '/webhooks/meta' });
   app.register(facebookAuthRoutes, deps);
   app.register(shareRoutes, deps);
+  // The website chat widget's script and its chat calls, open to the shops' own sites.
+  app.register(widgetPublicRoutes, deps);
   app.register(dashboardApiRoutes, { ...deps, prefix: '/api' });
   if (deps.urls.admin) app.register(adminRoutes, { ...deps, adminUrl: deps.urls.admin, prefix: '/admin' });
 

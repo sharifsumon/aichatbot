@@ -1,4 +1,4 @@
-import { and, asc, eq, ne } from 'drizzle-orm';
+import { and, asc, eq, inArray, ne } from 'drizzle-orm';
 import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { normaliseBdPhone } from '@agently/commerce';
@@ -129,7 +129,7 @@ export const settingsRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db }
         channels: chans.filter((c) => c.agentId === a.id || (!c.agentId && c.type === a.channelType)).map(({ agentId: _a, ...c }) => c),
       })),
       // Channel types with a channel connected but no bot of their own: their chats wait for staff.
-      unanswered: [...new Set(chans.filter((c) => !rows.some((a) => a.channelType === c.type)).map((c) => c.type))],
+      unanswered: [...new Set(chans.filter((c) => !c.agentId && !rows.some((a) => a.channelType === c.type)).map((c) => c.type))],
       limit: limits.agents,
     };
   });
@@ -229,14 +229,14 @@ export const settingsRoutes: FastifyPluginAsync<{ db: Db }> = async (app, { db }
       // Live means answering customers, which needs a channel of its type to answer on.
       const where =
         agent.channelType === 'facebook_page'
-          ? and(eq(channels.workspaceId, agent.workspaceId), eq(channels.status, 'connected'), ne(channels.type, 'widget'))
+          ? and(eq(channels.workspaceId, agent.workspaceId), eq(channels.status, 'connected'), inArray(channels.type, ['facebook_page', 'widget']))
           : and(eq(channels.workspaceId, agent.workspaceId), eq(channels.status, 'connected'), eq(channels.type, agent.channelType));
       const page = await db.query.channels.findFirst({ where });
       if (!page) {
         return reply.code(409).send({
           error:
             agent.channelType === 'facebook_page'
-              ? 'Connect a Facebook page before turning the agent on'
+              ? 'Connect a Facebook page or turn on website chat before turning the agent on'
               : `Connect ${agent.channelType === 'whatsapp' ? 'a WhatsApp number' : 'an Instagram account'} in Settings before turning this agent on`,
         });
       }

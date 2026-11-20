@@ -395,3 +395,43 @@ test('a Facebook page without its own bot uses the main Facebook bot, never a Wh
   assert.equal(await handleReply(deps(), queued[1]!, { finalAttempt: false }), 'sent');
   assert.equal(sent.length, 1);
 });
+
+test('website chat: the main bot answers, and the reply is saved for the widget, not sent to Meta', { skip }, async () => {
+  const page = `page-${randomBytes(4).toString('hex')}`;
+  const ws = await makeShop(page);
+  const widgetKey = `wk_${randomBytes(12).toString('hex')}`;
+  // No agent on the channel: website chat falls back to the main bot.
+  const [widget] = await db
+    .insert(channels)
+    .values({ workspaceId: ws.id, type: 'widget', externalId: widgetKey, name: 'rahim.com.bd', meta: { websiteUrl: 'https://rahim.com.bd' } })
+    .returning();
+  const visitor = `v_${randomBytes(12).toString('hex')}`;
+  const job: InboundJob = {
+    channel: 'widget',
+    channelExternalId: widgetKey,
+    senderExternalId: visitor,
+    senderName: 'Website visitor',
+    externalId: randomBytes(8).toString('hex'),
+    kind: 'message',
+    text: 'shirt ache?',
+    attachments: [],
+    timestamp: Date.now(),
+  };
+
+  assert.equal(await handleInbound(deps(), job), 'saved');
+  assert.equal(await handleReply(deps(), queued[0]!, { finalAttempt: false }), 'sent');
+  assert.equal(sent.length + sentWhatsApp.length, 0);
+  const out = await db
+    .select()
+    .from(messages)
+    .where(and(eq(messages.channelId, widget!.id), eq(messages.direction, 'outbound')));
+  assert.deepEqual(
+    out.map((m) => [m.sender, m.text, m.delivery]),
+    [['ai', 'Cotton Shirt ৳850, Blue L in stock.', 'sent']],
+  );
+  assert.ok(out[0]!.externalId);
+
+  // Turned off: the widget is gone, so its messages are dropped.
+  await db.update(channels).set({ status: 'disconnected' }).where(eq(channels.id, widget!.id));
+  assert.equal(await handleInbound(deps(), { ...job, externalId: randomBytes(8).toString('hex') }), 'unknown_channel');
+});

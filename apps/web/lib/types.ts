@@ -250,6 +250,18 @@ export interface Limits {
   staffSeats: number;
   whatsappNumbers: number;
   instagramAccounts: number;
+  /** AI images and seconds of AI video a month; null when the plan sets no cap. */
+  imagesPerMonth: number | null;
+  videoSecondsPerMonth: number | null;
+}
+
+/** AI images and seconds of AI video made this month against the plan; limit null means no cap. */
+export interface MediaAllowance {
+  images: { used: number; limit: number | null };
+  videoSeconds: { used: number; limit: number | null };
+  /** Top-up credits left to pay for images and video beyond the plan's allowance. */
+  topUpCredits: number;
+  periodEnd: string;
 }
 
 export interface Billing {
@@ -266,6 +278,9 @@ export interface Billing {
     agents: { used: number; limit: number };
     staffSeats: { used: number; limit: number };
     knowledgeBase: { usedBytes: number; limitBytes: number };
+    images: MediaAllowance['images'];
+    videoSeconds: MediaAllowance['videoSeconds'];
+    topUpCredits: number;
   };
   plans: { key: string; name: string; priceBdt: string; priceUsd: string; limits: Limits; current: boolean }[];
   topUp: { credits: number; priceBdt: string; priceUsd: string };
@@ -273,3 +288,15 @@ export interface Billing {
 }
 
 export const MANAGERS: Role[] = ['owner', 'admin'];
+
+/** Website chat (Settings → Website chat). null until the shop turns it on for the first time. */
+export interface Website {
+  channelId: string;
+  enabled: boolean;
+  key: string;
+  url: string | null;
+  welcomeMessage: string;
+  color: string;
+  snippet: string;
+  knowledge: { id: string; status: 'queued' | 'processing' | 'ready' | 'failed'; error: string | null; lastSyncedAt: string | null; chunks: number } | null;
+}

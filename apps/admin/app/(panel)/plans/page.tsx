@@ -7,7 +7,7 @@ import { useApi, useLoad } from '@/lib/api';
 import { bdt, num, usd } from '@/lib/format';
 import type { Limits, Plan } from '@/lib/types';
 
-const LIMIT_FIELDS: { key: keyof Limits; label: string }[] = [
+const LIMIT_FIELDS: { key: Exclude<keyof Limits, 'imagesPerMonth' | 'videoSecondsPerMonth'>; label: string }[] = [
   { key: 'aiCreditsPerMonth', label: 'AI credits a month' },
   { key: 'pages', label: 'Facebook pages' },
   { key: 'whatsappNumbers', label: 'WhatsApp numbers' },
@@ -16,6 +16,18 @@ const LIMIT_FIELDS: { key: keyof Limits; label: string }[] = [
   { key: 'staffSeats', label: 'Staff seats' },
   { key: 'knowledgeBaseMb', label: 'Knowledge base (MB)' },
 ];
+
+/** Optional caps: left blank, the plan has none and AI credits are the only limit. */
+const MEDIA_FIELDS: { key: 'imagesPerMonth' | 'videoSecondsPerMonth'; label: string }[] = [
+  { key: 'imagesPerMonth', label: 'AI images a month' },
+  { key: 'videoSecondsPerMonth', label: 'AI video seconds a month' },
+];
+
+/** "4 images · 10s video", or "No cap" when neither is set. */
+function mediaText(l: Limits): string {
+  const parts = [l.imagesPerMonth != null ? `${num(l.imagesPerMonth)} images` : '', l.videoSecondsPerMonth != null ? `${num(l.videoSecondsPerMonth)}s video` : ''].filter(Boolean);
+  return parts.length ? parts.join(' · ') : 'No cap';
+}
 
 export default function PlansPage() {
   const me = useAdmin();
@@ -40,7 +52,7 @@ export default function PlansPage() {
         {done && <Notice tone="ok">{done}</Notice>}
         {error && <Notice tone="error">{error}</Notice>}
         <div className="table-wrap">
-          <table style={{ minWidth: 1050 }}>
+          <table style={{ minWidth: 1180 }}>
             <thead>
               <tr>
                 <th>Plan</th>
@@ -51,6 +63,7 @@ export default function PlansPage() {
                 <th>Instagram</th>
                 <th>Staff</th>
                 <th>Knowledge base</th>
+                <th>AI images &amp; video</th>
                 <th>Shops</th>
                 <th>
                   <span className="sr">Actions</span>
@@ -73,6 +86,7 @@ export default function PlansPage() {
                   <td className="num">{p.limits.instagramAccounts ?? 0}</td>
                   <td className="num">{p.limits.staffSeats}</td>
                   <td className="num">{num(p.limits.knowledgeBaseMb)} MB</td>
+                  <td>{mediaText(p.limits)}</td>
                   <td className="num">{num(p.tenants)}</td>
                   <td>
                     {canEdit && (
@@ -111,7 +125,7 @@ function PlanDialog({ plan, onClose, onDone }: { plan?: Plan; onClose: () => voi
   const [priceBdt, setPriceBdt] = useState(plan ? String(Number(plan.priceBdt)) : '');
   const [priceUsd, setPriceUsd] = useState(plan ? String(Number(plan.priceUsd)) : '');
   const [active, setActive] = useState(plan?.active ?? true);
-  const [limits, setLimits] = useState<Record<keyof Limits, string>>({
+  const [limits, setLimits] = useState<Record<Exclude<keyof Limits, 'imagesPerMonth' | 'videoSecondsPerMonth'>, string>>({
     aiCreditsPerMonth: String(plan?.limits.aiCreditsPerMonth ?? 2000),
     pages: String(plan?.limits.pages ?? 1),
     whatsappNumbers: String(plan?.limits.whatsappNumbers ?? 0),
@@ -119,6 +133,10 @@ function PlanDialog({ plan, onClose, onDone }: { plan?: Plan; onClose: () => voi
     agents: String(plan?.limits.agents ?? 1),
     staffSeats: String(plan?.limits.staffSeats ?? 2),
     knowledgeBaseMb: String(plan?.limits.knowledgeBaseMb ?? 50),
+  });
+  const [media, setMedia] = useState({
+    imagesPerMonth: plan?.limits.imagesPerMonth != null ? String(plan.limits.imagesPerMonth) : '',
+    videoSecondsPerMonth: plan?.limits.videoSecondsPerMonth != null ? String(plan.limits.videoSecondsPerMonth) : '',
   });
 
   return (
@@ -130,6 +148,13 @@ function PlanDialog({ plan, onClose, onDone }: { plan?: Plan; onClose: () => voi
       onSubmit={async () => {
         const l = Object.fromEntries(Object.entries(limits).map(([k, v]) => [k, Number.parseInt(v, 10)])) as unknown as Limits;
         if (Object.values(l).some((v) => !Number.isFinite(v) || v < 0)) return 'Limits must be whole numbers.';
+        for (const f of MEDIA_FIELDS) {
+          const v = media[f.key].trim();
+          if (!v) continue;
+          const n = Number.parseInt(v, 10);
+          if (!Number.isFinite(n) || n < 0) return 'Limits must be whole numbers.';
+          l[f.key] = n;
+        }
         const body = { name: name.trim(), priceBdt: priceBdt.trim(), priceUsd: priceUsd.trim(), limits: l };
         if (plan) {
           await api(`/plans/${plan.id}`, { method: 'PATCH', body: { ...body, active } });
@@ -170,6 +195,15 @@ function PlanDialog({ plan, onClose, onDone }: { plan?: Plan; onClose: () => voi
           <label key={f.key} className="field">
             {f.label}
             <input type="number" min={0} required value={limits[f.key]} onChange={(e) => setLimits((l) => ({ ...l, [f.key]: e.target.value }))} />
+          </label>
+        ))}
+      </div>
+      <div className="row">
+        {MEDIA_FIELDS.map((f) => (
+          <label key={f.key} className="field">
+            {f.label}
+            <input type="number" min={0} placeholder="No cap" value={media[f.key]} onChange={(e) => setMedia((m) => ({ ...m, [f.key]: e.target.value }))} />
+            <small>Blank: no cap, AI credits still apply.</small>
           </label>
         ))}
       </div>

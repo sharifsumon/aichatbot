@@ -7,7 +7,7 @@ import { useShop } from '@/components/Shell';
 import { DayChart, Dialog, Empty, Loading, Meter, Notice, Pill, ShopStatusPill, Toggle } from '@/components/ui';
 import { useApi, useLoad } from '@/lib/api';
 import { bdt, date, daysLeft, num, usd } from '@/lib/format';
-import type { Billing, Channel, ChannelUsage, CountedChannel, Role, Settings, Team } from '@/lib/types';
+import type { Billing, Channel, ChannelUsage, CountedChannel, Role, Settings, Team, Website } from '@/lib/types';
 
 function useSettings() {
   const { ws, reloadHome, reloadMe } = useShop();
@@ -557,6 +557,16 @@ export function BillingTab() {
           <Meter used={b.usage.agents.used} total={b.usage.agents.limit} label={`Chat agents: ${b.usage.agents.used} of ${b.usage.agents.limit}`} />
           <Meter used={b.usage.staffSeats.used} total={b.usage.staffSeats.limit} label={`Team seats: ${b.usage.staffSeats.used} of ${b.usage.staffSeats.limit}`} />
           <Meter used={kb.usedBytes} total={kb.limitBytes} label={`Knowledge base: ${(kb.usedBytes / 1048576).toFixed(1)} of ${Math.round(kb.limitBytes / 1048576)} MB`} />
+          {b.usage.images.limit !== null && (
+            <Meter used={b.usage.images.used} total={b.usage.images.limit} label={`AI images this month: ${b.usage.images.used} of ${b.usage.images.limit}`} />
+          )}
+          {b.usage.videoSeconds.limit !== null && (
+            <Meter
+              used={b.usage.videoSeconds.used}
+              total={b.usage.videoSeconds.limit}
+              label={`AI video this month: ${b.usage.videoSeconds.used} of ${b.usage.videoSeconds.limit} seconds`}
+            />
+          )}
         </div>
       </Section>
       <Section title="AI replies, last 30 days">
@@ -600,14 +610,154 @@ export function BillingTab() {
                   {p.limits.staffSeats} team seat{p.limits.staffSeats === 1 ? '' : 's'}
                 </li>
                 <li>{p.limits.knowledgeBaseMb} MB knowledge base</li>
+                <li>{p.limits.imagesPerMonth === null ? 'AI product images' : `${p.limits.imagesPerMonth} AI product image${p.limits.imagesPerMonth === 1 ? '' : 's'} a month`}</li>
+                <li>{p.limits.videoSecondsPerMonth === null ? 'AI product videos' : `${p.limits.videoSecondsPerMonth} seconds of AI video a month`}</li>
               </ul>
             </div>
           ))}
         </div>
         <span className="sub">
-          Extra replies: {num(b.topUp.credits)} for {b.currency === 'BDT' ? bdt(b.topUp.priceBdt) : usd(b.topUp.priceUsd, 0)}.
+          Top-up: {num(b.topUp.credits)} credits for {b.currency === 'BDT' ? bdt(b.topUp.priceBdt) : usd(b.topUp.priceUsd, 0)}, until the end of the month. Top-up credits pay for more replies,
+          and for AI images and video after your plan&apos;s monthly allowance is used.
+          {b.usage.topUpCredits > 0 && ` You have ${num(b.usage.topUpCredits)} top-up credits left.`}
         </span>
       </Section>
     </div>
+  );
+}
+
+const CRAWL: Record<NonNullable<Website['knowledge']>['status'], { label: string; tone: 'green' | 'amber' | 'red' }> = {
+  queued: { label: 'Waiting to read', tone: 'amber' },
+  processing: { label: 'Reading your site', tone: 'amber' },
+  ready: { label: 'Learned', tone: 'green' },
+  failed: { label: 'Could not read', tone: 'red' },
+};
+
+/**
+ * Website chat: an optional extra channel. Ticking the box and saving creates
+ * the chat widget and adds the site to the knowledge base; the snippet then
+ * goes on the shop's own website.
+ */
+export function WebsiteTab() {
+  const { ws, reloadHome } = useShop();
+  const api = useApi();
+  const { data, error: loadError, reload } = useLoad<{ website: Website | null }>(`${ws}/website`);
+  const site = data?.website;
+  const [enabled, setEnabled] = useState(false);
+  const [url, setUrl] = useState('');
+  const [welcome, setWelcome] = useState('');
+  const [color, setColor] = useState('#2563eb');
+  const [saved, setSaved] = useState<string>();
+  const [error, setError] = useState<string>();
+  const [busy, setBusy] = useState(false);
+
+  // Only what was saved resets the form; the status checks below leave typing alone.
+  const loaded = data !== undefined;
+  useEffect(() => {
+    if (!loaded) return;
+    setEnabled(!!site?.enabled);
+    setUrl(site?.url ?? '');
+    setWelcome(site?.welcomeMessage ?? 'Hi! How can we help you today?');
+    setColor(site?.color ?? '#2563eb');
+  }, [loaded, site?.enabled, site?.url, site?.welcomeMessage, site?.color]);
+
+  // While the site is being read, check back so the status moves on by itself.
+  const reading = site?.enabled && (site.knowledge?.status === 'queued' || site.knowledge?.status === 'processing');
+  useEffect(() => {
+    if (!reading) return;
+    const t = setInterval(reload, 5000);
+    return () => clearInterval(t);
+  }, [reading, reload]);
+
+  if (data === undefined) return loadError ? <Notice tone="error">{loadError}</Notice> : <Loading />;
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setSaved(undefined);
+    setError(undefined);
+    try {
+      await api(`${ws}/website`, { method: 'PUT', body: enabled ? { enabled, url: url.trim(), welcomeMessage: welcome.trim(), color } : { enabled } });
+      setSaved(enabled ? (site?.enabled ? 'Saved.' : 'Website chat is on. Add the code below to your website.') : 'Website chat is off. The chat bubble no longer shows on your site.');
+      reload();
+      reloadHome();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form style={{ display: 'flex', flexDirection: 'column', gap: 20 }} onSubmit={submit}>
+      <Status saved={saved} error={error} />
+      <Section
+        title="Website chat"
+        note="Add a chat bubble to your own website. The bot answers visitors from your website's pages, your knowledge base and your products, and the chats arrive in your inbox like Messenger ones."
+      >
+        <label className="check" style={{ fontWeight: 600 }}>
+          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} /> Turn on website chat
+        </label>
+        {enabled && (
+          <>
+            <label className="field">
+              Your website address
+              <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://myshop.com" required />
+              <small>The bot reads up to 50 pages of this site. The chat only works on this site and its subdomains.</small>
+            </label>
+            <label className="field">
+              Welcome message
+              <input value={welcome} onChange={(e) => setWelcome(e.target.value)} maxLength={300} required />
+            </label>
+            <label className="field" style={{ maxWidth: 200 }}>
+              Colour
+              <input type="color" value={color} onChange={(e) => setColor(e.target.value)} style={{ height: 40, padding: 4 }} />
+            </label>
+          </>
+        )}
+      </Section>
+      {site?.enabled && enabled && (
+        <>
+          <Section title="Add this code to your website" note="Paste it just before </body> on every page, or in your site builder's “custom code” or footer box. The chat bubble appears in the bottom-right corner.">
+            <code className="secret" style={{ color: 'var(--ink)' }}>
+              {site.snippet}
+            </code>
+            <button type="button" className="btn sm" style={{ alignSelf: 'flex-start' }} onClick={() => navigator.clipboard?.writeText(site.snippet).then(() => setSaved('Code copied.'))}>
+              Copy code
+            </button>
+          </Section>
+          <Section title="What the bot knows about your site">
+            {site.knowledge ? (
+              <div className="page-row">
+                <div>
+                  <strong>{site.url}</strong>
+                  <span className="sub">
+                    {site.knowledge.status === 'ready'
+                      ? `${num(site.knowledge.chunks)} sections learned${site.knowledge.lastSyncedAt ? `, ${date(site.knowledge.lastSyncedAt)}` : ''}`
+                      : site.knowledge.status === 'failed'
+                        ? site.knowledge.error ?? 'The site could not be read.'
+                        : 'This takes a minute or two.'}
+                  </span>
+                </div>
+                <Pill tone={CRAWL[site.knowledge.status].tone}>{CRAWL[site.knowledge.status].label}</Pill>
+                <a className="btn sm" href="/knowledge">
+                  Knowledge base
+                </a>
+              </div>
+            ) : (
+              <Empty>Your site was removed from the knowledge base. Save a new address above to read it again.</Empty>
+            )}
+            <span className="sub">
+              The bot that answers here is your main chat agent: its name, tone and instructions are in <a href="/agent">Chat Agent</a>, and it must be live to reply.
+            </span>
+          </Section>
+        </>
+      )}
+      <div className="save-bar">
+        <button type="submit" className="btn primary" disabled={busy}>
+          {busy ? 'Saving…' : 'Save changes'}
+        </button>
+      </div>
+    </form>
   );
 }

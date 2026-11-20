@@ -30,13 +30,14 @@ import { homeRoutes } from './home.ts';
 import { tryOnRoutes, type TryOnDeps } from './tryon.ts';
 import { videoRoutes, type VideoDeps } from './video.ts';
 import { channelRoutes, type ChannelDeps } from './channels.ts';
+import { websiteRoutes } from './website.ts';
 import { limitsFor, pagesInUse } from '@agently/billing';
 
 export type DashboardDeps = InboxDeps & CatalogDeps & KnowledgeDeps & FacebookPostDeps & PagePostDeps & TryOnDeps & VideoDeps & ChannelDeps & {
   db: Db;
   facebook: Pick<FacebookApp, 'pages' | 'subscribePage' | 'unsubscribePage'> & ChannelDeps['facebook'];
   encryptionKey: string;
-  urls: { web: string };
+  urls: { web: string; api: string };
   cookies: CookieSettings;
 };
 
@@ -85,6 +86,7 @@ export const dashboardApiRoutes: FastifyPluginAsync<DashboardDeps> = async (app,
   app.register(tryOnRoutes, childDeps);
   app.register(videoRoutes, childDeps);
   app.register(channelRoutes, childDeps);
+  app.register(websiteRoutes, childDeps);
 
   /** Sign out from the dashboard (same origin rules as every other change). */
   app.post('/logout', async (req, reply) => {

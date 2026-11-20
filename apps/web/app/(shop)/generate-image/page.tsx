@@ -8,7 +8,9 @@ import { AddToProduct } from '@/components/AddToProduct';
 import { Icon } from '@/components/icons';
 import { Empty, Loading, Notice, Pill, TopBar } from '@/components/ui';
 import { ApiError, qs, useApi, useLoad, useUpload } from '@/lib/api';
+import { date } from '@/lib/format';
 import { shrinkImage } from '@/lib/image';
+import type { MediaAllowance } from '@/lib/types';
 
 interface Model {
   id: string;
@@ -288,6 +290,17 @@ export default function GenerateImagePage() {
   const [aspect, setAspect] = useState<Aspect>('1:1');
   const [note, setNote] = useState('');
   const [count, setCount] = useState(1);
+  const allowance = useLoad<MediaAllowance>(manager ? `${ws}/media-allowance` : null);
+  // Images the plan has left this month (null when the plan has no cap), and how many more top-up credits pay for.
+  const planImagesLeft = allowance.data && allowance.data.images.limit !== null ? Math.max(0, allowance.data.images.limit - allowance.data.images.used) : null;
+  const perImage = setup.data?.creditsPerImage ?? 0;
+  const topUpImages = allowance.data && perImage > 0 ? Math.floor(allowance.data.topUpCredits / perImage) : 0;
+  const imagesLeft = planImagesLeft === null ? null : planImagesLeft + topUpImages;
+  const counts = [1, 2, 3, 4].filter((n) => imagesLeft === null || n <= imagesLeft);
+  useEffect(() => {
+    // Keep the number of images within what is left.
+    if (imagesLeft !== null && imagesLeft > 0 && count > imagesLeft) setCount(imagesLeft);
+  }, [imagesLeft, count]);
   const [prompt, setPrompt] = useState<string>();
   const [showPrompt, setShowPrompt] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -415,7 +428,7 @@ export default function GenerateImagePage() {
 
   const credits = setup.data?.creditsPerImage ?? 0;
   // FASHN needs a model photo; the image models make everything else themselves.
-  const ready = !!garment && (styleOptions || !!chosen);
+  const ready = !!garment && (styleOptions || !!chosen) && imagesLeft !== 0;
   const size = SIZES.find((s) => s.value === aspect)!;
 
   async function generate() {
@@ -434,6 +447,7 @@ export default function GenerateImagePage() {
       setError((e as Error).message);
     } finally {
       setStarting(false);
+      allowance.reload();
     }
   }
 
@@ -464,6 +478,15 @@ export default function GenerateImagePage() {
           )}
         </div>
         {setup.data && !setup.data.enabled && <Notice tone="warn">Making images is not switched on for Agently yet. It will be soon.</Notice>}
+        {allowance.data && allowance.data.images.limit !== null && (
+          <Notice tone={imagesLeft ? 'info' : 'warn'}>
+            {planImagesLeft
+              ? `Your plan includes ${allowance.data.images.limit} AI images a month. ${allowance.data.images.used} used, ${planImagesLeft} left until ${date(allowance.data.periodEnd)}.${topUpImages ? ` Top-up credits pay for ${topUpImages} more.` : ''}`
+              : topUpImages
+                ? `This month's ${allowance.data.images.limit} plan images are used up. More images use top-up credits (${perImage} each): ${allowance.data.topUpCredits} left, enough for ${topUpImages}.`
+                : `This month's ${allowance.data.images.limit} AI images are used up. Top up credits to make more, or upgrade, in Settings → Billing. Your plan's images come back on ${date(allowance.data.periodEnd)}.`}
+          </Notice>
+        )}
         {done && <Notice tone="ok">{done}</Notice>}
         {error && <Notice tone="error">{error}</Notice>}
         {setup.error && <Notice tone="error">{setup.error}</Notice>}
@@ -635,7 +658,7 @@ export default function GenerateImagePage() {
                 <label className="field gen-count">
                   Number of images
                   <select value={count} onChange={(e) => setCount(Number(e.target.value))}>
-                    {[1, 2, 3, 4].map((n) => (
+                    {(counts.length ? counts : [1]).map((n) => (
                       <option key={n} value={n}>
                         {n} image{n > 1 ? 's' : ''}
                         {credits ? ` · ${credits * n} credits` : ''}
@@ -652,7 +675,9 @@ export default function GenerateImagePage() {
                 ← Back
               </Link>
               <div className="gen-go">
-                {!ready && <small className="muted">{!garment ? 'Upload the product photo first.' : 'Choose a model above.'}</small>}
+                {!ready && (
+                  <small className="muted">{imagesLeft === 0 ? "This month's images are used up. Top up credits to make more." : !garment ? 'Upload the product photo first.' : 'Choose a model above.'}</small>
+                )}
                 {credits > 0 && <span className="gen-cost">{credits * count} credits</span>}
                 <button type="button" className="btn primary lg" disabled={!ready || starting || uploading || !setup.data?.enabled} onClick={generate}>
                   {starting ? 'Starting…' : `Generate ${count > 1 ? `${count} images` : 'image'}`} <span aria-hidden="true">›</span>

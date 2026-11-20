@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { and, desc, eq } from 'drizzle-orm';
 import { channels, conversations, customerIdentities, messages, type Db } from '@agently/db';
 import { GraphApiError, INSTAGRAM_MAX_TEXT, type GraphClient } from '@agently/meta';
@@ -16,7 +17,9 @@ export interface SendDeps {
 const PLATFORM: Record<string, string> = { facebook_page: 'Facebook', instagram: 'Instagram', whatsapp: 'WhatsApp' };
 const CHANNEL_WORD: Record<string, string> = { facebook_page: 'page', instagram: 'Instagram account', whatsapp: 'WhatsApp number' };
 
-export function canReply(lastCustomerMessageAt: Date | null): boolean {
+export function canReply(lastCustomerMessageAt: Date | null, channelType?: string): boolean {
+  // Website chat is ours: no platform window, staff can answer whenever.
+  if (channelType === 'widget') return true;
   return !!lastCustomerMessageAt && Date.now() - lastCustomerMessageAt.getTime() < REPLY_WINDOW_MS;
 }
 
@@ -46,6 +49,11 @@ export async function sendHumanReply(
   if (text.length > MAX_REPLY) return { ok: false, status: 400, error: `Replies can be at most ${MAX_REPLY} characters` };
 
   const channel = await db.query.channels.findFirst({ where: eq(channels.id, conversation.channelId) });
+  if (channel?.type === 'widget') {
+    // The visitor's widget picks the reply up from the inbox; nothing to send anywhere.
+    if (channel.status !== 'connected') return { ok: false, status: 409, error: 'Website chat is turned off. Turn it on in Settings to reply.' };
+    return { ok: true, message: await saveReply(deps, conversation, channel.id, text, as, randomUUID(), false) };
+  }
   if (!channel?.accessTokenEncrypted || channel.status !== 'connected') {
     return { ok: false, status: 409, error: `This ${CHANNEL_WORD[channel?.type ?? 'facebook_page'] ?? 'channel'} is not connected. Reconnect it to reply.` };
   }
@@ -86,13 +94,26 @@ export async function sendHumanReply(
     throw err;
   }
 
+  return { ok: true, message: await saveReply(deps, conversation, channel.id, text, as, externalId, isComment, latestInbound?.id) };
+}
+
+async function saveReply(
+  { db }: SendDeps,
+  conversation: { id: string; workspaceId: string },
+  channelId: string,
+  text: string,
+  as: ReplyAs,
+  externalId: string | undefined,
+  isComment: boolean,
+  inboundId?: string,
+) {
   const now = new Date();
   const [message] = await db
     .insert(messages)
     .values({
       workspaceId: conversation.workspaceId,
       conversationId: conversation.id,
-      channelId: channel.id,
+      channelId,
       direction: 'outbound',
       kind: isComment ? 'comment_reply' : 'message',
       sender: as.sender,
@@ -100,7 +121,7 @@ export async function sendHumanReply(
       meta: {
         ...(as.sender === 'support' ? { supportUserId: as.platformUserId } : {}),
         // Ties a public reply to the comment it answers, for the Comments page.
-        ...(isComment ? { replyToMessageId: latestInbound!.id } : {}),
+        ...(isComment && inboundId ? { replyToMessageId: inboundId } : {}),
       },
       text,
       externalId,
@@ -109,5 +130,5 @@ export async function sendHumanReply(
     })
     .returning();
   await db.update(conversations).set({ lastMessageAt: now }).where(eq(conversations.id, conversation.id));
-  return { ok: true, message: message! };
+  return message!;
 }
